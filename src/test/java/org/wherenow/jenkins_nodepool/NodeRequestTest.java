@@ -23,55 +23,20 @@
  */
 package org.wherenow.jenkins_nodepool;
 
-import com.google.gson.Gson;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-enum State{
-	requested, pending, fulfilled, failed
-}
+import org.junit.Test;
+import static org.junit.Assert.assertTrue;
 
 /**
- * Represents a nodepool node request. Data format is JSON dump of following dict structure:
- * 	---
- * 	node_types:
- * 		- label1
- * 		- label2
- *	requestor: string id (eg hostname)
- * 	state: string requested|pending|fulfilled|failed
- * 	state_time: float seconds since epoch 
- * 
+ *
  * @author hughsaunders
  */
-public class NodeRequest {
-
-	private Map<String, Object> data;
-	private Gson gson;
+public class NodeRequestTest {
 	
-	public NodeRequest(String label)	{
-		this("jenkins", Arrays.asList( new String[] { label }));
+	@Test
+	public void serialisation(){
+		NodeRequest nr = new NodeRequest("testlabel");	
+		String json = nr.toString();
+		
+		assertTrue(json.contains("testlabel"));
 	}
-
-	public NodeRequest(List labels)	{
-		this("jenkins", labels);
-	}
-	@SuppressFBWarnings
-	public NodeRequest(String requestor, List labels) {
-		this.gson = new Gson();
-		this.data = new HashMap();
-		this.data.put("node_types", labels);
-		this.data.put("requestor", requestor);
-		this.data.put("state", State.requested);
-		this.data.put("state_time", System.currentTimeMillis()/1000);
-	}
-	
-	@Override
-	public String toString(){
-		String jsonStr = gson.toJson(this.data);
-		return jsonStr;
-	}
-
 }

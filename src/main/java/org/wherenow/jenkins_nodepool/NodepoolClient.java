@@ -23,37 +23,63 @@
  */
 package org.wherenow.jenkins_nodepool;
 
-import java.util.Dictionary;
+import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.List;
+import org.apache.curator.RetryPolicy;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.framework.api.CuratorWatcher;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.WatchedEvent;
 
 /**
  *
  * @author hughsaunders
  */
-public class nodepoolClient {
+public class NodepoolClient implements CuratorWatcher{
 
 	private CuratorFramework conn;  
 	private String requestRoot;
 	private String nodeRoot;
+	private String connectionString;
+	private String zkNamespace;
+	private RetryPolicy retryPolicy;	
+	
 
-	public nodepoolClient(String connectionString) {
-		this(connectionString, "nodepool");
+	public NodepoolClient(String connectionString) {
+		this(connectionString, 
+			"nodepool",
+			"requests",
+			"nodes",
+			new ExponentialBackoffRetry(1000,3));
 	}
 
-	public nodepoolClient(String connectionString, String zkNamespace, String requestRoot, String nodeRoot) {
+	public NodepoolClient(String connectionString, String zkNamespace, String requestRoot, String nodeRoot, RetryPolicy retryPolicy) {
 		this.requestRoot = requestRoot;
 		this.nodeRoot = nodeRoot;
-		ExponentialBackoffRetry retryPolicy = new ExponentialBackoffRetry(1000,3);
-		this.conn = CuratorFrameworkFactory.builder()
-			.connectString(connectionString)
-			.namespace(zkNamespace)
-			.retryPolicy(retryPolicy)
-			.build();
+		this.connectionString = connectionString;
+		this.zkNamespace = zkNamespace;
+		this.retryPolicy = retryPolicy;
 	}
 
+	public void connect(){
+		conn = CuratorFrameworkFactory.builder()
+		.connectString(connectionString)
+		.namespace(zkNamespace)
+		.retryPolicy(retryPolicy)
+		.build();
+		conn.start();
+	}
+	
+	public void disconnect(){
+		conn.close();	
+	}
+        
+        public CuratorFramework getConnection(){
+            return conn;
+        }
 
 	public NodeRequest requestNode(Integer priority, byte[] data) throws Exception{
 		String path = "{0}/{1}-".format(this.requestRoot, priority.toString());
@@ -61,9 +87,14 @@ public class nodepoolClient {
 			.withProtection()
 			.withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
 			.forPath(path, data);
-		
-		
+		//TODO:create proper constructor for node request and pass it some useful information
+		return new NodeRequest("testlabel");
 	}
+
+    @Override
+    public void process(WatchedEvent we) throws Exception {
+        
+    }
 
 
 	

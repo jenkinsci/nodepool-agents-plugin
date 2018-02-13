@@ -23,12 +23,15 @@
  */
 package org.wherenow.jenkins_nodepool;
 
+import hudson.Extension;
+import hudson.model.Descriptor;
 import hudson.model.Label;
 import hudson.slaves.NodeProvisioner;
 import java.util.Collection;
 
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.kohsuke.stapler.DataBoundConstructor;
 
 /**
  *
@@ -36,8 +39,20 @@ import org.apache.curator.framework.CuratorFrameworkFactory;
  */
 public class NodepoolCloud extends hudson.slaves.Cloud {
 
-    public NodepoolCloud(String name) {
+    private String connectionString;
+
+    @DataBoundConstructor
+    public NodepoolCloud(String name,
+	    String connectionString) {
         super(name);
+	this.connectionString = connectionString;
+    }
+    
+    public String getConnectionString(){
+	    return connectionString;
+    }
+    public String getName(){
+	    return name;
     }
 
     @Override
@@ -50,6 +65,16 @@ public class NodepoolCloud extends hudson.slaves.Cloud {
         throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
     }
     
-    
+    @Extension
+    public static final class DescriptorImpl extends Descriptor<hudson.slaves.Cloud> {
+	public DescriptorImpl(){
+		load();
+	}
+	@Override	
+	public String getDisplayName(){
+		return "Nodepool Cloud";
+	}
+	
+    }
     
 }
