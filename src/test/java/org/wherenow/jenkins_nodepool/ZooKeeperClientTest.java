@@ -26,11 +26,12 @@ package org.wherenow.jenkins_nodepool;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.framework.api.CuratorEvent;
+import org.apache.curator.framework.api.CuratorWatcher;
 import org.apache.curator.test.TestingServer;
 import org.apache.zookeeper.WatchedEvent;
-import org.apache.zookeeper.Watcher;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -41,14 +42,15 @@ import static org.junit.Assert.*;
 
 
 /**
- *
+ * This class mostly serves as my notes on how to use the
+ * curator framework.
  * @author hughsaunders
  */
-public class NodepoolClientTest {
+public class ZooKeeperClientTest {
 	
 	private TestingServer zkTestServer;
 	
-	public NodepoolClientTest() {
+	public ZooKeeperClientTest() {
 	}
 	
 	@BeforeClass
@@ -69,73 +71,107 @@ public class NodepoolClientTest {
 	public void tearDown() {
 	}
         
-        private NodepoolClient getClient(){
-            NodepoolClient npc = new NodepoolClient(
+        private ZooKeeperClient getClient(){
+            ZooKeeperClient zk = new ZooKeeperClient(
                 "localhost:" + Integer.toString(zkTestServer.getPort())
             );
-            npc.connect();
-            return npc;
+            zk.connect();
+            return zk;
         }
 
 	@Test
 	public void nodeCRUD() throws Exception{
             String path = "/crudTest";
             String payload = "payload";
+            String payloadUpdate = "payload update";
             Charset utf8 = Charset.forName("UTF-8");
-            NodepoolClient npc = getClient();
-            CuratorFramework conn = npc.getConnection();
+            
+            //Connect
+            ZooKeeperClient zk = getClient();
+            CuratorFramework conn = zk.getConnection();
            
+            // Assert path doesn't exist before creation
+            assertEquals(null, conn.checkExists().forPath(path));
+            
+            // Create
             conn.create().forPath(path, payload.getBytes(utf8));
+            
+            // Read
             byte[] recievedPayload = conn.getData().forPath(path);
             String recievedPayloadString = new String(recievedPayload, utf8);
             assertEquals(payload, recievedPayloadString);
+            
+            // Update
+            conn.setData().forPath(path, payloadUpdate.getBytes(utf8));
+            
+            // Read again to check update
+            recievedPayload = conn.getData().forPath(path);
+            recievedPayloadString = new String(recievedPayload, utf8);
+            assertEquals(payloadUpdate, recievedPayloadString);
+            
+            // Delete
+            conn.delete().forPath(path);
+            
+            // Assert nonexistent post delete
+            assertEquals(null, conn.checkExists().forPath(path));
+            
         }
         
         
-        private class ZkWatcher implements Watcher {
-            
-            private List<WatchedEvent> events;
-
-            public ZkWatcher() {
-                this.events = new ArrayList();
-            }
-
+        private class ZkWatcher<T> extends LinkedBlockingQueue<T> implements CuratorWatcher {
             @Override
             public void process(WatchedEvent we) {
-                events.add(we);
+                add((T)we);
             }
-            
-            public List<WatchedEvent> getEvents(){
-                return events;
-            }
-            
         }
+        
         @Test
         public void nodeWatch() throws Exception{
             String path = "/watchTest";
             String payload = "payload";
             Charset utf8 = Charset.forName("UTF-8");
-            NodepoolClient npc = getClient();
-            CuratorFramework conn = npc.getConnection();
-            Watcher watcher = new ZkWatcher();
+            ZooKeeperClient zk = getClient();
+            CuratorFramework conn = zk.getConnection();
+            ZkWatcher<WatchedEvent> watcher = new ZkWatcher();
             
             // set watch
-            conn.getData().usingWatcher(watcher);
+            conn.checkExists().usingWatcher(watcher).forPath(path);
             
             // create node
             conn.create().forPath(path, payload.getBytes(utf8));
-            // ensure creation triggers watch
-            
-            while (true){
-                // use a blocking queue to retrieve the event rather than a polling loop
-            }
            
+            // ensure creation triggers watch
+            // If poll times out, exception will be thrown and test fails
+            WatchedEvent we1 = watcher.poll(10, TimeUnit.SECONDS);
             
-            byte[] recievedPayload = conn.getData().forPath(path);
-            String recievedPayloadString = new String(recievedPayload, utf8);
-            assertEquals(payload, recievedPayloadString);
+            // assert path recieved with event matches path node was created with
+            String receivedPath = we1.getPath();
+            assertEquals(path, receivedPath);
+            
+            // assert payload received is the same as payload that was sent
+            String receivedPayload = new String(conn.getData().forPath(path), utf8);
+            assertEquals(payload, receivedPayload);
+
         }
                 
-        
+        @Test
+        public void testChildren() throws Exception{
+            ZooKeeperClient zk = getClient();
+            CuratorFramework conn = zk.getConnection();
+            
+            List<String> children = new ArrayList<String>();
+            children.add("c1");
+            children.add("c2");
+                    
+            for (String child : children){
+                conn.create().creatingParentsIfNeeded().forPath("/parent/"+child);
+            }
+            
+            List<String> receivedChildren = conn.getChildren().forPath("/parent");
+            assertEquals(children, receivedChildren);
+            
+            
+            
+        }
         
 }

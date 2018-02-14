@@ -30,6 +30,7 @@ import org.apache.curator.RetryPolicy;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.framework.api.CuratorWatcher;
+import org.apache.curator.framework.imps.CuratorFrameworkImpl;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.WatchedEvent;
@@ -38,7 +39,7 @@ import org.apache.zookeeper.WatchedEvent;
  *
  * @author hughsaunders
  */
-public class NodepoolClient implements CuratorWatcher{
+public class ZooKeeperClient{
 
 	private CuratorFramework conn;  
 	private String requestRoot;
@@ -48,7 +49,7 @@ public class NodepoolClient implements CuratorWatcher{
 	private RetryPolicy retryPolicy;	
 	
 
-	public NodepoolClient(String connectionString) {
+	public ZooKeeperClient(String connectionString) {
 		this(connectionString, 
 			"nodepool",
 			"requests",
@@ -56,7 +57,7 @@ public class NodepoolClient implements CuratorWatcher{
 			new ExponentialBackoffRetry(1000,3));
 	}
 
-	public NodepoolClient(String connectionString, String zkNamespace, String requestRoot, String nodeRoot, RetryPolicy retryPolicy) {
+	public ZooKeeperClient(String connectionString, String zkNamespace, String requestRoot, String nodeRoot, RetryPolicy retryPolicy) {
 		this.requestRoot = requestRoot;
 		this.nodeRoot = nodeRoot;
 		this.connectionString = connectionString;
@@ -81,20 +82,6 @@ public class NodepoolClient implements CuratorWatcher{
             return conn;
         }
 
-	public NodeRequest requestNode(Integer priority, byte[] data) throws Exception{
-		String path = "{0}/{1}-".format(this.requestRoot, priority.toString());
-		path = conn.create()
-			.withProtection()
-			.withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
-			.forPath(path, data);
-		//TODO:create proper constructor for node request and pass it some useful information
-		return new NodeRequest("testlabel");
-	}
-
-    @Override
-    public void process(WatchedEvent we) throws Exception {
-        
-    }
 
 
 	
