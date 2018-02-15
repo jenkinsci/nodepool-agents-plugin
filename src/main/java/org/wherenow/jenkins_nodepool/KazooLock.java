@@ -26,8 +26,14 @@ package org.wherenow.jenkins_nodepool;
 import java.nio.charset.Charset;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.api.CuratorWatcher;
+import org.apache.zookeeper.WatchedEvent;
 
 /**
  * Partial Java implementation of the python module kazoo.recipe.lock
@@ -62,9 +68,44 @@ public class KazooLock {
         this.utf8 = Charset.forName("UTF-8");
     }
     
-    private Integer sequenceNumberForPath(String path){
-        // TODO: implement this
-        return 0;
+    static Integer sequenceNumberForPath(String path) throws KazooLockException{
+        Pattern p = Pattern.compile(".*-([0-9]+)$");
+        Matcher m = p.matcher(path);
+        boolean matches = m.find();
+        if (matches){
+            return new Integer(m.group(1));
+        } else {
+            throw new KazooLockException("Found non sequential node: "+path);
+        }
+    }
+
+    private class KazooLockWatcher<T extends WatchedEvent>
+            extends LinkedBlockingQueue<T> implements CuratorWatcher {
+
+        @Override
+        public void process(WatchedEvent we) throws Exception {
+            add((T)we);
+        }
+    }
+
+    void waitForOtherContenders() throws Exception{
+         List<String> contenders = conn.getChildren().forPath(path);
+        for (String contender : contenders){
+            LOG.fine("Found contender for lock:" + contender);
+            Integer contenderSequence = sequenceNumberForPath(contender);
+            if (contenderSequence < this.sequence){
+                // This contender is ahead of us in the queue,
+                // watch and wait
+                waitForNodeRemoval(path);
+            }
+        }
+    }
+    void waitForNodeRemoval(String path)
+            throws Exception{
+        KazooLockWatcher klw = new KazooLockWatcher();
+        while (conn.checkExists().usingWatcher(klw).forPath(path) != null ){
+            klw.take();
+        }
     }
     
     public void acquire() throws Exception{
@@ -94,16 +135,6 @@ public class KazooLock {
         this.sequence = sequenceNumberForPath(this.node);
         
         // 3. Wait for any child nodes with lower seq numbers
-        List<String> contenders = conn.getChildren().forPath(path);
-        for (String contender : contenders){
-            LOG.fine("Found contender for lock:" + contender);
-            Integer contenderSequence = sequenceNumberForPath(contender);
-            if (contenderSequence < this.sequence){
-                // This contender is ahead of us in the queue,
-                // watch and wait
-            }
-            
-        }
     }
     
 }
