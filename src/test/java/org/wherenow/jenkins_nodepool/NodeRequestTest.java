@@ -23,20 +23,70 @@
  */
 package org.wherenow.jenkins_nodepool;
 
+import com.google.gson.Gson;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.logging.Logger;
+import org.apache.curator.framework.CuratorFramework;
 import org.junit.Test;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
+import org.junit.Before;
+import org.junit.BeforeClass;
 
 /**
  *
  * @author hughsaunders
  */
 public class NodeRequestTest {
-	
-	@Test
-	public void serialisation(){
-		NodeRequest nr = new NodeRequest("testlabel");	
-		String json = nr.toString();
-		
-		assertTrue(json.contains("testlabel"));
-	}
+    private static final Logger LOG = Logger.getLogger(NodeRequestTest.class.getName());
+    static Gson gson;
+    private String label = "testlabel";
+    private CuratorFramework conn;
+    private ZooKeeperClient zkc;
+    
+    @BeforeClass
+    public static void setUpClass() {
+        gson = new Gson();
+      
+        
+    }
+    
+    @Before
+    public void setUp() throws Exception{
+        zkc = ZooKeeperClientTest.getClient();
+        conn = zkc.getConnection();
+    }
+    
+    @Test
+    public void TestSerialisation(){
+        NodeRequest nr = new NodeRequest(conn, label);	
+        String json = nr.toString();
+        
+        LOG.fine("TestSerialisation json string: "+json);
+        
+        // ensure the json is valid by deserialising it
+        Map data = gson.fromJson(json, HashMap.class);
+        
+        // Check a couple of key value pairs are as expected
+        assertEquals((String)data.get("state"), "requested");
+        assertEquals(((List)data.get("node_types")).get(0), label);
+    }
+    
+    @Test
+    public void TestDeserialisation(){
+        String[] keys = {"node_types", "requestor", "state", "state_time"};
+        NodeRequest nr = new NodeRequest(conn, label);	
+        String json = nr.toString();
+        NodeRequest nr2 = NodeRequest.fromJson(json);
+        LOG.info("nr: "+nr);
+        LOG.info("nr2: "+nr2);
+        for (String key : keys){
+            LOG.info("key compare: "+key);
+            assertEquals(nr.get(key), nr2.get(key));
+        }
+        assertEquals(nr, nr2);
+        assertTrue(nr.equals(nr2));
+    }
+
 }

@@ -25,10 +25,16 @@ package org.wherenow.jenkins_nodepool;
 
 import com.google.gson.Gson;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import java.nio.charset.Charset;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.api.CuratorWatcher;
+import org.apache.zookeeper.WatchedEvent;
 
 enum State{
 	requested, pending, fulfilled, failed
@@ -46,32 +52,146 @@ enum State{
  * 
  * @author hughsaunders
  */
-public class NodeRequest {
+public class NodeRequest extends HashMap implements CuratorWatcher{
+    
+    // fields
+    
+    static Charset charset = Charset.forName("UTF-8");
+    private Gson gson;
+    private String[] requiredKeys = {"node_types", "requestor", "state", "state_time"};
+    private String nodePoolID;
+    private String nodePath;
+    private CuratorFramework conn;
+    private CountDownLatch latch;
+    private KazooLock lock;
+    
 
-	private Map<String, Object> data;
-	private Gson gson;
-	
-	public NodeRequest(String label)	{
-		this("jenkins", Arrays.asList( new String[] { label }));
-	}
+    // Static initialisers
+        
+    public static NodeRequest fromJsonBytes(CuratorFramework conn, byte[] bytes){
+        return NodeRequest.fromJson(conn, new String(bytes, charset));
+    }
 
-	public NodeRequest(List labels)	{
-		this("jenkins", labels);
-	}
-	@SuppressFBWarnings
-	public NodeRequest(String requestor, List labels) {
-		this.gson = new Gson();
-		this.data = new HashMap();
-		this.data.put("node_types", labels);
-		this.data.put("requestor", requestor);
-		this.data.put("state", State.requested);
-		this.data.put("state_time", System.currentTimeMillis()/1000);
-	}
-	
-	@Override
-	public String toString(){
-		String jsonStr = gson.toJson(this.data);
-		return jsonStr;
-	}
+    public static NodeRequest fromJson(CuratorFramework conn, String json){
+        Gson gson = new Gson();
+        Map data = gson.fromJson(json, HashMap.class);
+        return new NodeRequest(conn, data);
+    }
 
+    // constructors
+    
+    // package private constructor
+    NodeRequest(CuratorFramework conn, Map data){
+        this.gson = new Gson();
+        this.conn = conn;
+        this.latch = new CountDownLatch(1);
+        updateFromMap(data);
+    }
+
+
+    public NodeRequest(CuratorFramework conn, String label)	{
+        this(conn, "jenkins", Arrays.asList( new String[] { label }));
+    }
+
+    public NodeRequest(CuratorFramework conn, List labels)	{
+        this(conn, "jenkins", labels);
+    }
+    @SuppressFBWarnings
+    public NodeRequest(CuratorFramework conn, String requestor, List<String> labels) {
+        this.gson = new Gson();
+        this.conn = conn;
+         this.latch = new CountDownLatch(1);
+        put("node_types", new ArrayList(labels));
+        put("requestor", requestor);
+        put("state", State.requested);
+        put("state_time", new Double(System.currentTimeMillis()/1000));
+    }
+    
+    // public methods
+
+    public String getNodePath() {
+        return nodePath;
+    }
+
+    public void setNodePath(String nodePath) {
+        this.nodePath = nodePath;
+    }
+
+    public String getNodePoolID() {
+        return nodePoolID;
+    }
+
+    public void setNodePoolID(String nodePoolID) {
+        this.nodePoolID = nodePoolID;
+    }
+
+    @Override
+    public String toString(){
+        String jsonStr = gson.toJson(this);
+        return jsonStr;
+    }
+
+    public byte[] getBytes(){
+        return toString().getBytes(charset);
+    }
+    
+    @Override
+    public void process(WatchedEvent we) throws Exception {
+        // we don't care what the event is, but something changed, so refresh
+        // local data from zookeeper.
+        updateFromZooKeeper();
+    }
+    
+    public void waitForFulfillment() throws Exception {
+        while(true){
+            State state = (State)get("state");
+            switch(state){
+                case requested:
+                case pending:
+                    latch.await();
+                    break;
+                case fulfilled:
+                    return;
+                case failed:
+                    throw new NodePoolException("Nodepool node Request failed :("+this.toString());
+            }
+        }
+    }
+    
+    private void lock() throws Exception{
+        if (lock == null){
+            lock = new KazooLock(conn, nodePath);
+        }
+        lock.acquire();
+    }
+
+    
+    public void accept() throws Exception {
+        lock();
+        
+    }
+    
+    private void unblockWaiters(){
+        CountDownLatch old = latch; 
+        latch = new CountDownLatch(1);// do the switch before countdown, 
+                                      // to ensure the next await() call happens on the new latch.
+        old.countDown(); // this will unblock threads that have called latch.await()
+    }
+    
+    void updateFromZooKeeper() throws Exception{
+        if (nodePath == null){
+            throw new NodePoolException("Attempt to update request from zookeeper before path has been set");
+        }
+        byte[] bytes = conn.getData().forPath(nodePath);
+        NodeRequest remoteState = NodeRequest.fromJsonBytes(conn, bytes);
+        updateFromMap(remoteState);
+        unblockWaiters();
+    }
+    
+    private void updateFromMap(Map data){
+        put("state_time", (Double)data.get("state_time"));
+        put("node_types", data.get("node_types"));
+        put("state", State.valueOf((String)data.get("state")));
+        put("requestor", data.get("requestor"));
+    }
 }

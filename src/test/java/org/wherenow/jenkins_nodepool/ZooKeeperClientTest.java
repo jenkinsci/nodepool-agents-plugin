@@ -48,8 +48,6 @@ import static org.junit.Assert.*;
  */
 public class ZooKeeperClientTest {
 	
-	private TestingServer zkTestServer;
-	
 	public ZooKeeperClientTest() {
 	}
 	
@@ -62,16 +60,16 @@ public class ZooKeeperClientTest {
 	}
 	
 	@Before
-	public void setUp() throws Exception {
-                // setup zk test server
-		zkTestServer = new TestingServer();
+	public void setUp(){
+                
 	}
 	
 	@After
 	public void tearDown() {
 	}
         
-        private ZooKeeperClient getClient(){
+        static ZooKeeperClient getClient() throws Exception{
+            TestingServer zkTestServer = new TestingServer();
             ZooKeeperClient zk = new ZooKeeperClient(
                 "localhost:" + Integer.toString(zkTestServer.getPort())
             );
@@ -116,15 +114,8 @@ public class ZooKeeperClientTest {
             assertEquals(null, conn.checkExists().forPath(path));
             
         }
-        
-        
-        private class ZkWatcher<T> extends LinkedBlockingQueue<T> implements CuratorWatcher {
-            @Override
-            public void process(WatchedEvent we) {
-                add((T)we);
-            }
-        }
-        
+
+
         @Test
         public void nodeWatch() throws Exception{
             String path = "/watchTest";

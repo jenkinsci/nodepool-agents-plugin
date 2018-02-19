@@ -7,7 +7,7 @@ import static org.junit.Assert.*;
 import org.junit.Rule;
 import org.jvnet.hudson.test.RestartableJenkinsRule;
 
-public class NodepoolCloudTest {
+public class NodePoolCloudTest {
 
     @Rule
     public RestartableJenkinsRule rr = new RestartableJenkinsRule();
@@ -24,7 +24,7 @@ public class NodepoolCloudTest {
     @Test
     public void testConfigWithRestart() {
         rr.then(r -> {
-	    NodepoolCloud npc = new NodepoolCloud("test", "host1:port1,host2:port2");
+	    NodePoolCloud npc = new NodePoolCloud("test", "host1:port1,host2:port2");
 	    r.jenkins.clouds.add(npc);
 	    HtmlForm config = r.createWebClient().goTo("configure").getFormByName("config");
             HtmlTextInput nameStringBox = config.getInputByName("_.name");

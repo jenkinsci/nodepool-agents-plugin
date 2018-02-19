@@ -37,12 +37,12 @@ import org.kohsuke.stapler.DataBoundConstructor;
  *
  * @author hughsaunders
  */
-public class NodepoolCloud extends hudson.slaves.Cloud {
+public class NodePoolCloud extends hudson.slaves.Cloud {
 
     private String connectionString;
 
     @DataBoundConstructor
-    public NodepoolCloud(String name,
+    public NodePoolCloud(String name,
 	    String connectionString) {
         super(name);
 	this.connectionString = connectionString;
@@ -57,12 +57,18 @@ public class NodepoolCloud extends hudson.slaves.Cloud {
 
     @Override
     public Collection<NodeProvisioner.PlannedNode> provision(Label label, int i) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        // returns a list of planned nodes
+        // generate Future<Node> object
+        // box the future node in NodeProvisioner.PlannedNode
+        // return list of PlannedNode
+        
     }
 
     @Override
     public boolean canProvision(Label label) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        // TODO: Work our how to query the labels nodepool supports
+        return true;
+        
     }
     
     @Extension

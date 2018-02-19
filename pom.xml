@@ -69,5 +69,15 @@
             <artifactId>curator-test</artifactId>
             <version>4.0.0</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>cloud-stats</artifactId>
+            <version>0.9</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>ssh-slaves</artifactId>
+            <version>1.25.1</version>
+        </dependency>
     </dependencies>
 </project>

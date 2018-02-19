@@ -28,11 +28,14 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.api.CuratorWatcher;
+import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.KeeperException.NodeExistsException;
 import org.apache.zookeeper.WatchedEvent;
 
 /**
@@ -44,10 +47,17 @@ public class KazooLock {
     private static final Logger LOG = Logger.getLogger(KazooLock.class.getName());
     
     private CuratorFramework conn;
+    // Path is the path to the node to be locked
     private final String path;
     private final String identifier;
     private final String node_name = "__lock__";
     private final String prefix;
+    private final Long timeout;
+    private final TimeUnit unit;
+    /** create_path is the path we create to represent our lock or place in the 
+     * queue. The actual node name will have a sequence number appended by 
+     * zookeeper. The full node path is stored in self.node
+     */
     private final String create_path;
     //this is set to create_path+index number, when the node is created
     private String node;
@@ -55,21 +65,32 @@ public class KazooLock {
     private Integer sequence;
     
     public KazooLock(CuratorFramework conn, String path){
-        this(conn, path, "jenkins");
+        this(conn, path, "jenkins", 5, TimeUnit.SECONDS);
     }
     
     public KazooLock(CuratorFramework conn, 
-            String path, String identifier){
+            String path, String identifier, long timeout, TimeUnit unit){
         this.conn = conn;
         this.path = path;
         this.identifier = identifier;
+        this.timeout = timeout;
+        this.unit = unit;
         this.prefix = UUID.randomUUID().toString() + node_name; //type 4
         this.create_path = this.path + "/" + this.prefix;
         this.utf8 = Charset.forName("UTF-8");
     }
     
+    private class KazooLockWatcher<T extends WatchedEvent>
+            extends LinkedBlockingQueue<T> implements CuratorWatcher {
+
+        @Override
+        public void process(WatchedEvent we) throws Exception {
+            add((T)we);
+        }
+    }
+    
     static Integer sequenceNumberForPath(String path) throws KazooLockException{
-        Pattern p = Pattern.compile(".*-([0-9]+)$");
+        Pattern p = Pattern.compile("_([0-9]+)$");
         Matcher m = p.matcher(path);
         boolean matches = m.find();
         if (matches){
@@ -79,62 +100,57 @@ public class KazooLock {
         }
     }
 
-    private class KazooLockWatcher<T extends WatchedEvent>
-            extends LinkedBlockingQueue<T> implements CuratorWatcher {
-
-        @Override
-        public void process(WatchedEvent we) throws Exception {
-            add((T)we);
-        }
-    }
-
-    void waitForOtherContenders() throws Exception{
-         List<String> contenders = conn.getChildren().forPath(path);
-        for (String contender : contenders){
-            LOG.fine("Found contender for lock:" + contender);
-            Integer contenderSequence = sequenceNumberForPath(contender);
-            if (contenderSequence < this.sequence){
-                // This contender is ahead of us in the queue,
-                // watch and wait
-                waitForNodeRemoval(path);
-            }
-        }
-    }
     void waitForNodeRemoval(String path)
             throws Exception{
         KazooLockWatcher klw = new KazooLockWatcher();
         while (conn.checkExists().usingWatcher(klw).forPath(path) != null ){
-            klw.take();
+            WatchedEvent we = (WatchedEvent)klw.poll(timeout, unit);
+            if (we == null){
+                throw new KazooLockException("Timeout Acquiring Lock for node: "+this.path);
+            }
+            
         }
     }
     
     public void acquire() throws Exception{
-       
-        /**
-         * /path <-- ensure this
-         * /path/prefix <-- lock path?
-         * create path
-         * self.node is creat_path+index number
-         *
-         * delete
-         * self.node = prefix
-        
-         *  - Ensure path exists
-         *  - Check for child nodes with lower sequence numbers
-         *    - For any lower seq children, create watch and wait
-         *  - Create create_path ephemeral and sequential
-         */
-        
-        
-        
-        // 1. Ensure path exists
-        conn.create().forPath(path, identifier.getBytes(utf8));
+        // 1. Ensure path to be locked exists
+        try {
+            conn.create()
+                .creatingParentsIfNeeded()
+                .forPath(path, identifier.getBytes(utf8));
+        } catch (NodeExistsException ex) {
+            // node already exists, nothing to do.
+        }
         
         // 2. Create create path and determine our sequence
-        this.node = conn.create().forPath(create_path, identifier.getBytes(utf8));
-        this.sequence = sequenceNumberForPath(this.node);
+        node = conn.create()
+                   .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
+                   .forPath(create_path, identifier.getBytes(utf8));
+        sequence = sequenceNumberForPath(node);
         
         // 3. Wait for any child nodes with lower seq numbers
+        List<String> contenders = conn.getChildren().forPath(path);
+        for (String contender : contenders){
+            LOG.log(Level.FINE, "Found contender for lock:{0}", contender);
+            Integer contenderSequence = sequenceNumberForPath(contender);
+            if (contenderSequence < sequence){
+                // This contender is ahead of us in the queue,
+                // watch and wait
+                waitForNodeRemoval(path+"/"+contender);
+                /**
+                 * Waiting for node removal may take a long time
+                 * during which other contenders may be added to
+                 * the list. However any contenders added during
+                 * our wait will have a higher sequence number
+                 * than us, so must wait for us before acquiring.
+                 */
+            }
+        }
+        
+    }
+    public void release() throws Exception{
+        conn.delete().forPath(node);
     }
     
 }
+ 
