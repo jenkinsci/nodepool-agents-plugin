@@ -38,6 +38,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
+import org.junit.ClassRule;
 
 
 
@@ -47,6 +48,9 @@ import static org.junit.Assert.*;
  * @author hughsaunders
  */
 public class ZooKeeperClientTest {
+    
+        @ClassRule
+        public static NodePoolRule npr = new NodePoolRule();
 	
 	public ZooKeeperClientTest() {
 	}
@@ -68,14 +72,15 @@ public class ZooKeeperClientTest {
 	public void tearDown() {
 	}
         
-        static ZooKeeperClient getClient() throws Exception{
-            TestingServer zkTestServer = new TestingServer();
-            ZooKeeperClient zk = new ZooKeeperClient(
-                "localhost:" + Integer.toString(zkTestServer.getPort())
-            );
-            zk.connect();
-            return zk;
-        }
+//        static CuratorFramework getClient() throws Exception{
+//            TestingServer zkTestServer = new TestingServer();
+//            ZooKeeperClient zk = new ZooKeeperClient(
+//                zkTestServer.getConnectString()
+//            );
+//            zk.connect();
+//            return zk;
+//            return npr.getCuratorConnection();
+//        }
 
 	@Test
 	public void nodeCRUD() throws Exception{
@@ -85,8 +90,7 @@ public class ZooKeeperClientTest {
             Charset utf8 = Charset.forName("UTF-8");
             
             //Connect
-            ZooKeeperClient zk = getClient();
-            CuratorFramework conn = zk.getConnection();
+            CuratorFramework conn = npr.getCuratorConnection();
            
             // Assert path doesn't exist before creation
             assertEquals(null, conn.checkExists().forPath(path));
@@ -121,8 +125,7 @@ public class ZooKeeperClientTest {
             String path = "/watchTest";
             String payload = "payload";
             Charset utf8 = Charset.forName("UTF-8");
-            ZooKeeperClient zk = getClient();
-            CuratorFramework conn = zk.getConnection();
+            CuratorFramework conn = npr.getCuratorConnection();
             ZkWatcher<WatchedEvent> watcher = new ZkWatcher();
             
             // set watch
@@ -147,8 +150,7 @@ public class ZooKeeperClientTest {
                 
         @Test
         public void testChildren() throws Exception{
-            ZooKeeperClient zk = getClient();
-            CuratorFramework conn = zk.getConnection();
+            CuratorFramework conn = npr.getCuratorConnection();
             
             List<String> children = new ArrayList<String>();
             children.add("c1");

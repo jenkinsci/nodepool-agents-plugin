@@ -33,6 +33,7 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
 
 /**
  *
@@ -45,6 +46,9 @@ public class NodeRequestTest {
     private CuratorFramework conn;
     private ZooKeeperClient zkc;
     
+    @ClassRule
+    public static NodePoolRule npr = new NodePoolRule();
+    
     @BeforeClass
     public static void setUpClass() {
         gson = new Gson();
@@ -54,8 +58,7 @@ public class NodeRequestTest {
     
     @Before
     public void setUp() throws Exception{
-        zkc = ZooKeeperClientTest.getClient();
-        conn = zkc.getConnection();
+        conn = npr.getCuratorConnection();
     }
     
     @Test
@@ -78,7 +81,7 @@ public class NodeRequestTest {
         String[] keys = {"node_types", "requestor", "state", "state_time"};
         NodeRequest nr = new NodeRequest(conn, label);	
         String json = nr.toString();
-        NodeRequest nr2 = NodeRequest.fromJson(json);
+        NodeRequest nr2 = NodeRequest.fromJson(conn, json);
         LOG.info("nr: "+nr);
         LOG.info("nr2: "+nr2);
         for (String key : keys){

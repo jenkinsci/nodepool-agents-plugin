@@ -62,7 +62,7 @@ public class NodeRequest extends HashMap implements CuratorWatcher{
     private String nodePoolID;
     private String nodePath;
     private CuratorFramework conn;
-    private CountDownLatch latch;
+    private volatile CountDownLatch latch;
     private KazooLock lock;
     
 

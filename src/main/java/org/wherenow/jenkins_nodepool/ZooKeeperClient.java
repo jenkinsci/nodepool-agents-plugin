@@ -79,6 +79,9 @@ public class ZooKeeperClient{
 	}
         
         public CuratorFramework getConnection(){
+            if (conn == null){
+                throw new IllegalStateException("Attempt to get connection before calling connect");
+            }
             return conn;
         }
 

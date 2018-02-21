@@ -95,8 +95,8 @@ public class NodePoolClient {
         }
         
         static String idForPath(String path) throws NodePoolException{
-            if (path.contains("/")){
-                List<String> parts = Arrays.asList(path.split("/"));
+            if (path.contains("-")){
+                List<String> parts = Arrays.asList(path.split("-"));
                 return parts.get(parts.size()-1);
                 
             } else {
@@ -124,17 +124,15 @@ public class NodePoolClient {
             
         }
         
-        private 
-        
-    	public NodeRequest requestNode(Integer priority, byte[] data) throws Exception{
-		String path = "{0}/{1}-".format(this.requestRoot, priority.toString());
-		path = conn.create()
-			.withProtection()
-			.withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
-			.forPath(path, data);
-		//TODO:create proper constructor for node request and pass it some useful information
-		return new NodeRequest("testlabel");
-	}
+//    	public NodeRequest requestNode(Integer priority, byte[] data) throws Exception{
+//		String path = "{0}/{1}-".format(this.requestRoot, priority.toString());
+//		path = conn.create()
+//			.withProtection()
+//			.withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
+//			.forPath(path, data);
+//		//TODO:create proper constructor for node request and pass it some useful information
+//		return new NodeRequest("testlabel");
+//	}
         
         public void provisionNode(String label){
             //

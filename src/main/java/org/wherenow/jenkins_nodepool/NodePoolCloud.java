@@ -61,7 +61,7 @@ public class NodePoolCloud extends hudson.slaves.Cloud {
         // generate Future<Node> object
         // box the future node in NodeProvisioner.PlannedNode
         // return list of PlannedNode
-        
+        return null;
     }
 
     @Override

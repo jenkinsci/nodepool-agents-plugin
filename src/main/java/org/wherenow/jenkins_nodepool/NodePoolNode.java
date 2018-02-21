@@ -23,8 +23,11 @@
  */
 package org.wherenow.jenkins_nodepool;
 
+import hudson.model.Descriptor;
 import hudson.model.Node;
 import hudson.model.Slave;
+import hudson.slaves.ComputerLauncher;
+import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -35,11 +38,11 @@ import java.util.concurrent.TimeoutException;
  * @author hughsaunders
  */
 public class NodePoolNode extends Slave implements Future<Node>{
-    
-    
-    public NodePoolNode(NodePoolClient npClient){
-        
+
+    public NodePoolNode(String string, String string1, ComputerLauncher cl) throws Descriptor.FormException, IOException {
+        super(string, string1, cl);
     }
+   
 
     @Override
     public boolean cancel(boolean mayInterruptIfRunning) {
