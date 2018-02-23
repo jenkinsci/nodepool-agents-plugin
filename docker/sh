@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# shortcut for logging onto a container shell
+
+container="$1"
+
+if [ ${container} == "launcher" ]; then
+    docker exec -it docker_nodepool_launcher_1 bash
+
+elif [ ${container} == "zk" ]; then
+    docker exec -it docker_zookeeper_1 bash
+
+else
+    echo "Unknown container ${container}"
+    exit 1
+fi

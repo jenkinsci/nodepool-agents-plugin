@@ -1,0 +1,28 @@
+zookeeper-servers:
+  - host: zookeeper
+
+labels:
+  - name: debian
+    min-ready: 1
+    console-log: True
+
+providers:
+  - name: rackspace
+    cloud: rackspace
+    driver: openstack
+    region-name: IAD
+
+    cloud-images:
+      - name: debian-jessie-external
+        image-name: Debian 8 (Jessie) (PVHVM)
+
+    pools:
+      - name: main
+        max-servers: 1
+        labels:
+          - name: debian
+            cloud-image: debian-jessie-external
+            flavor-name: performance1-4
+            key-name: %KEYPAIR_NAME%
+
+    boot-timeout: 600
