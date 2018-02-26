@@ -25,6 +25,7 @@ package org.wherenow.jenkins_nodepool;
 
 import com.spotify.docker.client.DefaultDockerClient;
 import com.spotify.docker.client.DockerClient;
+import com.spotify.docker.client.DockerClient.LogsParam;
 import com.spotify.docker.client.exceptions.DockerCertificateException;
 import com.spotify.docker.client.exceptions.DockerException;
 import com.spotify.docker.client.messages.ContainerConfig;
@@ -33,7 +34,7 @@ import com.spotify.docker.client.messages.ContainerInfo;
 import com.spotify.docker.client.messages.HostConfig;
 import com.spotify.docker.client.messages.NetworkSettings;
 import com.spotify.docker.client.messages.PortBinding;
-import com.spotify.docker.client.shaded.com.google.common.collect.ImmutableMap;
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -61,7 +62,7 @@ public class NodePoolRule implements TestRule {
         docker = null;
         try {
             docker = DefaultDockerClient.fromEnv().build();
-        } catch (Exception e) {
+        } catch (DockerCertificateException e) {
             LOG.severe(e.getMessage());
         }
     }
@@ -85,7 +86,7 @@ public class NodePoolRule implements TestRule {
         return conn;
     }
 
-    private ContainerInfo startContainer(String image, List<String> env, String... ports)
+    private ContainerInfo startContainer(String image, String name, List<String> env, List<String> links,  String... ports)
             throws DockerException, InterruptedException {
 
         //get base image
@@ -98,7 +99,10 @@ public class NodePoolRule implements TestRule {
         for (String port : ports) {
             portBindings.put(port+"/tcp", randomPort);
         }
-        final HostConfig hostConfig = HostConfig.builder().portBindings(portBindings).build();
+        final HostConfig hostConfig = HostConfig.builder()
+                .portBindings(portBindings)
+                .links(links)
+                .build();
 
         // Create container with exposed ports
         final ContainerConfig containerConfig = ContainerConfig.builder()
@@ -107,7 +111,7 @@ public class NodePoolRule implements TestRule {
                 .env(env)
                 .build();
 
-        final ContainerCreation creation = docker.createContainer(containerConfig);
+        final ContainerCreation creation = docker.createContainer(containerConfig,name);
         final String id = creation.id();
 
 
@@ -131,24 +135,34 @@ public class NodePoolRule implements TestRule {
                 ContainerInfo zkc;
                 ContainerInfo npc;
 
+                Map<String, ContainerInfo> containers = new HashMap();
                 List<String> zkEnv = new ArrayList();
                 List<String> npEnv = new ArrayList();
+                List<String> nodepoolLinks = new ArrayList();
+                List<String> zkLinks = new ArrayList();
 
                 // start zookeeper container
-                zkc = startContainer("zookeeper:3.4", zkEnv, "2181");
+                zkc = startContainer("zookeeper:3.4", "ZK", zkEnv, zkLinks, "2181");
+                containers.put("Zookeeper", zkc);
 
                 // Get zookeeper port
                 HostConfig zkHostConfig = zkc.hostConfig();
                 NetworkSettings networkSettings = zkc.networkSettings();
-                ImmutableMap<String, List<PortBinding>> portBindings = networkSettings.ports();
+                Map<String, List<PortBinding>> portBindings = networkSettings.ports();
                 List<PortBinding> zkClientPortBindings = portBindings.get("2181/tcp");
                 PortBinding zkClientPortBinding = zkClientPortBindings.get(0);
                 LOG.severe(zkClientPortBinding.toString());
                 Integer zkPort = Integer.parseInt(zkClientPortBinding.hostPort());
 
                 // Add zookeeper port to nodepool container env and start it
-                npEnv.add("ZKPORT=" + zkPort.toString());
-                npc = startContainer("hughsaunders/nodepoolrulejunit", npEnv, "9999");
+                //npEnv.add("ZKPORT=" + zkPort.toString());
+                //npEnv.forEach((s) -> {
+                //    LOG.log(Level.SEVERE, "npenv: {0}", s);
+                //});
+               
+                nodepoolLinks.add("ZK");
+                npc = startContainer("hughsaunders/nodepoolrulejunit", "NP", npEnv, nodepoolLinks,  "9999");
+                containers.put("Nodepool", npc);
 
                 // connect to zookeeper
                 conn = CuratorFrameworkFactory.builder()
@@ -162,10 +176,16 @@ public class NodePoolRule implements TestRule {
                     base.evaluate();
                 } finally {
                     conn.close();
-                    docker.stopContainer(npc.id(), 0);
-                    docker.stopContainer(zkc.id(), 0);
-                    docker.removeContainer(npc.id());
-                    docker.removeContainer(zkc.id());
+                    
+                    ContainerInfo c;
+                    for (String name : containers.keySet()){
+                        c = containers.get(name);
+                        docker.stopContainer(c.id(), 0);
+                        LOG.info(MessageFormat.format("---- {0} Container Output----",name));
+                        LOG.info(docker.logs(c.id(), LogsParam.stdout(), LogsParam.stderr()).readFully());
+                        docker.removeContainer(c.id());
+                    }
+          
                 }
 
             }

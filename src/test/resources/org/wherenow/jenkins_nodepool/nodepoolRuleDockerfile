@@ -47,4 +47,4 @@ RUN cd nodepool; pip install .
 
 ADD updateConfig.sh updateConfig.sh
 
-CMD cd nodepool/tools/zuul-nodepool-integration; ../../../updateConfig.sh; bash -x ./start.sh; while :; do sleep 1; done
+CMD env; cd nodepool/tools/zuul-nodepool-integration; ../../../updateConfig.sh; bash -x ./start.sh; while ! tail -F /tmp/nodepool/log/nodepool-launcher.log; do sleep 1; done

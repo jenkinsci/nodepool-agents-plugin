@@ -23,10 +23,6 @@
  */
 package org.wherenow.jenkins_nodepool;
 
-import com.arakelian.docker.junit.Container;
-import com.arakelian.docker.junit.Container.Binding;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import org.apache.curator.framework.CuratorFramework;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -86,6 +82,7 @@ public class NodePoolClientTest {
     @Test
     public void ruleTest() throws Exception {
         npr.getCuratorConnection().create().forPath("/testnode");
+        Thread.sleep(30000);
     }
     
 }
