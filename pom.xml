@@ -13,6 +13,7 @@
     <properties>
         <jenkins.version>2.60.3</jenkins.version>
         <java.level>8</java.level>
+        <!--<tiger-types.version>2.2</tiger-types.version>-->
     </properties>
     <name>nodepool-plugin</name>
     <description>TODO</description>
@@ -116,6 +117,7 @@
             <groupId>com.spotify</groupId>
             <artifactId>docker-client</artifactId>
             <version>8.11.1</version>
+            <classifier>shaded</classifier>
             <exclusions>
                 <exclusion>
                     <groupId>org.apache.commons</groupId>
@@ -125,6 +127,30 @@
                     <groupId>org.glassfish.hk2</groupId>
                     <artifactId>hk2-utils</artifactId>
                 </exclusion>-->
+                <exclusion>
+                    <groupId>org.glassfish.hk2</groupId>
+                    <artifactId>hk2-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.glassfish.hk2</groupId>
+                    <artifactId>hk2-locator</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.glassfish.jersey.core</groupId>
+                    <artifactId>jersey-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.glassfish.jersey.connectors</groupId>
+                    <artifactId>jersey-apache-connector</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.glassfish.jersey.media</groupId>
+                    <artifactId>jersey-media-json-jackson</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.jvnet</groupId>
+                    <artifactId>tiger-types</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
         <dependency>
@@ -143,10 +169,21 @@
             <artifactId>tiger-types</artifactId>
             <version>2.2</version>
         </dependency> -->
-        <dependency>
+        <!--<dependency>
             <groupId>org.glassfish.hk2</groupId>
             <artifactId>hk2-utils</artifactId>
-            <version>2.2.0</version>
-        </dependency>
+            <version>2.4.0-b34</version>
+        </dependency>-->
+        <!--<dependency>
+            <groupId>org.jenkins-ci.main</groupId>
+            <artifactId>jenkins-core</artifactId>
+            <version>2.60.3</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.jvnet</groupId>
+                    <artifactId>tiger-types</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>-->
     </dependencies>
 </project>
