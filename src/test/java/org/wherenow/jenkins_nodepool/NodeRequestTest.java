@@ -63,30 +63,6 @@ public class NodeRequestTest {
     @Before
     public void setUp() throws Exception {
         conn = npr.getCuratorConnection();
-
-        
-        //Temp code for debugging the tiger-types conflict
-        
-        // Example using HTMLEmail from Apache Commons Email 
-        Class theClass = Types.class;
-
-        // Find the path of the compiled class 
-        String classPath = theClass.getResource(theClass.getSimpleName() + ".class").toString();
-        LOG.severe("Class: " + classPath);
-
-        // Find the path of the lib which includes the class 
-        String libPath = classPath.substring(0, classPath.lastIndexOf("!"));
-        LOG.severe("Lib:   " + libPath);
-
-        // Find the path of the file inside the lib jar 
-        String filePath = libPath + "!/META-INF/MANIFEST.MF";
-        LOG.severe("File:  " + filePath);
-
-        // We look at the manifest file, getting two attributes out of it 
-        Manifest manifest = new Manifest(new URL(filePath).openStream());
-        Attributes attr = manifest.getMainAttributes();
-        LOG.severe("Manifest-Version: " + attr.getValue("Manifest-Version"));
-        LOG.severe("Implementation-Version: " + attr.getValue("Implementation-Version"));
     }
 
     @Test

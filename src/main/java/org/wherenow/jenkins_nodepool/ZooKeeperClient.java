@@ -23,17 +23,11 @@
  */
 package org.wherenow.jenkins_nodepool;
 
-import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.List;
+import java.text.MessageFormat;
 import org.apache.curator.RetryPolicy;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
-import org.apache.curator.framework.api.CuratorWatcher;
-import org.apache.curator.framework.imps.CuratorFrameworkImpl;
 import org.apache.curator.retry.ExponentialBackoffRetry;
-import org.apache.zookeeper.CreateMode;
-import org.apache.zookeeper.WatchedEvent;
 
 /**
  *
@@ -47,19 +41,23 @@ public class ZooKeeperClient{
 	private String connectionString;
 	private String zkNamespace;
 	private RetryPolicy retryPolicy;	
+        
+        
+        public static CuratorFramework createConnection(String connectionString){
+            ZooKeeperClient zkc = new ZooKeeperClient(connectionString);
+            zkc.connect();
+            return zkc.getConnection();
+        }
 	
 
 	public ZooKeeperClient(String connectionString) {
 		this(connectionString, 
 			"nodepool",
-			"requests",
-			"nodes",
 			new ExponentialBackoffRetry(1000,3));
 	}
 
-	public ZooKeeperClient(String connectionString, String zkNamespace, String requestRoot, String nodeRoot, RetryPolicy retryPolicy) {
-		this.requestRoot = requestRoot;
-		this.nodeRoot = nodeRoot;
+	public ZooKeeperClient(String connectionString, String zkNamespace, 
+                RetryPolicy retryPolicy) {
 		this.connectionString = connectionString;
 		this.zkNamespace = zkNamespace;
 		this.retryPolicy = retryPolicy;
@@ -68,7 +66,7 @@ public class ZooKeeperClient{
 	public void connect(){
 		conn = CuratorFrameworkFactory.builder()
 		.connectString(connectionString)
-		.namespace(zkNamespace)
+		.namespace(MessageFormat.format("/{0}",zkNamespace))
 		.retryPolicy(retryPolicy)
 		.build();
 		conn.start();

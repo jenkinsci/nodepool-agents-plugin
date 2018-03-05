@@ -30,12 +30,14 @@ import java.util.logging.Logger;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.api.CuratorWatcher;
 import org.apache.curator.test.TestingServer;
+import org.apache.zookeeper.data.Stat;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
+import org.junit.ClassRule;
 
 /**
  *
@@ -49,6 +51,9 @@ public class KazooLockTest {
     ZooKeeperClient zk;
     CuratorFramework conn;
     String path = "/testkazoolock/locknode1";
+    
+    @ClassRule
+    public static NodePoolRule npr = new NodePoolRule();
 
     public KazooLockTest() {
     }
@@ -64,12 +69,12 @@ public class KazooLockTest {
     @Before
     public void setUp() throws Exception {
     
-        TestingServer zkTestServer = new TestingServer();
-        ZooKeeperClient zk = new ZooKeeperClient(
-                zkTestServer.getConnectString()
-        );
-        zk.connect();
-        conn = zk.getConnection();
+//        TestingServer zkTestServer = new TestingServer();
+//        ZooKeeperClient zk = new ZooKeeperClient(
+//                zkTestServer.getConnectString()
+//        );
+//        zk.connect();
+        conn = npr.getCuratorConnection();
     }
 
     @After
@@ -86,8 +91,16 @@ public class KazooLockTest {
 
     @Test
     public void testAcquireRelease() throws Exception {
-        // create node to ensure acquire doesn't fail if node already exists
-        conn.create().creatingParentsIfNeeded().forPath(path);
+        
+
+        Stat stat = conn.checkExists().forPath(path);
+        if (stat == null){
+            // create node to ensure acquire doesn't fail if node already exists
+            conn.create()
+                .creatingParentsIfNeeded()
+                .forPath(path);
+        }
+
 
         // check newly created node has no children
         children = conn.getChildren().forPath(path);

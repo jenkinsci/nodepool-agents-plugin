@@ -80,9 +80,11 @@ public class NodePoolClientTest {
     }
     
     @Test
-    public void ruleTest() throws Exception {
+    public void requestTest() throws Exception {
         npr.getCuratorConnection().create().forPath("/testnode");
-        Thread.sleep(30000);
+        NodePoolClient npc = new NodePoolClient(npr.getCuratorConnection());
+        NodeRequest nr = npc.requestNode("fake-label");
+        nr.waitForFulfillment();
     }
     
 }

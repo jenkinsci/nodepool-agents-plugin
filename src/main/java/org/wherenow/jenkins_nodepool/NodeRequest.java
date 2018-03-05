@@ -96,6 +96,7 @@ public class NodeRequest extends HashMap implements CuratorWatcher{
     public NodeRequest(CuratorFramework conn, List labels)	{
         this(conn, "jenkins", labels);
     }
+    
     @SuppressFBWarnings
     public NodeRequest(CuratorFramework conn, String requestor, List<String> labels) {
         this.gson = new Gson();
@@ -191,7 +192,7 @@ public class NodeRequest extends HashMap implements CuratorWatcher{
     private void updateFromMap(Map data){
         put("state_time", (Double)data.get("state_time"));
         put("node_types", data.get("node_types"));
-        put("state", State.valueOf((String)data.get("state")));
+        put("state", data.get("state"));
         put("requestor", data.get("requestor"));
     }
 }
