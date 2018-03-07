@@ -28,10 +28,13 @@ import hudson.model.Node;
 import hudson.model.Slave;
 import hudson.slaves.ComputerLauncher;
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  *
@@ -39,34 +42,87 @@ import java.util.concurrent.TimeoutException;
  */
 public class NodePoolNode extends Slave implements Future<Node>{
 
-    public NodePoolNode(String string, String string1, ComputerLauncher cl) throws Descriptor.FormException, IOException {
-        super(string, string1, cl);
+    private static final Logger LOGGER = Logger.getLogger(NodePoolNode.class.getName());
+
+    private NodePoolClient client;
+    NodeRequest request;
+
+
+    public NodePoolNode(NodePoolClient client, NodeRequest request) throws IOException, Descriptor.FormException {
+
+        super(
+                request.getNodePoolID(), // name
+                "/var/lib/jenkins",  // TODO this should be the path to the root of the workspace on the slave
+                null // TODO ComputerLauncher instance goes here
+        );
+        this.client = client;
+        this.request = request;
     }
-   
 
     @Override
     public boolean cancel(boolean mayInterruptIfRunning) {
+        // TODO release node & delete noderequest if it exists?
         throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
     }
 
     @Override
     public boolean isCancelled() {
+
+        // TODO confirm node & noderequest are released/deleted
         throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
     }
 
     @Override
     public boolean isDone() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+
+        LOGGER.log(Level.INFO, "isDone() polling to see if node is ready");
+
+        // NOTE: the node request should be getting asynchronously updated via a curator watcher attached to it,
+        // so we can just test if the state is fulfilled.
+        final State requestState = request.getState();
+
+        LOGGER.log(Level.INFO, "Current state of request " + request.getNodePoolID() + " is: " + requestState);
+
+        if (requestState == State.failed) {
+            // TODO switch this logic to re-submit the NodeRequest?
+            LOGGER.log(Level.WARNING, "Request " + request.getNodePoolID() + " failed.");
+        }
+
+        if (requestState != State.requested) {
+            LOGGER.log(Level.INFO, "Current state is now: " + requestState);
+        }
+
+        return requestState == State.fulfilled;
     }
 
     @Override
     public Node get() throws InterruptedException, ExecutionException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        return getNode();
     }
 
     @Override
     public Node get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        // TODO do timeout stuff the interface wants.
+        return getNode();
     }
-    
+
+    /**
+     * Called once a NodeRequest has been "fulfilled", meaning there is now a Node up and waiting for us to use.
+     *
+     * In Zuul terms, we now "accept" the node.
+     * @return Node
+     */
+    private Node getNode() throws ExecutionException {
+        try {
+            LOGGER.log(Level.INFO, "Nodes to accept:" + request.get("nodes"));
+            final List<String> nodes = client.acceptNodes(request);
+            LOGGER.log(Level.INFO, "Accepted nodes: " + nodes);
+
+            // ok we know the identity of the nodes to use
+            // TODO do whatever stuff neeeds to happen to actually provision a Node now.
+            return this;
+        } catch (Exception e) {
+            throw new ExecutionException(e);
+        }
+    }
 }

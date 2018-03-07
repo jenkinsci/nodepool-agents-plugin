@@ -23,17 +23,16 @@
  */
 package org.wherenow.jenkins_nodepool;
 
-import hudson.model.Node;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Future;
+import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+
+import hudson.model.Node;
 import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.framework.api.CuratorWatcher;
 import org.apache.zookeeper.CreateMode;
 
 /**
@@ -62,7 +61,7 @@ import org.apache.zookeeper.CreateMode;
  */
 public class NodePoolClient {
 
-    private static final Logger LOG = Logger.getLogger(NodePoolClient.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(NodePoolClient.class.getName());
 
     private CuratorFramework conn;
 
@@ -114,16 +113,16 @@ public class NodePoolClient {
     // TODO: similar with nodeSet for multiple nodes.
     // or just create multiple requests?
     public NodeRequest requestNode(String label) throws Exception {
-        NodeRequest request = new NodeRequest(conn, label);
-        String createPath = MessageFormat.format("/{0}/{1}-", this.requestRoot, priority.toString());
-        LOG.info(MessageFormat.format("Creating request node: {0}", createPath));
+        final NodeRequest request = new NodeRequest(conn, label);
+        final String createPath = MessageFormat.format("/{0}/{1}-", this.requestRoot, priority.toString());
+        LOGGER.info(MessageFormat.format("Creating request node: {0}", createPath));
         String requestPath = conn.create()
                 .creatingParentsIfNeeded()
                 .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
                 .forPath(createPath, request.toString().getBytes());
 
-        // get nodepool request id
-        String id = NodePoolClient.idForPath(requestPath);
+        // get NodePool request id
+        final String id = NodePoolClient.idForPath(requestPath);
         request.setNodePoolID(id);
         request.setNodePath(requestPath);
 
@@ -134,17 +133,30 @@ public class NodePoolClient {
 
     }
 
-//    	public NodeRequest requestNode(Integer priority, byte[] data) throws Exception{
-//		String path = "{0}/{1}-".format(this.requestRoot, priority.toString());
-//		path = conn.create()
-//			.withProtection()
-//			.withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
-//			.forPath(path, data);
-//		//TODO:create proper constructor for node request and pass it some useful information
-//		return new NodeRequest("testlabel");
-//	}
-    public void provisionNode(String label) {
-        //
-    }
+    /**
+     * Accept the node that was created to satisfy the given request.
+     *
+     * @return node name as a String
+     */
+    public List<String> acceptNodes(NodeRequest request) throws Exception {
 
+        // refer to the request "nodeset" to know which nodes to lock.
+        final List<String> nodes = (List<String>)request.get("nodes");
+        final List<String> acceptedNodes = new ArrayList<String>();
+
+        for (String node : nodes) {
+            LOGGER.log(Level.INFO, "Accepting node " + node + " on behalf of request " + request.getNodePoolID());
+
+            final String nodePath = "/nodepool/nodes/" + node;
+            final KazooLock lock = new KazooLock(conn, nodePath);
+            lock.acquire();  // TODO debug making sure this lock stuff actually works
+
+            // TODO get details about the node from ZK?
+            acceptedNodes.add(node);
+
+            // TODO delete node request now that we've got the node locked.
+        }
+
+        return acceptedNodes;
+    }
 }
