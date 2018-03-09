@@ -8,9 +8,9 @@ labels:
 
 providers:
   - name: rackspace
-    cloud: rackspace
+    cloud: hughsaunders_uk
     driver: openstack
-    region-name: IAD
+    region-name: LON
 
     cloud-images:
       - name: debian-jessie-external
@@ -18,7 +18,7 @@ providers:
 
     pools:
       - name: main
-        max-servers: 1
+        max-servers: 3
         labels:
           - name: debian
             cloud-image: debian-jessie-external
