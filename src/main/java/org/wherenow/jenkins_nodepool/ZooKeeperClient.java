@@ -66,7 +66,7 @@ public class ZooKeeperClient{
 	public void connect(){
 		conn = CuratorFrameworkFactory.builder()
 		.connectString(connectionString)
-		.namespace(MessageFormat.format("/{0}",zkNamespace))
+		.namespace(zkNamespace)
 		.retryPolicy(retryPolicy)
 		.build();
 		conn.start();

@@ -23,8 +23,10 @@
  */
 package org.wherenow.jenkins_nodepool;
 
-import com.google.gson.Gson;
+import com.google.gson.*;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+
+import java.lang.reflect.Type;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -32,6 +34,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.api.CuratorWatcher;
 import org.apache.zookeeper.WatchedEvent;
@@ -39,6 +44,7 @@ import org.apache.zookeeper.WatchedEvent;
 enum State{
 	requested, pending, fulfilled, failed
 }
+
 
 /**
  * Represents a nodepool node request. Data format is JSON dump of following dict structure:
@@ -52,12 +58,12 @@ enum State{
  * 
  * @author hughsaunders
  */
-public class NodeRequest extends HashMap implements CuratorWatcher{
-    
-    // fields
-    
-    static Charset charset = Charset.forName("UTF-8");
-    private Gson gson;
+public class NodeRequest extends HashMap implements CuratorWatcher {
+
+    private static final Charset charset = Charset.forName("UTF-8");
+    private static final Logger LOGGER = Logger.getLogger(NodeRequest.class.getName());
+    private static final Gson gson = new Gson();
+
     private String[] requiredKeys = {"node_types", "requestor", "state", "state_time"};
     private String nodePoolID;
     private String nodePath;
@@ -73,8 +79,16 @@ public class NodeRequest extends HashMap implements CuratorWatcher{
     }
 
     public static NodeRequest fromJson(CuratorFramework conn, String json){
-        Gson gson = new Gson();
-        Map data = gson.fromJson(json, HashMap.class);
+        final Map data = gson.fromJson(json, HashMap.class);
+
+        // convert state time from string
+        final Double stateTime = (Double)data.get("state_time");
+        data.put("state_time", stateTime);
+
+        // convert 'state' back into its corresponding enum value
+        final String stateString = (String)data.get("state");
+        data.put("state", State.valueOf(stateString));
+
         return new NodeRequest(conn, data);
     }
 
@@ -82,7 +96,6 @@ public class NodeRequest extends HashMap implements CuratorWatcher{
     
     // package private constructor
     NodeRequest(CuratorFramework conn, Map data){
-        this.gson = new Gson();
         this.conn = conn;
         this.latch = new CountDownLatch(1);
         updateFromMap(data);
@@ -99,9 +112,8 @@ public class NodeRequest extends HashMap implements CuratorWatcher{
     
     @SuppressFBWarnings
     public NodeRequest(CuratorFramework conn, String requestor, List<String> labels) {
-        this.gson = new Gson();
         this.conn = conn;
-         this.latch = new CountDownLatch(1);
+        this.latch = new CountDownLatch(1);
         put("node_types", new ArrayList(labels));
         put("requestor", requestor);
         put("state", State.requested);
@@ -126,6 +138,10 @@ public class NodeRequest extends HashMap implements CuratorWatcher{
         this.nodePoolID = nodePoolID;
     }
 
+    public State getState() {
+        return (State)get("state");
+    }
+
     @Override
     public String toString(){
         String jsonStr = gson.toJson(this);
@@ -140,6 +156,9 @@ public class NodeRequest extends HashMap implements CuratorWatcher{
     public void process(WatchedEvent we) throws Exception {
         // we don't care what the event is, but something changed, so refresh
         // local data from zookeeper.
+
+        // TODO handle an expired event/re-create the nodes?
+        LOGGER.log(Level.INFO, "WatchedEvent: " + we);
         updateFromZooKeeper();
     }
     
@@ -189,10 +208,8 @@ public class NodeRequest extends HashMap implements CuratorWatcher{
         unblockWaiters();
     }
     
-    private void updateFromMap(Map data){
-        put("state_time", (Double)data.get("state_time"));
-        put("node_types", data.get("node_types"));
-        put("state", data.get("state"));
-        put("requestor", data.get("requestor"));
+    private void updateFromMap(Map data) {
+        putAll(data);
     }
+
 }
