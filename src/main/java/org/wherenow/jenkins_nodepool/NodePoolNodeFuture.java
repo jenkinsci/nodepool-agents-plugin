@@ -131,7 +131,9 @@ public class NodePoolNodeFuture implements Future<Node>{
             // ZKNode that represents the newly created node.
             String nodeZKNode = request.getAllocatedNodePath();
             Map<String, Object> nodeData = client.getZNode(nodeZKNode);
-            String host = (String)nodeData.get("ipv4");
+            String host = (String)nodeData.get("interface_ip");
+            String port = (String)nodeData.get("connection_port");
+            String credentialsId = client.getCredentialsId();
 
             return null; // TODO
             //return new NodePoolNode(request.getNodePoolID(), host);

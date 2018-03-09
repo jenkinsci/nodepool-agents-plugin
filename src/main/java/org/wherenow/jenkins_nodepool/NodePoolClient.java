@@ -62,6 +62,7 @@ import org.apache.zookeeper.CreateMode;
  */
 import com.google.gson.Gson;
 import java.nio.charset.Charset;
+
 public class NodePoolClient {
 
     private static final Logger LOGGER = Logger.getLogger(NodePoolClient.class.getName());
@@ -74,32 +75,33 @@ public class NodePoolClient {
     private String requestLockRoot = "requests-lock";
     private String nodeRoot = "nodes";
     private Integer priority;
-    
+    private String credentialsId;
+
     private static final Gson gson = new Gson();
     private static final Charset charset = Charset.forName("UTF-8");
 
-    public NodePoolClient(String connectionString) {
-        this(connectionString, 100);
+    public NodePoolClient(String connectionString, String credentialsId) {
+        this(connectionString, 100, credentialsId);
     }
 
-    public NodePoolClient(String connectionString, Integer priority) {
-        this(ZooKeeperClient.createConnection(connectionString), priority);
+    public NodePoolClient(String connectionString, Integer priority, String credentialsId) {
+        this(ZooKeeperClient.createConnection(connectionString), priority, credentialsId);
     }
 
-    public NodePoolClient(CuratorFramework conn) {
-        this(conn, 100);
+    public NodePoolClient(CuratorFramework conn, String credentialsId) {
+        this(conn, 100, credentialsId);
     }
 
-    public NodePoolClient(ZooKeeperClient zkc, Integer priority) {
-        this(zkc.getConnection(), priority);
+    public NodePoolClient(ZooKeeperClient zkc, Integer priority, String credentialsId) {
+        this(zkc.getConnection(), priority, credentialsId);
     }
 
     // all constructors lead here
-    public NodePoolClient(CuratorFramework conn, Integer priority) {
+    public NodePoolClient(CuratorFramework conn, Integer priority, String credentialsId) {
         this.conn = conn;
         this.requestRoot = requestRoot;
         this.priority = priority;
-
+        this.credentialsId = credentialsId;
     }
 
     public String getRequestRoot() {
@@ -116,6 +118,10 @@ public class NodePoolClient {
 
     public Integer getPriority() {
         return priority;
+    }
+
+    public String getCredentialsId() {
+        return credentialsId;
     }
 
     public Future<NodePoolNode> request() {
@@ -153,14 +159,15 @@ public class NodePoolClient {
         return request;
 
     }
-    
+
     /**
      * Get data for a node
+     *
      * @param path path to query
      * @return Map representing the json data stored on the node.
      * @throws Exception barf
      */
-    public Map getZNode(String path) throws Exception{
+    public Map getZNode(String path) throws Exception {
         byte[] jsonBytes = conn.getData().forPath(path);
         String jsonString = new String(jsonBytes, charset);
         final Map data = gson.fromJson(jsonString, HashMap.class);
@@ -177,7 +184,7 @@ public class NodePoolClient {
     public List<String> acceptNodes(NodeRequest request) throws Exception {
 
         // refer to the request "nodeset" to know which nodes to lock.
-        final List<String> nodes = (List<String>)request.get("nodes");
+        final List<String> nodes = (List<String>) request.get("nodes");
         final List<String> acceptedNodes = new ArrayList<String>();
 
         for (String node : nodes) {
