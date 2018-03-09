@@ -28,6 +28,7 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 import java.lang.reflect.Type;
 import java.nio.charset.Charset;
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -215,6 +216,15 @@ public class NodeRequest extends HashMap implements CuratorWatcher {
     
     private void updateFromMap(Map data) {
         putAll(data);
+    }
+    
+    public String getAllocatedNodePath(){
+        // this.nodePath =  /nodepool/requests/priority-id
+        //                  |<  requestroot >| |nodename |
+        //
+        String[] pathSplit = this.nodePath.split("/");
+        String nodeName = pathSplit[pathSplit.length-1];
+        return MessageFormat.format("/nodes/{0}", nodeName);
     }
 
 }

@@ -32,6 +32,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import hudson.model.Node;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.zookeeper.CreateMode;
 
@@ -59,6 +61,8 @@ import org.apache.zookeeper.CreateMode;
  *
  * @author hughsaunders
  */
+import com.google.gson.Gson;
+import java.nio.charset.Charset;
 public class NodePoolClient {
 
     private static final Logger LOGGER = Logger.getLogger(NodePoolClient.class.getName());
@@ -71,6 +75,9 @@ public class NodePoolClient {
     private String requestLockRoot = "requests-lock";
     private String nodeRoot = "nodes";
     private Integer priority;
+    
+    private static final Gson gson = new Gson();
+    private static final Charset charset = Charset.forName("UTF-8");
 
     public NodePoolClient(String connectionString) {
         this(connectionString, 100);
@@ -94,6 +101,22 @@ public class NodePoolClient {
         this.requestRoot = requestRoot;
         this.priority = priority;
 
+    }
+
+    public String getRequestRoot() {
+        return requestRoot;
+    }
+
+    public String getRequestLockRoot() {
+        return requestLockRoot;
+    }
+
+    public String getNodeRoot() {
+        return nodeRoot;
+    }
+
+    public Integer getPriority() {
+        return priority;
     }
 
     public Future<NodePoolNode> request() {
@@ -131,6 +154,20 @@ public class NodePoolClient {
 
         return request;
 
+    }
+    
+    /**
+     * Get data for a node
+     * @param nodeName the name of the node to query usually priority-id format.
+     * @return Map representing the json data stored on the node.
+     * @throws Exception 
+     */
+    public Map<String, Object> getNode(String nodeName) throws Exception{
+        String nodePath = MessageFormat.format("/{0}/{1}", this.nodeRoot, nodeName);
+        byte[] jsonBytes = conn.getData().forPath(nodePath);
+        String jsonString = new String(jsonBytes, charset);
+        final Map data = gson.fromJson(jsonString, HashMap.class);
+        return data;
     }
 
     /**
