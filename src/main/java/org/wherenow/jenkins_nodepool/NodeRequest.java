@@ -160,6 +160,10 @@ public class NodeRequest extends HashMap implements CuratorWatcher {
         // TODO handle an expired event/re-create the nodes?
         LOGGER.log(Level.INFO, "WatchedEvent: " + we);
         updateFromZooKeeper();
+
+        // Watches only trigger once, so after processing an event
+        // setup a new watch
+        conn.getData().usingWatcher(this).forPath(nodePath);
     }
     
     public void waitForFulfillment() throws Exception {
@@ -206,6 +210,7 @@ public class NodeRequest extends HashMap implements CuratorWatcher {
         NodeRequest remoteState = NodeRequest.fromJsonBytes(conn, bytes);
         updateFromMap(remoteState);
         unblockWaiters();
+
     }
     
     private void updateFromMap(Map data) {
