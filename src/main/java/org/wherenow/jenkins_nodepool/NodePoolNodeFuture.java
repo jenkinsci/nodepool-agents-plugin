@@ -70,8 +70,17 @@ public class NodePoolNodeFuture implements Future<Node>{
 
         LOGGER.log(Level.INFO, "isDone() polling to see if node is ready");
 
-        // NOTE: the node request should be getting asynchronously updated via a curator watcher attached to it,
-        // so we can just test if the state is fulfilled.
+        try {
+            // refresh request from ZK:
+            final Map data = client.getZNode(request.getNodePath());
+            request.updateFromMap(data);
+        } catch (Exception e) {
+            // TODO do something smarter with the failz
+            e.printStackTrace();
+            return false;
+        }
+
+        // node is updated now, check it's state:
         final State requestState = request.getState();
 
         LOGGER.log(Level.INFO, "Current state of request " + request.getNodePoolID() + " is: " + requestState);
@@ -121,9 +130,11 @@ public class NodePoolNodeFuture implements Future<Node>{
             
             // ZKNode that represents the newly created node.
             String nodeZKNode = request.getAllocatedNodePath();
-            Map<String, Object> nodeData = client.getNode(nodeZKNode);
+            Map<String, Object> nodeData = client.getZNode(nodeZKNode);
             String host = (String)nodeData.get("ipv4");
-            return new NodePoolNode(request.getNodePoolID(), host);
+
+            return null; // TODO
+            //return new NodePoolNode(request.getNodePoolID(), host);
         } catch (Exception e) {
             throw new ExecutionException(e);
         }

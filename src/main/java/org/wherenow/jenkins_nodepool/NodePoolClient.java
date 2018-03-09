@@ -31,7 +31,6 @@ import java.util.concurrent.Future;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import hudson.model.Node;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.curator.framework.CuratorFramework;
@@ -144,13 +143,12 @@ public class NodePoolClient {
                 .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
                 .forPath(createPath, request.toString().getBytes());
 
+        LOGGER.info("Requested created at path: " + requestPath);
+
         // get NodePool request id
         final String id = NodePoolClient.idForPath(requestPath);
         request.setNodePoolID(id);
         request.setNodePath(requestPath);
-
-        // set watch so the request gets updated
-        conn.getData().usingWatcher(request).forPath(requestPath);
 
         return request;
 
@@ -158,13 +156,12 @@ public class NodePoolClient {
     
     /**
      * Get data for a node
-     * @param nodeName the name of the node to query usually priority-id format.
+     * @param path path to query
      * @return Map representing the json data stored on the node.
-     * @throws Exception 
+     * @throws Exception barf
      */
-    public Map<String, Object> getNode(String nodeName) throws Exception{
-        String nodePath = MessageFormat.format("/{0}/{1}", this.nodeRoot, nodeName);
-        byte[] jsonBytes = conn.getData().forPath(nodePath);
+    public Map getZNode(String path) throws Exception{
+        byte[] jsonBytes = conn.getData().forPath(path);
         String jsonString = new String(jsonBytes, charset);
         final Map data = gson.fromJson(jsonString, HashMap.class);
         return data;
@@ -173,6 +170,8 @@ public class NodePoolClient {
     /**
      * Accept the node that was created to satisfy the given request.
      *
+     * @param request node request
+     * @throws Exception barf
      * @return node name as a String
      */
     public List<String> acceptNodes(NodeRequest request) throws Exception {
@@ -184,9 +183,12 @@ public class NodePoolClient {
         for (String node : nodes) {
             LOGGER.log(Level.INFO, "Accepting node " + node + " on behalf of request " + request.getNodePoolID());
 
-            final String nodePath = "/nodepool/nodes/" + node;
+            final String nodePath = "/nodes/" + node;
             final KazooLock lock = new KazooLock(conn, nodePath);
             lock.acquire();  // TODO debug making sure this lock stuff actually works
+
+            final Map data = getZNode(nodePath);
+            LOGGER.log(Level.INFO, "ZNode data: " + data);
 
             // TODO get details about the node from ZK?
             acceptedNodes.add(node);

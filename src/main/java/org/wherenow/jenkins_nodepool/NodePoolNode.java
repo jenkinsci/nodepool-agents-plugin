@@ -26,6 +26,7 @@ package org.wherenow.jenkins_nodepool;
 import hudson.model.Descriptor;
 import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
+import hudson.plugins.sshslaves.verifiers.SshHostKeyVerificationStrategy;
 import hudson.tools.JDKInstaller;
 import java.io.IOException;
 import java.util.logging.Logger;
@@ -45,13 +46,14 @@ public class NodePoolNode extends Slave {
         super(
                 name, // name
                 "/var/lib/jenkins", // TODO this should be the path to the root of the workspace on the slave
-                new SSHLauncher(host,
+                null // TODO use ssh launcher
+                /*new SSHLauncher(host,
                         port, credentialsId,
                         jvmOptions, javaPath,
                         jdkInstaller, prefixStartSlaveCmd,
                         suffixStartSlaveCmd, launchTimeoutSeconds,
                         maxNumRetries, retryWaitTime,
                         sshHostKeyVerificationStrategy
-                ));
+                ));*/);
     }
 }

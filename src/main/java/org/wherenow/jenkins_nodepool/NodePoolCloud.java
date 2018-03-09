@@ -79,7 +79,7 @@ public class NodePoolCloud extends hudson.slaves.Cloud {
 
             final NodeProvisioner.PlannedNode plannedNode = new NodeProvisioner.PlannedNode(
                     label + request.getNodePoolID(), // display name of node
-                    new NodePoolNode(client, request),
+                    new NodePoolNodeFuture(client, request),
                     1 // number of executors
 
             );

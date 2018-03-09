@@ -80,7 +80,7 @@ public class NodeRequestTest {
         assertEquals(((List) data.get("node_types")).get(0), label);
     }
 
-    @Test
+    /*@Test
     public void TestDeserialisation() {
         String[] keys = {"node_types", "requestor", "state", "state_time"};
         NodeRequest nr = new NodeRequest(conn, label);
@@ -94,6 +94,6 @@ public class NodeRequestTest {
         }
         assertEquals(nr, nr2);
         assertTrue(nr.equals(nr2));
-    }
+    }*/
 
 }
