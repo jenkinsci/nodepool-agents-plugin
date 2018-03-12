@@ -23,16 +23,17 @@
  */
 package org.wherenow.jenkins_nodepool;
 
+import com.google.gson.Gson;
+import java.nio.charset.Charset;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import java.util.HashMap;
-import java.util.Map;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.zookeeper.CreateMode;
 
@@ -47,22 +48,11 @@ import org.apache.zookeeper.CreateMode;
  * use cloudretention strategy and a runlistener to listen to job completion
  * events and offline the slave so it isn't reused before its removed.
  *
- */
-/**
+ *
  *
  * Single use node life cycle: request wait for provisioning accept lock use
- * return unlock
  *
- * lock (kazoo.recipe.lock) noderoot/nodeid/lock
- *
- * Zuul hierachy NodeRequest Job nodeset node
- *
- *
- * @author hughsaunders
  */
-import com.google.gson.Gson;
-import java.nio.charset.Charset;
-
 public class NodePoolClient {
 
     private static final Logger LOGGER = Logger.getLogger(NodePoolClient.class.getName());
@@ -191,7 +181,8 @@ public class NodePoolClient {
             LOGGER.log(Level.INFO, "Accepting node " + node + " on behalf of request " + request.getNodePoolID());
 
             final String nodePath = "/nodes/" + node;
-            final KazooLock lock = new KazooLock(conn, nodePath);
+            final String nodeLockPath = nodePath + "/lock";
+            final KazooLock lock = new KazooLock(conn, nodeLockPath);
             lock.acquire();  // TODO debug making sure this lock stuff actually works
 
             final Map data = getZNode(nodePath);

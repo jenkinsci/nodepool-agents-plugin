@@ -26,6 +26,7 @@ package org.wherenow.jenkins_nodepool;
 import hudson.model.Descriptor;
 import hudson.model.Node;
 import java.io.IOException;
+import java.text.MessageFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -122,21 +123,28 @@ public class NodePoolNodeFuture implements Future<Node>{
 
             // ok we know the identity of the nodes to use
             // TODO do whatever stuff neeeds to happen to actually provision a Node now.
-            
-            
+
+
             // TODO: Get ip/host for node.
             // I suspect that this is in the zknode for the node, not the
             // zknode for the request.
-            
+            // TODO: Replace all uses of /nodes with client.getNodeRoot()
+
             // ZKNode that represents the newly created node.
-            String nodeZKNode = request.getAllocatedNodePath();
-            Map<String, Object> nodeData = client.getZNode(nodeZKNode);
+            List<String> nodeZKNodes = request.getAllocatedNodes();
+            String nodeZKNode = nodeZKNodes.get(0);
+            Map<String, Object> nodeData = client.getZNode("/nodes/" + nodeZKNode);
             String host = (String)nodeData.get("interface_ip");
-            String port = (String)nodeData.get("connection_port");
+            Integer port = ((Double) nodeData.get("connection_port")).intValue();
+            List<String> hostKeys = (List) nodeData.get("host_keys");
+            String hostKey = hostKeys.get(0);
             String credentialsId = client.getCredentialsId();
 
-            return null; // TODO
-            //return new NodePoolNode(request.getNodePoolID(), host);
+            // TODO: Delete node request
+            LOGGER.log(Level.INFO, MessageFormat.format("Creating NodePoolNode: Host:{0}, Port:{1}, Host Key:{2}, Creds Id:{3}", host, port, hostKey, credentialsId));
+
+            return new NodePoolNode(request.getNodePoolID(), host, port,
+                    hostKey, credentialsId);
         } catch (Exception e) {
             throw new ExecutionException(e);
         }

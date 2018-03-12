@@ -27,6 +27,7 @@ import com.cloudbees.jenkins.plugins.sshcredentials.SSHAuthenticator;
 import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
 import com.cloudbees.plugins.credentials.domains.DomainRequirement;
+import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.trilead.ssh2.Connection;
 import hudson.Extension;
 import hudson.model.Computer;

@@ -26,8 +26,7 @@ package org.wherenow.jenkins_nodepool;
 import hudson.model.Descriptor;
 import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
-import hudson.plugins.sshslaves.verifiers.SshHostKeyVerificationStrategy;
-import hudson.tools.JDKInstaller;
+import hudson.plugins.sshslaves.verifiers.ManuallyProvidedKeyVerificationStrategy;
 import java.io.IOException;
 import java.util.logging.Logger;
 
@@ -39,21 +38,25 @@ public class NodePoolNode extends Slave {
 
     private static final Logger LOGGER = Logger.getLogger(NodePoolNode.class.getName());
 
-    public NodePoolNode(String name, String host, int port, String credentialsId, String jvmOptions,
-            String javaPath, JDKInstaller jdkInstaller, String prefixStartSlaveCmd,
-            String suffixStartSlaveCmd, Integer launchTimeoutSeconds, Integer maxNumRetries, Integer retryWaitTime, SshHostKeyVerificationStrategy sshHostKeyVerificationStrategy) throws IOException, Descriptor.FormException {
+    public NodePoolNode(String name, String host, int port,
+            String hostKey, String credentialsId) throws Descriptor.FormException, IOException{
 
         super(
-                name, // name
-                "/var/lib/jenkins", // TODO this should be the path to the root of the workspace on the slave
-                null // TODO use ssh launcher
-                /*new SSHLauncher(host,
-                        port, credentialsId,
-                        jvmOptions, javaPath,
-                        jdkInstaller, prefixStartSlaveCmd,
-                        suffixStartSlaveCmd, launchTimeoutSeconds,
-                        maxNumRetries, retryWaitTime,
-                        sshHostKeyVerificationStrategy
-                ));*/);
+            name, // name
+            "/var/lib/jenkins", // TODO this should be the path to the root of the workspace on the slave
+            new SSHLauncher(
+                host,
+                port, credentialsId,
+                "", //jvmoptions
+                null, // javapath
+                null, //jdkInstaller,
+                "", //prefixStartSlaveCmd,
+                "", //suffixStartSlaveCmd,
+                300, //launchTimeoutSeconds,
+                30, //maxNumRetries
+                10, //retryWaitTime,
+                new ManuallyProvidedKeyVerificationStrategy(hostKey)
+            )
+        );
     }
 }

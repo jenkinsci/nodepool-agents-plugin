@@ -119,10 +119,13 @@ public class NodeRequest extends HashMap {
         putAll(data);
     }
     
-    public String getAllocatedNodePath(){
-        // node request znode path:     /nodepool/requests/priority-id
-        // node znode path:             /nodes/id
-        return MessageFormat.format("/nodes/{0}", nodePoolID);
+    public List<String> getAllocatedNodes(){
+        // Example fulfilled request
+        // {"nodes": ["0000000000"], "node_types": ["debian"], "state": "fulfilled", "declined_by": [], "state_time": 1520849225.4513698, "reuse": false, "requestor": "NodePool:min-ready"}
+        if (get("state") != State.fulfilled){
+            throw new IllegalStateException("Attempt to get allocated nodes from a node request before it has been fulfilled");
+        }
+        return (List)get("nodes");
     }
 
 }
