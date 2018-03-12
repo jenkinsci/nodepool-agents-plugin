@@ -14,8 +14,7 @@ providers:
 
     cloud-images:
       - name: debian-jessie-external
-        image-name: Debian 8 (Jessie) (PVHVM)
-
+        image-name: Ubuntu 16.04 LTS (Xenial Xerus) (PVHVM)
     pools:
       - name: main
         max-servers: 3

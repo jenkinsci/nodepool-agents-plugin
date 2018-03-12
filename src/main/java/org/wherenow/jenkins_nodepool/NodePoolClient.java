@@ -39,8 +39,7 @@ import org.apache.zookeeper.CreateMode;
 
 /**
  * Notes on what needs to be implemented form the Jenkins side.. Cloud:
- * provision --> NodeProvisioner.PlannedNode Slave: createComputer (Pass in
- * enough information about node to free it, must be serialisable so it can be
+ * provision: NodeProvisioner.PlannedNode Slave: createComputer (Pass in * enough information about node to free it, must be serialisable so it can be
  * stored in global config incase a user manually reconfigures the node)
  * Computer onRemoved: Release the node here. RetentionStrategy
  * (CloudRetentionStrategy is based on idle minutes which doesn't work for our
@@ -130,8 +129,8 @@ public class NodePoolClient {
 
     // TODO: similar with nodeSet for multiple nodes.
     // or just create multiple requests?
-    public NodeRequest requestNode(String label) throws Exception {
-        final NodeRequest request = new NodeRequest(conn, label);
+    public NodeRequest requestNode(String nPLabel, String jenkinsLabel) throws Exception {
+        final NodeRequest request = new NodeRequest(conn, nPLabel, jenkinsLabel);
         final String createPath = MessageFormat.format("/{0}/{1}-", this.requestRoot, priority.toString());
         LOGGER.info(MessageFormat.format("Creating request node: {0}", createPath));
         String requestPath = conn.create()

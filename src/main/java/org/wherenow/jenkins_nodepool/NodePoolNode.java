@@ -24,10 +24,13 @@
 package org.wherenow.jenkins_nodepool;
 
 import hudson.model.Descriptor;
+import hudson.model.Node.Mode;
 import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.plugins.sshslaves.verifiers.ManuallyProvidedKeyVerificationStrategy;
+import hudson.slaves.RetentionStrategy;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.logging.Logger;
 
 /**
@@ -39,24 +42,31 @@ public class NodePoolNode extends Slave {
     private static final Logger LOGGER = Logger.getLogger(NodePoolNode.class.getName());
 
     public NodePoolNode(String name, String host, int port,
-            String hostKey, String credentialsId) throws Descriptor.FormException, IOException{
+            String hostKey, String credentialsId, String label) throws Descriptor.FormException, IOException {
 
         super(
-            name, // name
-            "/var/lib/jenkins", // TODO this should be the path to the root of the workspace on the slave
-            new SSHLauncher(
-                host,
-                port, credentialsId,
-                "", //jvmoptions
-                null, // javapath
-                null, //jdkInstaller,
-                "", //prefixStartSlaveCmd,
-                "", //suffixStartSlaveCmd,
-                300, //launchTimeoutSeconds,
-                30, //maxNumRetries
-                10, //retryWaitTime,
-                new ManuallyProvidedKeyVerificationStrategy(hostKey)
-            )
+                name, // name
+                "Nodepool Node", // description
+                "/var/lib/jenkins", // TODO this should be the path to the root of the workspace on the slave
+                "2", // num executors
+                Mode.EXCLUSIVE,
+                label,
+                new SSHLauncher(
+                        host,
+                        port,
+                        credentialsId,
+                        "", //jvmoptions
+                        null, // javapath
+                        null, //jdkInstaller
+                        "", //prefixStartSlaveCmd
+                        "", //suffixStartSlaveCmd
+                        300, //launchTimeoutSeconds
+                        30, //maxNumRetries
+                        10, //retryWaitTime
+                        new ManuallyProvidedKeyVerificationStrategy(hostKey)
+                ),
+                new RetentionStrategy.Demand(1, 1), //retention strategy TODO: use a more suitlable strategy
+                new ArrayList() //nodeProperties
         );
     }
 }

@@ -27,7 +27,6 @@ import com.cloudbees.jenkins.plugins.sshcredentials.SSHAuthenticator;
 import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
 import com.cloudbees.plugins.credentials.domains.DomainRequirement;
-import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.trilead.ssh2.Connection;
 import hudson.Extension;
 import hudson.model.Computer;
@@ -39,7 +38,6 @@ import hudson.security.ACL;
 import hudson.security.AccessControlled;
 import hudson.slaves.NodeProvisioner;
 import hudson.util.ListBoxModel;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -47,9 +45,6 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.model.Jenkins;
-
-import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
@@ -96,7 +91,7 @@ public class NodePoolCloud extends hudson.slaves.Cloud {
 
             // Return a description of a node that is being built asynchronously:
             final NodePoolClient client = new NodePoolClient(connectionString, credentialsId);
-            final NodeRequest request = client.requestNode(nodePoolLabel);
+            final NodeRequest request = client.requestNode(nodePoolLabel, label.getName());
 
             final NodeProvisioner.PlannedNode plannedNode = new NodeProvisioner.PlannedNode(
                     label + request.getNodePoolID(), // display name of node
@@ -149,12 +144,12 @@ public class NodePoolCloud extends hudson.slaves.Cloud {
         }
 
         /*
-        java.lang.IllegalStateException: class 
-        org.wherenow.jenkins_nodepool.NodePoolCloud$DescriptorImpl 
+        java.lang.IllegalStateException: class
+        org.wherenow.jenkins_nodepool.NodePoolCloud$DescriptorImpl
         doesn't have the doFillCredentialsIdItems method for filling a drop-down list
-        
+
         Shamelessly stolen from https://github.com/jenkinsci/ssh-slaves-plugin/blob/master/src/main/java/hudson/plugins/sshslaves/SSHConnector.java#L314
-        
+
         */
         public ListBoxModel doFillCredentialsIdItems(@AncestorInPath ItemGroup context, @QueryParameter String credentialsId) {
             AccessControlled _context = (context instanceof AccessControlled ? (AccessControlled) context : Jenkins.getInstance());

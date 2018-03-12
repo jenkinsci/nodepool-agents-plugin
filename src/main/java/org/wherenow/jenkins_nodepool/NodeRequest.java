@@ -25,16 +25,13 @@ package org.wherenow.jenkins_nodepool;
 
 import com.google.gson.*;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-
 import java.nio.charset.Charset;
-import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
-
 import org.apache.curator.framework.CuratorFramework;
 
 enum State{
@@ -49,8 +46,8 @@ enum State{
  * 		- label2
  *	requestor: string id (eg hostname)
  * 	state: string requested|pending|fulfilled|failed
- * 	state_time: float seconds since epoch 
- * 
+ * 	state_time: float seconds since epoch
+ *
  * @author hughsaunders
  */
 public class NodeRequest extends HashMap {
@@ -62,18 +59,19 @@ public class NodeRequest extends HashMap {
     private String nodePoolID;
     private String nodePath;
 
-    public NodeRequest(CuratorFramework conn, String label)	{
-        this(conn, "jenkins", Arrays.asList( new String[] { label }));
+    public NodeRequest(CuratorFramework conn, String label, String jenkinsLabel) {
+        this(conn, "jenkins", Arrays.asList(new String[]{label}), jenkinsLabel);
     }
 
     @SuppressFBWarnings
-    public NodeRequest(CuratorFramework conn, String requestor, List<String> labels) {
+    public NodeRequest(CuratorFramework conn, String requestor, List<String> labels, String jenkinsLabel) {
         put("node_types", new ArrayList(labels));
         put("requestor", requestor);
         put("state", State.requested);
-        put("state_time", new Double(System.currentTimeMillis()/1000));
+        put("state_time", new Double(System.currentTimeMillis() / 1000));
+        put("jenkins_label", jenkinsLabel);
     }
-    
+
     // public methods
 
     public String getNodePath() {
@@ -118,14 +116,20 @@ public class NodeRequest extends HashMap {
 
         putAll(data);
     }
-    
-    public List<String> getAllocatedNodes(){
+
+    public Map<String, String> getAllocatedNodes() {
         // Example fulfilled request
         // {"nodes": ["0000000000"], "node_types": ["debian"], "state": "fulfilled", "declined_by": [], "state_time": 1520849225.4513698, "reuse": false, "requestor": "NodePool:min-ready"}
         if (get("state") != State.fulfilled){
             throw new IllegalStateException("Attempt to get allocated nodes from a node request before it has been fulfilled");
         }
-        return (List)get("nodes");
+        List<String> nodes = (List) get("nodes");
+        List<String> node_types = (List) get("node_types");
+        Map<String, String> nodesMap = new HashMap();
+        for (int i = 0; i < nodes.size(); i++) {
+            nodesMap.put(nodes.get(i), node_types.get(i));
+        }
+        return nodesMap;
     }
 
 }

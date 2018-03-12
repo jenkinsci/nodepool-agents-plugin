@@ -40,13 +40,12 @@ import java.util.logging.Logger;
  *
  * @author hughsaunders
  */
-public class NodePoolNodeFuture implements Future<Node>{
+public class NodePoolNodeFuture implements Future<Node> {
 
     private static final Logger LOGGER = Logger.getLogger(NodePoolNodeFuture.class.getName());
 
     private NodePoolClient client;
     NodeRequest request;
-
 
     public NodePoolNodeFuture(NodePoolClient client, NodeRequest request) throws IOException, Descriptor.FormException {
         this.client = client;
@@ -110,9 +109,11 @@ public class NodePoolNodeFuture implements Future<Node>{
     }
 
     /**
-     * Called once a NodeRequest has been "fulfilled", meaning there is now a Node up and waiting for us to use.
+     * Called once a NodeRequest has been "fulfilled", meaning there is now a
+     * Node up and waiting for us to use.
      *
      * In Zuul terms, we now "accept" the node.
+     *
      * @return Node
      */
     private Node getNode() throws ExecutionException {
@@ -123,30 +124,34 @@ public class NodePoolNodeFuture implements Future<Node>{
 
             // ok we know the identity of the nodes to use
             // TODO do whatever stuff neeeds to happen to actually provision a Node now.
-
-
             // TODO: Get ip/host for node.
             // I suspect that this is in the zknode for the node, not the
             // zknode for the request.
             // TODO: Replace all uses of /nodes with client.getNodeRoot()
-
             // ZKNode that represents the newly created node.
-            List<String> nodeZKNodes = request.getAllocatedNodes();
-            String nodeZKNode = nodeZKNodes.get(0);
-            Map<String, Object> nodeData = client.getZNode("/nodes/" + nodeZKNode);
-            String host = (String)nodeData.get("interface_ip");
-            Integer port = ((Double) nodeData.get("connection_port")).intValue();
-            List<String> hostKeys = (List) nodeData.get("host_keys");
-            String hostKey = hostKeys.get(0);
-            String credentialsId = client.getCredentialsId();
+            Map<String, String> nodeZKNodes = request.getAllocatedNodes();
 
-            // TODO: Delete node request
-            LOGGER.log(Level.INFO, MessageFormat.format("Creating NodePoolNode: Host:{0}, Port:{1}, Host Key:{2}, Creds Id:{3}", host, port, hostKey, credentialsId));
+            for (String node : nodeZKNodes.keySet()) {
+                String type = nodeZKNodes.get(node);
+                Map<String, Object> nodeData = client.getZNode("/nodes/" + node);
+                String host = (String) nodeData.get("interface_ip");
+                Integer port = ((Double) nodeData.get("connection_port")).intValue();
+                List<String> hostKeys = (List) nodeData.get("host_keys");
+                String hostKey = hostKeys.get(0);
+                String credentialsId = client.getCredentialsId();
 
-            return new NodePoolNode(request.getNodePoolID(), host, port,
-                    hostKey, credentialsId);
+                String jenkinsLabel = (String) request.get("jenkins_label");
+                // TODO: Delete node request
+                LOGGER.log(Level.INFO, MessageFormat.format("Creating NodePoolNode: Host:{0}, Port:{1}, Host Key:{2}, Creds Id:{3}, Jenkins Label: {4}", host, port, hostKey, credentialsId, jenkinsLabel));
+
+                return new NodePoolNode(MessageFormat.format("{0}-{1}", type, jenkinsLabel, request.getNodePoolID()), host, port,
+                        hostKey, credentialsId, jenkinsLabel);
+            }
+
+            // TODO: Figure out how/if multiple node requests work.
         } catch (Exception e) {
             throw new ExecutionException(e);
         }
+        return null;
     }
 }
