@@ -23,22 +23,23 @@
  */
 package org.wherenow.jenkins_nodepool;
 
+import com.google.gson.Gson;
+import java.nio.charset.Charset;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import hudson.model.Node;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.zookeeper.CreateMode;
 
 /**
  * Notes on what needs to be implemented form the Jenkins side.. Cloud:
- * provision --> NodeProvisioner.PlannedNode Slave: createComputer (Pass in
- * enough information about node to free it, must be serialisable so it can be
+ * provision: NodeProvisioner.PlannedNode Slave: createComputer (Pass in * enough information about node to free it, must be serialisable so it can be
  * stored in global config incase a user manually reconfigures the node)
  * Computer onRemoved: Release the node here. RetentionStrategy
  * (CloudRetentionStrategy is based on idle minutes which doesn't work for our
@@ -46,18 +47,10 @@ import org.apache.zookeeper.CreateMode;
  * use cloudretention strategy and a runlistener to listen to job completion
  * events and offline the slave so it isn't reused before its removed.
  *
- */
-/**
+ *
  *
  * Single use node life cycle: request wait for provisioning accept lock use
- * return unlock
  *
- * lock (kazoo.recipe.lock) noderoot/nodeid/lock
- *
- * Zuul hierachy NodeRequest Job nodeset node
- *
- *
- * @author hughsaunders
  */
 public class NodePoolClient {
 
@@ -71,29 +64,53 @@ public class NodePoolClient {
     private String requestLockRoot = "requests-lock";
     private String nodeRoot = "nodes";
     private Integer priority;
+    private String credentialsId;
 
-    public NodePoolClient(String connectionString) {
-        this(connectionString, 100);
+    private static final Gson gson = new Gson();
+    private static final Charset charset = Charset.forName("UTF-8");
+
+    public NodePoolClient(String connectionString, String credentialsId) {
+        this(connectionString, 100, credentialsId);
     }
 
-    public NodePoolClient(String connectionString, Integer priority) {
-        this(ZooKeeperClient.createConnection(connectionString), priority);
+    public NodePoolClient(String connectionString, Integer priority, String credentialsId) {
+        this(ZooKeeperClient.createConnection(connectionString), priority, credentialsId);
     }
 
-    public NodePoolClient(CuratorFramework conn) {
-        this(conn, 100);
+    public NodePoolClient(CuratorFramework conn, String credentialsId) {
+        this(conn, 100, credentialsId);
     }
 
-    public NodePoolClient(ZooKeeperClient zkc, Integer priority) {
-        this(zkc.getConnection(), priority);
+    public NodePoolClient(ZooKeeperClient zkc, Integer priority, String credentialsId) {
+        this(zkc.getConnection(), priority, credentialsId);
     }
 
     // all constructors lead here
-    public NodePoolClient(CuratorFramework conn, Integer priority) {
+    public NodePoolClient(CuratorFramework conn, Integer priority, String credentialsId) {
         this.conn = conn;
         this.requestRoot = requestRoot;
         this.priority = priority;
+        this.credentialsId = credentialsId;
+    }
 
+    public String getRequestRoot() {
+        return requestRoot;
+    }
+
+    public String getRequestLockRoot() {
+        return requestLockRoot;
+    }
+
+    public String getNodeRoot() {
+        return nodeRoot;
+    }
+
+    public Integer getPriority() {
+        return priority;
+    }
+
+    public String getCredentialsId() {
+        return credentialsId;
     }
 
     public Future<NodePoolNode> request() {
@@ -112,8 +129,8 @@ public class NodePoolClient {
 
     // TODO: similar with nodeSet for multiple nodes.
     // or just create multiple requests?
-    public NodeRequest requestNode(String label) throws Exception {
-        final NodeRequest request = new NodeRequest(conn, label);
+    public NodeRequest requestNode(String nPLabel, String jenkinsLabel) throws Exception {
+        final NodeRequest request = new NodeRequest(conn, nPLabel, jenkinsLabel);
         final String createPath = MessageFormat.format("/{0}/{1}-", this.requestRoot, priority.toString());
         LOGGER.info(MessageFormat.format("Creating request node: {0}", createPath));
         String requestPath = conn.create()
@@ -121,35 +138,54 @@ public class NodePoolClient {
                 .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
                 .forPath(createPath, request.toString().getBytes());
 
+        LOGGER.info("Requested created at path: " + requestPath);
+
         // get NodePool request id
         final String id = NodePoolClient.idForPath(requestPath);
         request.setNodePoolID(id);
         request.setNodePath(requestPath);
-
-        // set watch so the request gets updated
-        conn.getData().usingWatcher(request).forPath(requestPath);
 
         return request;
 
     }
 
     /**
+     * Get data for a node
+     *
+     * @param path path to query
+     * @return Map representing the json data stored on the node.
+     * @throws Exception barf
+     */
+    public Map getZNode(String path) throws Exception {
+        byte[] jsonBytes = conn.getData().forPath(path);
+        String jsonString = new String(jsonBytes, charset);
+        final Map data = gson.fromJson(jsonString, HashMap.class);
+        return data;
+    }
+
+    /**
      * Accept the node that was created to satisfy the given request.
      *
+     * @param request node request
+     * @throws Exception barf
      * @return node name as a String
      */
     public List<String> acceptNodes(NodeRequest request) throws Exception {
 
         // refer to the request "nodeset" to know which nodes to lock.
-        final List<String> nodes = (List<String>)request.get("nodes");
+        final List<String> nodes = (List<String>) request.get("nodes");
         final List<String> acceptedNodes = new ArrayList<String>();
 
         for (String node : nodes) {
             LOGGER.log(Level.INFO, "Accepting node " + node + " on behalf of request " + request.getNodePoolID());
 
-            final String nodePath = "/nodepool/nodes/" + node;
-            final KazooLock lock = new KazooLock(conn, nodePath);
+            final String nodePath = "/nodes/" + node;
+            final String nodeLockPath = nodePath + "/lock";
+            final KazooLock lock = new KazooLock(conn, nodeLockPath);
             lock.acquire();  // TODO debug making sure this lock stuff actually works
+
+            final Map data = getZNode(nodePath);
+            LOGGER.log(Level.INFO, "ZNode data: " + data);
 
             // TODO get details about the node from ZK?
             acceptedNodes.add(node);

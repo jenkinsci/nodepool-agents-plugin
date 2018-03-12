@@ -23,21 +23,31 @@
  */
 package org.wherenow.jenkins_nodepool;
 
+import com.cloudbees.jenkins.plugins.sshcredentials.SSHAuthenticator;
+import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
+import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
+import com.cloudbees.plugins.credentials.domains.DomainRequirement;
+import com.trilead.ssh2.Connection;
 import hudson.Extension;
+import hudson.model.Computer;
 import hudson.model.Descriptor;
+import hudson.model.ItemGroup;
 import hudson.model.Label;
+import hudson.plugins.sshslaves.SSHLauncher;
+import hudson.security.ACL;
+import hudson.security.AccessControlled;
 import hudson.slaves.NodeProvisioner;
-
+import hudson.util.ListBoxModel;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.framework.CuratorFrameworkFactory;
+import jenkins.model.Jenkins;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.QueryParameter;
 
 /**
  *
@@ -48,20 +58,26 @@ public class NodePoolCloud extends hudson.slaves.Cloud {
     private static final Logger LOGGER = Logger.getLogger(NodePoolCloud.class.getName());
     private static final String NODEPOOL_LABEL_PREFIX = "nodepool-";
 
+    private String credentialsId;
     private String connectionString;
 
     @DataBoundConstructor
-    public NodePoolCloud(String name, String connectionString) {
+    public NodePoolCloud(String name, String connectionString, String credentialsId) {
         super(name);
-	    this.connectionString = connectionString;
-    }
-    
-    public String getConnectionString(){
-	    return connectionString;
+        this.connectionString = connectionString;
+        this.credentialsId = credentialsId;
     }
 
-    public String getName(){
-	    return name;
+    public String getConnectionString() {
+        return connectionString;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getCredentialsId() {
+        return credentialsId;
     }
 
     @Override
@@ -74,16 +90,16 @@ public class NodePoolCloud extends hudson.slaves.Cloud {
             LOGGER.log(Level.INFO, "Provisioning label " + nodePoolLabel);
 
             // Return a description of a node that is being built asynchronously:
-            final NodePoolClient client = new NodePoolClient(connectionString);
-            final NodeRequest request = client.requestNode(nodePoolLabel);
+            final NodePoolClient client = new NodePoolClient(connectionString, credentialsId);
+            final NodeRequest request = client.requestNode(nodePoolLabel, label.getName());
 
             final NodeProvisioner.PlannedNode plannedNode = new NodeProvisioner.PlannedNode(
                     label + request.getNodePoolID(), // display name of node
-                    new NodePoolNode(client, request),
+                    new NodePoolNodeFuture(client, request),
                     1 // number of executors
 
             );
-            final List<NodeProvisioner.PlannedNode> nodeList =  new ArrayList<NodeProvisioner.PlannedNode>();
+            final List<NodeProvisioner.PlannedNode> nodeList = new ArrayList<NodeProvisioner.PlannedNode>();
             nodeList.add(plannedNode);
             return nodeList;
 
@@ -100,7 +116,7 @@ public class NodePoolCloud extends hudson.slaves.Cloud {
     public boolean canProvision(Label label) {
         /**
          * For simplicity, assume that NodePool labels start with a "nodepool-"
-         * prefix.  We'll take the remainder of the label and assume a matching
+         * prefix. We'll take the remainder of the label and assume a matching
          * label exists in NodePool's configuration.
          */
         LOGGER.log(Level.INFO, "Request to provision label " + label);
@@ -114,17 +130,43 @@ public class NodePoolCloud extends hudson.slaves.Cloud {
             return false;
         }
     }
-    
+
     @Extension
     public static final class DescriptorImpl extends Descriptor<hudson.slaves.Cloud> {
-	public DescriptorImpl(){
-		load();
-	}
-	@Override	
-	public String getDisplayName(){
-		return "Nodepool Cloud";
-	}
-	
+
+        public DescriptorImpl() {
+            load();
+        }
+
+        @Override
+        public String getDisplayName() {
+            return "Nodepool Cloud";
+        }
+
+        /*
+        java.lang.IllegalStateException: class
+        org.wherenow.jenkins_nodepool.NodePoolCloud$DescriptorImpl
+        doesn't have the doFillCredentialsIdItems method for filling a drop-down list
+
+        Shamelessly stolen from https://github.com/jenkinsci/ssh-slaves-plugin/blob/master/src/main/java/hudson/plugins/sshslaves/SSHConnector.java#L314
+
+        */
+        public ListBoxModel doFillCredentialsIdItems(@AncestorInPath ItemGroup context, @QueryParameter String credentialsId) {
+            AccessControlled _context = (context instanceof AccessControlled ? (AccessControlled) context : Jenkins.getInstance());
+            if (_context == null || !_context.hasPermission(Computer.CONFIGURE)) {
+                return new StandardUsernameListBoxModel()
+                        .includeCurrentValue(credentialsId);
+            }
+            return new StandardUsernameListBoxModel()
+                    .includeMatchingAs(
+                            ACL.SYSTEM,
+                            context,
+                            StandardUsernameCredentials.class,
+                            Collections.<DomainRequirement>singletonList(SSHLauncher.SSH_SCHEME),
+                            SSHAuthenticator.matcher(Connection.class)
+                    )
+                    .includeCurrentValue(credentialsId);
+        }
     }
-    
+
 }

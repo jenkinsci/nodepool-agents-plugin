@@ -25,26 +25,18 @@ package org.wherenow.jenkins_nodepool;
 
 import com.google.gson.*;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-
-import java.lang.reflect.Type;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.framework.api.CuratorWatcher;
-import org.apache.zookeeper.WatchedEvent;
 
 enum State{
 	requested, pending, fulfilled, failed
 }
-
 
 /**
  * Represents a nodepool node request. Data format is JSON dump of following dict structure:
@@ -54,72 +46,32 @@ enum State{
  * 		- label2
  *	requestor: string id (eg hostname)
  * 	state: string requested|pending|fulfilled|failed
- * 	state_time: float seconds since epoch 
- * 
+ * 	state_time: float seconds since epoch
+ *
  * @author hughsaunders
  */
-public class NodeRequest extends HashMap implements CuratorWatcher {
+public class NodeRequest extends HashMap {
 
     private static final Charset charset = Charset.forName("UTF-8");
     private static final Logger LOGGER = Logger.getLogger(NodeRequest.class.getName());
     private static final Gson gson = new Gson();
 
-    private String[] requiredKeys = {"node_types", "requestor", "state", "state_time"};
     private String nodePoolID;
     private String nodePath;
-    private CuratorFramework conn;
-    private volatile CountDownLatch latch;
-    private KazooLock lock;
-    
 
-    // Static initialisers
-        
-    public static NodeRequest fromJsonBytes(CuratorFramework conn, byte[] bytes){
-        return NodeRequest.fromJson(conn, new String(bytes, charset));
+    public NodeRequest(CuratorFramework conn, String label, String jenkinsLabel) {
+        this(conn, "jenkins", Arrays.asList(new String[]{label}), jenkinsLabel);
     }
 
-    public static NodeRequest fromJson(CuratorFramework conn, String json){
-        final Map data = gson.fromJson(json, HashMap.class);
-
-        // convert state time from string
-        final Double stateTime = (Double)data.get("state_time");
-        data.put("state_time", stateTime);
-
-        // convert 'state' back into its corresponding enum value
-        final String stateString = (String)data.get("state");
-        data.put("state", State.valueOf(stateString));
-
-        return new NodeRequest(conn, data);
-    }
-
-    // constructors
-    
-    // package private constructor
-    NodeRequest(CuratorFramework conn, Map data){
-        this.conn = conn;
-        this.latch = new CountDownLatch(1);
-        updateFromMap(data);
-    }
-
-
-    public NodeRequest(CuratorFramework conn, String label)	{
-        this(conn, "jenkins", Arrays.asList( new String[] { label }));
-    }
-
-    public NodeRequest(CuratorFramework conn, List labels)	{
-        this(conn, "jenkins", labels);
-    }
-    
     @SuppressFBWarnings
-    public NodeRequest(CuratorFramework conn, String requestor, List<String> labels) {
-        this.conn = conn;
-        this.latch = new CountDownLatch(1);
+    public NodeRequest(CuratorFramework conn, String requestor, List<String> labels, String jenkinsLabel) {
         put("node_types", new ArrayList(labels));
         put("requestor", requestor);
         put("state", State.requested);
-        put("state_time", new Double(System.currentTimeMillis()/1000));
+        put("state_time", new Double(System.currentTimeMillis() / 1000));
+        put("jenkins_label", jenkinsLabel);
     }
-    
+
     // public methods
 
     public String getNodePath() {
@@ -151,70 +103,33 @@ public class NodeRequest extends HashMap implements CuratorWatcher {
     public byte[] getBytes(){
         return toString().getBytes(charset);
     }
-    
-    @Override
-    public void process(WatchedEvent we) throws Exception {
-        // we don't care what the event is, but something changed, so refresh
-        // local data from zookeeper.
 
-        // TODO handle an expired event/re-create the nodes?
-        LOGGER.log(Level.INFO, "WatchedEvent: " + we);
-        updateFromZooKeeper();
+    void updateFromMap(Map data) {
 
-        // Watches only trigger once, so after processing an event
-        // setup a new watch
-        conn.getData().usingWatcher(this).forPath(nodePath);
-    }
-    
-    public void waitForFulfillment() throws Exception {
-        while(true){
-            State state = (State)get("state");
-            switch(state){
-                case requested:
-                case pending:
-                    latch.await();
-                    break;
-                case fulfilled:
-                    return;
-                case failed:
-                    throw new NodePoolException("Nodepool node Request failed :("+this.toString());
-            }
-        }
-    }
-    
-    private void lock() throws Exception{
-        if (lock == null){
-            lock = new KazooLock(conn, nodePath);
-        }
-        lock.acquire();
-    }
+        // convert state time from string
+        final Double stateTime = (Double)data.get("state_time");
+        data.put("state_time", stateTime);
 
-    
-    public void accept() throws Exception {
-        lock();
-        
-    }
-    
-    private void unblockWaiters(){
-        CountDownLatch old = latch; 
-        latch = new CountDownLatch(1);// do the switch before countdown, 
-                                      // to ensure the next await() call happens on the new latch.
-        old.countDown(); // this will unblock threads that have called latch.await()
-    }
-    
-    void updateFromZooKeeper() throws Exception{
-        if (nodePath == null){
-            throw new NodePoolException("Attempt to update request from zookeeper before path has been set");
-        }
-        byte[] bytes = conn.getData().forPath(nodePath);
-        NodeRequest remoteState = NodeRequest.fromJsonBytes(conn, bytes);
-        updateFromMap(remoteState);
-        unblockWaiters();
+        // convert 'state' back into its corresponding enum value
+        final String stateString = (String)data.get("state");
+        data.put("state", State.valueOf(stateString));
 
-    }
-    
-    private void updateFromMap(Map data) {
         putAll(data);
+    }
+
+    public Map<String, String> getAllocatedNodes() {
+        // Example fulfilled request
+        // {"nodes": ["0000000000"], "node_types": ["debian"], "state": "fulfilled", "declined_by": [], "state_time": 1520849225.4513698, "reuse": false, "requestor": "NodePool:min-ready"}
+        if (get("state") != State.fulfilled){
+            throw new IllegalStateException("Attempt to get allocated nodes from a node request before it has been fulfilled");
+        }
+        List<String> nodes = (List) get("nodes");
+        List<String> node_types = (List) get("node_types");
+        Map<String, String> nodesMap = new HashMap();
+        for (int i = 0; i < nodes.size(); i++) {
+            nodesMap.put(nodes.get(i), node_types.get(i));
+        }
+        return nodesMap;
     }
 
 }

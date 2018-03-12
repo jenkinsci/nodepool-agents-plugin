@@ -8,17 +8,16 @@ labels:
 
 providers:
   - name: rackspace
-    cloud: rackspace
+    cloud: hughsaunders_uk
     driver: openstack
-    region-name: IAD
+    region-name: LON
 
     cloud-images:
       - name: debian-jessie-external
-        image-name: Debian 8 (Jessie) (PVHVM)
-
+        image-name: Ubuntu 16.04 LTS (Xenial Xerus) (PVHVM)
     pools:
       - name: main
-        max-servers: 1
+        max-servers: 3
         labels:
           - name: debian
             cloud-image: debian-jessie-external

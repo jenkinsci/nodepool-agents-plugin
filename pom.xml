@@ -145,5 +145,10 @@
             <artifactId>docker-java-api</artifactId>
             <version>3.0.14</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>ssh-slaves</artifactId>
+            <version>1.26</version>
+        </dependency>
     </dependencies>
 </project>
