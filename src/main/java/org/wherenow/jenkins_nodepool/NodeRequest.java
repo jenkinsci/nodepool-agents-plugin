@@ -120,12 +120,9 @@ public class NodeRequest extends HashMap {
     }
     
     public String getAllocatedNodePath(){
-        // this.nodePath =  /nodepool/requests/priority-id
-        //                  |<  requestroot >| |nodename |
-        //
-        String[] pathSplit = this.nodePath.split("/");
-        String nodeName = pathSplit[pathSplit.length-1];
-        return MessageFormat.format("/nodes/{0}", nodeName);
+        // node request znode path:     /nodepool/requests/priority-id
+        // node znode path:             /nodes/id
+        return MessageFormat.format("/nodes/{0}", nodePoolID);
     }
 
 }
