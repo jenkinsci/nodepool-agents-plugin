@@ -1,16 +1,16 @@
 #!/bin/bash
 
-if [ -z "NODEPOOL_CLOUD_NAME" ]; then
+if [ -z "$NODEPOOL_CLOUD_NAME" ]; then
     echo "Need NODEPOOL_CLOUD_NAME to be set name of cloud in clouds.yaml"
     exit 1
 fi
 
-if [ -z "NODEPOOL_REGION_NAME" ]; then
+if [ -z "$NODEPOOL_REGION_NAME" ]; then
     echo "Need NODEPOOL_REGION_NAME to be set to cloud region"
     exit 1
 fi
 
-if [ -z "NODEPOOL_KEYPAIR_NAME" ]; then
+if [ -z "$NODEPOOL_KEYPAIR_NAME" ]; then
     echo "Need KEYPAIR_NAME to be set to launch instances"
     exit 1
 fi
