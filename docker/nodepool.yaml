@@ -8,9 +8,9 @@ labels:
 
 providers:
   - name: rackspace
-    cloud: hughsaunders_uk
+    cloud: %NODEPOOL_CLOUD_NAME%
     driver: openstack
-    region-name: LON
+    region-name: %NODEPOOL_REGION_NAME%
 
     cloud-images:
       - name: debian-jessie-external
@@ -22,6 +22,6 @@ providers:
           - name: debian
             cloud-image: debian-jessie-external
             flavor-name: performance1-4
-            key-name: %KEYPAIR_NAME%
+            key-name: %NODEPOOL_KEYPAIR_NAME%
 
     boot-timeout: 600
