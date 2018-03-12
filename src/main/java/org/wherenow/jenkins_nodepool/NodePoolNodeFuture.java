@@ -25,6 +25,8 @@ package org.wherenow.jenkins_nodepool;
 
 import hudson.model.Descriptor;
 import hudson.model.Node;
+import org.apache.zookeeper.KeeperException;
+
 import java.io.IOException;
 import java.text.MessageFormat;
 import java.util.List;
@@ -68,16 +70,16 @@ public class NodePoolNodeFuture implements Future<Node> {
     @Override
     public boolean isDone() {
 
-        LOGGER.log(Level.INFO, "isDone() polling to see if node is ready");
-
         try {
-            // refresh request from ZK:
-            final Map data = client.getZNode(request.getNodePath());
-            request.updateFromMap(data);
-        } catch (Exception e) {
-            // TODO do something smarter with the failz
-            e.printStackTrace();
+            updateNodeRequestFromZK();
+
+        } catch (KeeperException e) {
+            // connectivity issue with ZK - it should auto-reconnect and we can re-create the request then
+            LOGGER.log(Level.WARNING, e.getMessage(), e);
             return false;
+        } catch (Exception e) {
+            // let other exceptions bubble through
+            throw new RuntimeException(e);
         }
 
         // node is updated now, check it's state:
@@ -95,6 +97,31 @@ public class NodePoolNodeFuture implements Future<Node> {
         }
 
         return requestState == State.fulfilled;
+    }
+
+    private void updateNodeRequestFromZK() throws Exception {
+        Map data = null;
+
+        final boolean exists = client.nodeExists(request.getNodePath());
+
+        if (exists) {
+            // refresh request from ZK:
+            data = client.getZNode(request.getNodePath());
+
+        } else {
+            // the request node is ephemeral, so we probably just re-connected to ZK.
+            LOGGER.log(Level.INFO, "Node request " + request.getNodePath() + " no longer exists.  Submitting " +
+                    "new request...");
+
+            final NodeRequest newRequest = client.requestNode(
+                    request.getNodePoolLabel(),
+                    request.getJenkinsLabel()
+            );
+            request = newRequest;
+        }
+
+        request.updateFromMap(data);
+
     }
 
     @Override

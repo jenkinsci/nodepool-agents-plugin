@@ -163,6 +163,11 @@ public class NodePoolClient {
         return data;
     }
 
+    public boolean nodeExists(String path) throws Exception {
+        // check if the ZNode at the given path exists
+        return conn.checkExists().forPath(path) != null;
+    }
+
     /**
      * Accept the node that was created to satisfy the given request.
      *
