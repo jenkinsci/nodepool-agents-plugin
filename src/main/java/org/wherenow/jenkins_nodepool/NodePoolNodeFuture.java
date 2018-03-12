@@ -144,7 +144,7 @@ public class NodePoolNodeFuture implements Future<Node> {
                 // TODO: Delete node request
                 LOGGER.log(Level.INFO, MessageFormat.format("Creating NodePoolNode: Host:{0}, Port:{1}, Host Key:{2}, Creds Id:{3}, Jenkins Label: {4}", host, port, hostKey, credentialsId, jenkinsLabel));
 
-                return new NodePoolNode(MessageFormat.format("{0}-{1}", type, jenkinsLabel, request.getNodePoolID()), host, port,
+                return new NodePoolNode(MessageFormat.format("{0}-{1}", jenkinsLabel, request.getNodePoolID()), host, port,
                         hostKey, credentialsId, jenkinsLabel);
             }
 
