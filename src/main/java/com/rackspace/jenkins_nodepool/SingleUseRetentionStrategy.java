@@ -46,7 +46,7 @@ public class SingleUseRetentionStrategy extends RetentionStrategy {
      */
     @Override
     public long check(Computer c) {
-        if (!c.getBuilds().isEmpty() && c.countBusy() > 0) {
+        if (!c.getBuilds().isEmpty() && c.countBusy() == 0) {
             try {
                 c.doDoDelete();
             } catch (IOException ex) {
