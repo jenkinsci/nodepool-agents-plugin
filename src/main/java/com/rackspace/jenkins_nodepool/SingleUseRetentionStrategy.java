@@ -21,20 +21,38 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package org.wherenow.jenkins_nodepool;
+package com.rackspace.jenkins_nodepool;
 
-import java.util.concurrent.LinkedBlockingQueue;
-import org.apache.curator.framework.api.CuratorWatcher;
-import org.apache.zookeeper.WatchedEvent;
+import hudson.model.Computer;
+import hudson.slaves.RetentionStrategy;
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
+ * SingleUseRetentionStrategy This strategy will delete a computer once it is
+ * idle, if it has at least one associated build.
  *
  * @author hughsaunders
  */
+public class SingleUseRetentionStrategy extends RetentionStrategy {
 
-public class ZkWatcher<T extends WatchedEvent> extends LinkedBlockingQueue<T> implements CuratorWatcher {
+    private static final Logger LOG = Logger.getLogger(SingleUseRetentionStrategy.class.getName());
+
+    /**
+     *
+     * @param c Computer
+     * @return
+     */
     @Override
-    public void process(WatchedEvent we) {
-        add((T)we);
+    public long check(Computer c) {
+        if (!c.getBuilds().isEmpty() && c.countBusy() == 0) {
+            try {
+                c.doDoDelete();
+            } catch (IOException ex) {
+                LOG.log(Level.SEVERE, null, ex);
+            }
+        }
+        return 2;
     }
 }

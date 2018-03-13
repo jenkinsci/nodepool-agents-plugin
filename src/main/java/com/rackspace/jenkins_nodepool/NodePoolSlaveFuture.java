@@ -21,15 +21,11 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package org.wherenow.jenkins_nodepool;
+package com.rackspace.jenkins_nodepool;
 
 import hudson.model.Descriptor;
 import hudson.model.Node;
-import org.apache.zookeeper.KeeperException;
-
 import java.io.IOException;
-import java.text.MessageFormat;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -37,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.apache.zookeeper.KeeperException;
 
 /**
  *
@@ -98,10 +95,14 @@ public class NodePoolSlaveFuture implements Future<Node> {
 
         boolean done = requestState == State.fulfilled;
         if (done) {
-            // accept here so that if any error conditions occur, the above update logic will automatically re-submit
-            // the node request:
-            LOGGER.log(Level.INFO, "Nodes to accept:" + request.get("nodes"));
-            done = client.acceptNodes(request) != null;
+            try {
+                // accept here so that if any error conditions occur, the above update logic will automatically re-submit
+                // the node request:
+                LOGGER.log(Level.INFO, "Nodes to accept:" + request.get("nodes"));
+                done = client.acceptNodes(request) != null;
+            } catch (Exception ex) {
+                LOGGER.log(Level.SEVERE, null, ex);
+            }
         }
         return done;
     }
@@ -117,8 +118,8 @@ public class NodePoolSlaveFuture implements Future<Node> {
 
         } else {
             // the request node is ephemeral, so we probably just re-connected to ZK.
-            LOGGER.log(Level.INFO, "Node request " + request.getNodePath() + " no longer exists.  Submitting " +
-                    "new request...");
+            LOGGER.log(Level.INFO, "Node request " + request.getNodePath() + " no longer exists.  Submitting "
+                    + "new request...");
 
             final NodeRequest newRequest = client.requestNode(
                     request.getNodePoolLabel(),
@@ -150,9 +151,9 @@ public class NodePoolSlaveFuture implements Future<Node> {
      *
      * @return Node
      */
-    private Node getNode() throws ExecutionException {
-        try {
+    private Node getNode() {
 
+        try {
             // ok we know the identity of the nodes to use
             // TODO do whatever stuff neeeds to happen to actually provision a Node now.
             // TODO: Get ip/host for node.
@@ -160,29 +161,12 @@ public class NodePoolSlaveFuture implements Future<Node> {
             // zknode for the request.
             // TODO: Replace all uses of /nodes with client.getNodeRoot()
             // ZKNode that represents the newly created node.
-            Map<String, String> nodeZKNodes = request.getAllocatedNodes();
-
-            for (String node : nodeZKNodes.keySet()) {
-                String type = nodeZKNodes.get(node);
-                Map<String, Object> nodeData = client.getZNode("/nodes/" + node);
-                String host = (String) nodeData.get("interface_ip");
-                Integer port = ((Double) nodeData.get("connection_port")).intValue();
-                List<String> hostKeys = (List) nodeData.get("host_keys");
-                String hostKey = hostKeys.get(0);
-                String credentialsId = client.getCredentialsId();
-
-                String jenkinsLabel = (String) request.get("jenkins_label");
-                // TODO: Delete node request
-                LOGGER.log(Level.INFO, MessageFormat.format("Creating NodePoolSlave: Host:{0}, Port:{1}, Host Key:{2}, Creds Id:{3}, Jenkins Label: {4}", host, port, hostKey, credentialsId, jenkinsLabel));
-
-                return new NodePoolSlave(MessageFormat.format("{0}-{1}", type, jenkinsLabel, request.getNodePoolID()), host, port,
-                        hostKey, credentialsId, jenkinsLabel);
-            }
-
-            // TODO: Figure out how/if multiple node requests work.
-        } catch (Exception e) {
-            throw new ExecutionException(e);
+            return new NodePoolSlave(request.getAllocatedNodes().get(0),
+                    client.getCredentialsId());
+        } catch (Exception ex) {
+            Logger.getLogger(NodePoolSlaveFuture.class.getName()).log(Level.SEVERE, null, ex);
+            return null;
         }
-        return null;
+
     }
 }

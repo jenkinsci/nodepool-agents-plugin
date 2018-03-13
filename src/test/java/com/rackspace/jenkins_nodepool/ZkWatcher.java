@@ -1,7 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright 2018 hughsaunders.
+ * Copyright 2018 Rackspace.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -21,17 +21,20 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package org.wherenow.jenkins_nodepool;
+package com.rackspace.jenkins_nodepool;
+
+import java.util.concurrent.LinkedBlockingQueue;
+import org.apache.curator.framework.api.CuratorWatcher;
+import org.apache.zookeeper.WatchedEvent;
 
 /**
  *
- * @author hughsaunders
+ * @author Rackspace
  */
-public class KazooLockException extends Exception {
 
-    public KazooLockException(String message) {
-        super(message);
+public class ZkWatcher<T extends WatchedEvent> extends LinkedBlockingQueue<T> implements CuratorWatcher {
+    @Override
+    public void process(WatchedEvent we) {
+        add((T)we);
     }
-    
-    
 }

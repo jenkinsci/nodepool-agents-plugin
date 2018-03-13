@@ -21,13 +21,12 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package org.wherenow.jenkins_nodepool;
+package com.rackspace.jenkins_nodepool;
 
 import hudson.model.Descriptor;
 import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.plugins.sshslaves.verifiers.ManuallyProvidedKeyVerificationStrategy;
-import hudson.slaves.RetentionStrategy;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.logging.Logger;
@@ -39,20 +38,20 @@ import java.util.logging.Logger;
 public class NodePoolSlave extends Slave {
 
     private static final Logger LOGGER = Logger.getLogger(NodePoolSlave.class.getName());
+    private final NodePoolNode node;
 
-    public NodePoolSlave(String name, String host, int port,
-                         String hostKey, String credentialsId, String label) throws Descriptor.FormException, IOException {
+    public NodePoolSlave(NodePoolNode node, String credentialsId) throws Descriptor.FormException, IOException {
 
         super(
-                name, // name
+                node.getName(), // name
                 "Nodepool Node", // description
                 "/var/lib/jenkins", // TODO this should be the path to the root of the workspace on the slave
                 "2", // num executors
                 Mode.EXCLUSIVE,
-                label,
+                node.getJenkinsLabel(),
                 new SSHLauncher(
-                        host,
-                        port,
+                        node.getHost(),
+                        node.getPort(),
                         credentialsId,
                         "", //jvmoptions
                         null, // javapath
@@ -62,10 +61,15 @@ public class NodePoolSlave extends Slave {
                         300, //launchTimeoutSeconds
                         30, //maxNumRetries
                         10, //retryWaitTime
-                        new ManuallyProvidedKeyVerificationStrategy(hostKey)
+                        new ManuallyProvidedKeyVerificationStrategy(node.getHostKey())
                 ),
-                new RetentionStrategy.Demand(1, 1), //retention strategy TODO: use a more suitlable strategy
+                new SingleUseRetentionStrategy(), //retention strategy TODO: use a more suitlable strategy
                 new ArrayList() //nodeProperties
         );
+        this.node = node;
+    }
+
+    public NodePoolNode getNode() {
+        return node;
     }
 }

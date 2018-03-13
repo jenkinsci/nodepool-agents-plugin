@@ -21,7 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package org.wherenow.jenkins_nodepool;
+package com.rackspace.jenkins_nodepool;
 
 import com.cloudbees.jenkins.plugins.sshcredentials.SSHAuthenticator;
 import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;

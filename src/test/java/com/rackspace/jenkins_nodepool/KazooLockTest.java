@@ -1,7 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright 2018 hughsaunders.
+ * Copyright 2018 Rackspace.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -21,8 +21,11 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package org.wherenow.jenkins_nodepool;
+package com.rackspace.jenkins_nodepool;
 
+import com.rackspace.jenkins_nodepool.ZooKeeperClient;
+import com.rackspace.jenkins_nodepool.KazooLockException;
+import com.rackspace.jenkins_nodepool.KazooLock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -41,7 +44,7 @@ import org.junit.ClassRule;
 
 /**
  *
- * @author hughsaunders
+ * @author Rackspace
  */
 public class KazooLockTest {
 
