@@ -93,4 +93,8 @@ public class NodePoolNode {
         return getName();
     }
 
+    public void release() throws Exception {
+        lock.release();
+    }
+
 }

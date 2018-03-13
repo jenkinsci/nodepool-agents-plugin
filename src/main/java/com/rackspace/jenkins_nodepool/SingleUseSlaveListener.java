@@ -28,16 +28,9 @@ import hudson.model.Build;
 import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.model.listeners.RunListener;
-import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * Based on
- * https://github.com/jenkinsci/singleuseslave-plugin/blob/master/models/singleuseslave_listener.rb
- *
- * @author hughsaunders
- */
 @Extension
 public class SingleUseSlaveListener extends RunListener<Build> {
 
@@ -49,13 +42,19 @@ public class SingleUseSlaveListener extends RunListener<Build> {
 
     @Override
     public void onCompleted(Build build, TaskListener listener) {
-        LOG.log(Level.INFO, "onCompleted:" + build.toString() + " " + listener.toString());
+        LOG.log(Level.INFO, "onCompleted:{0} {1}", new Object[]{build.toString(), listener.toString()});
         Node node = build.getBuiltOn();
         node.getAssignedLabels().stream().filter((label) -> (label.getName().startsWith("nodepool-"))).forEachOrdered((_item) -> {
             try {
+                if (!(node instanceof NodePoolSlave)) {
+                    return;
+                }
                 // this is  a nodepool node, kill it.
+                NodePoolSlave nps = (NodePoolSlave) node;
+                NodePoolNode npn = nps.getNode();
                 node.toComputer().doDoDelete();
-            } catch (IOException ex) {
+                npn.release();
+            } catch (Exception ex) {
                 LOG.log(Level.SEVERE, null, ex);
             }
         });

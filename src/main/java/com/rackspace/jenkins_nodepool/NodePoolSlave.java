@@ -38,31 +38,20 @@ import java.util.logging.Logger;
 public class NodePoolSlave extends Slave {
 
     private static final Logger LOGGER = Logger.getLogger(NodePoolSlave.class.getName());
+    private final NodePoolNode node;
 
     public NodePoolSlave(NodePoolNode node, String credentialsId) throws Descriptor.FormException, IOException {
-        this(
-                node.getName(),
-                node.getHost(),
-                node.getPort(),
-                node.getHostKey(),
-                credentialsId,
-                node.getJenkinsLabel()
-        );
-    }
-
-    public NodePoolSlave(String name, String host, int port,
-                         String hostKey, String credentialsId, String label) throws Descriptor.FormException, IOException {
 
         super(
-                name, // name
+                node.getName(), // name
                 "Nodepool Node", // description
                 "/var/lib/jenkins", // TODO this should be the path to the root of the workspace on the slave
                 "2", // num executors
                 Mode.EXCLUSIVE,
-                label,
+                node.getJenkinsLabel(),
                 new SSHLauncher(
-                        host,
-                        port,
+                        node.getHost(),
+                        node.getPort(),
                         credentialsId,
                         "", //jvmoptions
                         null, // javapath
@@ -72,10 +61,15 @@ public class NodePoolSlave extends Slave {
                         300, //launchTimeoutSeconds
                         30, //maxNumRetries
                         10, //retryWaitTime
-                        new ManuallyProvidedKeyVerificationStrategy(hostKey)
+                        new ManuallyProvidedKeyVerificationStrategy(node.getHostKey())
                 ),
                 new SingleUseRetentionStrategy(), //retention strategy TODO: use a more suitlable strategy
                 new ArrayList() //nodeProperties
         );
+        this.node = node;
+    }
+
+    public NodePoolNode getNode() {
+        return node;
     }
 }
