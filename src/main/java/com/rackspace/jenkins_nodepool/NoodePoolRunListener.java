@@ -26,17 +26,18 @@ package com.rackspace.jenkins_nodepool;
 import hudson.Extension;
 import hudson.model.Build;
 import hudson.model.Node;
+import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.model.listeners.RunListener;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 @Extension
-public class SingleUseSlaveListener extends RunListener<Build> {
+public class NoodePoolRunListener extends RunListener<Build> {
 
-    private static final Logger LOG = Logger.getLogger(SingleUseSlaveListener.class.getName());
+    private static final Logger LOG = Logger.getLogger(NoodePoolRunListener.class.getName());
 
-    public SingleUseSlaveListener() {
+    public NoodePoolRunListener() {
     }
 
 
@@ -58,6 +59,8 @@ public class SingleUseSlaveListener extends RunListener<Build> {
                 LOG.log(Level.SEVERE, null, ex);
             }
         });
+        Run r;
+        r.
 
     }
 }
