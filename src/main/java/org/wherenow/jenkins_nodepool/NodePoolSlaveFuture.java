@@ -35,19 +35,20 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.apache.zookeeper.KeeperException;
 
 /**
  *
  * @author hughsaunders
  */
-public class NodePoolNodeFuture implements Future<Node> {
+public class NodePoolSlaveFuture implements Future<Node> {
 
-    private static final Logger LOGGER = Logger.getLogger(NodePoolNodeFuture.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(NodePoolSlaveFuture.class.getName());
 
     private NodePoolClient client;
     NodeRequest request;
 
-    public NodePoolNodeFuture(NodePoolClient client, NodeRequest request) throws IOException, Descriptor.FormException {
+    public NodePoolSlaveFuture(NodePoolClient client, NodeRequest request) throws IOException, Descriptor.FormException {
         this.client = client;
         this.request = request;
     }
@@ -68,16 +69,16 @@ public class NodePoolNodeFuture implements Future<Node> {
     @Override
     public boolean isDone() {
 
-        LOGGER.log(Level.INFO, "isDone() polling to see if node is ready");
-
         try {
-            // refresh request from ZK:
-            final Map data = client.getZNode(request.getNodePath());
-            request.updateFromMap(data);
-        } catch (Exception e) {
-            // TODO do something smarter with the failz
-            e.printStackTrace();
+            updateNodeRequestFromZK();
+
+        } catch (KeeperException e) {
+            // connectivity issue with ZK - it should auto-reconnect and we can re-create the request then
+            LOGGER.log(Level.WARNING, e.getMessage(), e);
             return false;
+        } catch (Exception e) {
+            // let other exceptions bubble through
+            throw new RuntimeException(e);
         }
 
         // node is updated now, check it's state:
@@ -94,7 +95,39 @@ public class NodePoolNodeFuture implements Future<Node> {
             LOGGER.log(Level.INFO, "Current state is now: " + requestState);
         }
 
-        return requestState == State.fulfilled;
+        boolean done = requestState == State.fulfilled;
+        if (done) {
+            // accept here so that if any error conditions occur, the above update logic will automatically re-submit
+            // the node request:
+            LOGGER.log(Level.INFO, "Nodes to accept:" + request.get("nodes"));
+            done = client.acceptNodes(request) != null;
+        }
+        return done;
+    }
+
+    private void updateNodeRequestFromZK() throws Exception {
+        Map data = null;
+
+        final boolean exists = client.nodeExists(request.getNodePath());
+
+        if (exists) {
+            // refresh request from ZK:
+            data = client.getZNode(request.getNodePath());
+
+        } else {
+            // the request node is ephemeral, so we probably just re-connected to ZK.
+            LOGGER.log(Level.INFO, "Node request " + request.getNodePath() + " no longer exists.  Submitting " +
+                    "new request...");
+
+            final NodeRequest newRequest = client.requestNode(
+                    request.getNodePoolLabel(),
+                    request.getJenkinsLabel()
+            );
+            request = newRequest;
+        }
+
+        request.updateFromMap(data);
+
     }
 
     @Override
@@ -118,9 +151,6 @@ public class NodePoolNodeFuture implements Future<Node> {
      */
     private Node getNode() throws ExecutionException {
         try {
-            LOGGER.log(Level.INFO, "Nodes to accept:" + request.get("nodes"));
-            final List<String> nodes = client.acceptNodes(request);
-            LOGGER.log(Level.INFO, "Accepted nodes: " + nodes);
 
             // ok we know the identity of the nodes to use
             // TODO do whatever stuff neeeds to happen to actually provision a Node now.
@@ -142,9 +172,9 @@ public class NodePoolNodeFuture implements Future<Node> {
 
                 String jenkinsLabel = (String) request.get("jenkins_label");
                 // TODO: Delete node request
-                LOGGER.log(Level.INFO, MessageFormat.format("Creating NodePoolNode: Host:{0}, Port:{1}, Host Key:{2}, Creds Id:{3}, Jenkins Label: {4}", host, port, hostKey, credentialsId, jenkinsLabel));
+                LOGGER.log(Level.INFO, MessageFormat.format("Creating NodePoolSlave: Host:{0}, Port:{1}, Host Key:{2}, Creds Id:{3}, Jenkins Label: {4}", host, port, hostKey, credentialsId, jenkinsLabel));
 
-                return new NodePoolNode(MessageFormat.format("{0}-{1}", jenkinsLabel, request.getNodePoolID()), host, port,
+                return new NodePoolSlave(MessageFormat.format("{0}-{1}", jenkinsLabel, request.getNodePoolID()), host, port,
                         hostKey, credentialsId, jenkinsLabel);
             }
 

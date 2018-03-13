@@ -14,7 +14,9 @@ services:
     volumes:
       - "~/.config:/root/.config"
     environment:
-      - KEYPAIR_NAME
+      - NODEPOOL_CLOUD_NAME
+      - NODEPOOL_REGION_NAME
+      - NODEPOOL_KEYPAIR_NAME
 
   web:
     image: elkozmon/zoonavigator-web:latest

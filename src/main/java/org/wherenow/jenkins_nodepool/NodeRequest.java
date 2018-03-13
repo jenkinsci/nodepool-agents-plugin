@@ -132,4 +132,12 @@ public class NodeRequest extends HashMap {
         return nodesMap;
     }
 
+    String getNodePoolLabel() {
+        final List<String> labels = (List<String>)get("node_types");
+        return labels.get(0);
+    }
+
+    String getJenkinsLabel() {
+        return (String)get("jenkins_label");
+    }
 }

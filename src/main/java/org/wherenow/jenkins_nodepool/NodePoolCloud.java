@@ -38,10 +38,8 @@ import hudson.security.ACL;
 import hudson.security.AccessControlled;
 import hudson.slaves.NodeProvisioner;
 import hudson.util.ListBoxModel;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
+
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.model.Jenkins;
@@ -93,9 +91,10 @@ public class NodePoolCloud extends hudson.slaves.Cloud {
             final NodePoolClient client = new NodePoolClient(connectionString, credentialsId);
             final NodeRequest request = client.requestNode(nodePoolLabel, label.getName());
 
+            final String nodeDisplayName = label + "-" + UUID.randomUUID().toString();
             final NodeProvisioner.PlannedNode plannedNode = new NodeProvisioner.PlannedNode(
-                    label + request.getNodePoolID(), // display name of node
-                    new NodePoolNodeFuture(client, request),
+                    nodeDisplayName, // don't use node request id, it can change
+                    new NodePoolSlaveFuture(client, request),
                     1 // number of executors
 
             );

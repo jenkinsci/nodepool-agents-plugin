@@ -113,7 +113,7 @@ public class NodePoolClient {
         return credentialsId;
     }
 
-    public Future<NodePoolNode> request() {
+    public Future<NodePoolSlave> request() {
         return null;
     }
 
@@ -163,36 +163,67 @@ public class NodePoolClient {
         return data;
     }
 
+    public boolean nodeExists(String path) throws Exception {
+        // check if the ZNode at the given path exists
+        return conn.checkExists().forPath(path) != null;
+    }
+
     /**
      * Accept the node that was created to satisfy the given request.
      *
      * @param request node request
-     * @throws Exception barf
      * @return node name as a String
      */
-    public List<String> acceptNodes(NodeRequest request) throws Exception {
+    public List<NodePoolNode> acceptNodes(NodeRequest request) {
 
         // refer to the request "nodeset" to know which nodes to lock.
         final List<String> nodes = (List<String>) request.get("nodes");
-        final List<String> acceptedNodes = new ArrayList<String>();
+        final List<NodePoolNode> acceptedNodes = new ArrayList<NodePoolNode>();
 
-        for (String node : nodes) {
-            LOGGER.log(Level.INFO, "Accepting node " + node + " on behalf of request " + request.getNodePoolID());
+        try {
+            for (String node : nodes) {
+                LOGGER.log(Level.INFO, "Accepting node " + node + " on behalf of request " + request.getNodePoolID());
 
-            final String nodePath = "/nodes/" + node;
-            final String nodeLockPath = nodePath + "/lock";
-            final KazooLock lock = new KazooLock(conn, nodeLockPath);
-            lock.acquire();  // TODO debug making sure this lock stuff actually works
+                final String nodePath = "/nodes/" + node;
+                final String nodeLockPath = nodePath + "/lock";
+                    final KazooLock lock = new KazooLock(conn, nodeLockPath);
+                    lock.acquire();  // TODO debug making sure this lock stuff actually works
 
-            final Map data = getZNode(nodePath);
-            LOGGER.log(Level.INFO, "ZNode data: " + data);
+                    final Map data = getZNode(nodePath);
+                    LOGGER.log(Level.INFO, "ZNode data: " + data);
 
-            // TODO get details about the node from ZK?
-            acceptedNodes.add(node);
+                    acceptedNodes.add(new NodePoolNode(node, lock));
 
-            // TODO delete node request now that we've got the node locked.
+            }
+        } catch (Exception e) {
+            // (if we hit this, then the request will get re-created on the next isDone() poll.)
+            LOGGER.log(Level.WARNING, "Failed to lock node" + e.getMessage(), e);
+
+            // roll back acceptance on any nodes we managed to successfully accept
+            for (NodePoolNode acceptedNode : acceptedNodes) {
+                try {
+                    acceptedNode.getLock().release();
+
+                } catch (Exception lockException) {
+                    LOGGER.log(Level.WARNING, "Failed to release lock on node " + acceptedNode.getName() + ": "
+                            + lockException.getMessage(), lockException);
+                }
+            }
+
+        } finally {
+            // regardless of success locking node, delete the request.
+            deleteNode(request.getNodePath());
         }
 
         return acceptedNodes;
+    }
+
+    public void deleteNode(String path) {
+        try {
+            conn.delete().forPath(path);
+        } catch (Exception e) {
+            // not sure what else we can do at this point.
+            LOGGER.log(Level.WARNING, "Failed to delete node at path: " + path + ": " + e.getMessage(), e);
+        }
     }
 }
