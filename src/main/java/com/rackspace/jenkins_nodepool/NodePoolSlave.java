@@ -45,8 +45,8 @@ public class NodePoolSlave extends Slave {
                 node.getHost(),
                 node.getPort(),
                 node.getHostKey(),
-                node.getJenkinsLabel(),
-                credentialsId
+                credentialsId,
+                node.getJenkinsLabel()
         );
     }
 
