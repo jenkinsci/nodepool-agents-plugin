@@ -46,7 +46,7 @@ public class KazooLock {
 
     private static final Logger LOG = Logger.getLogger(KazooLock.class.getName());
 
-    private CuratorFramework conn;
+    private String connectionString;
     // Path is the path to the node to be locked
     private final String path;
     private final String identifier;
@@ -64,13 +64,13 @@ public class KazooLock {
     private Charset utf8;
     private Integer sequence;
 
-    public KazooLock(CuratorFramework conn, String path){
-        this(conn, path, "jenkins", 5, TimeUnit.SECONDS);
+    public KazooLock(String connectionString, String path) {
+        this(connectionString, path, "jenkins", 5, TimeUnit.SECONDS);
     }
 
-    public KazooLock(CuratorFramework conn,
+    public KazooLock(String connectionString,
             String path, String identifier, long timeout, TimeUnit unit){
-        this.conn = conn;
+        this.connectionString = connectionString;
         this.path = path;
         this.identifier = identifier;
         this.timeout = timeout;
@@ -89,7 +89,7 @@ public class KazooLock {
         }
     }
 
-    static Integer sequenceNumberForPath(String path) throws KazooLockException{
+    static Integer sequenceNumberForPath(String path) throws KazooLockException {
         Pattern p = Pattern.compile("_([0-9]+)$");
         Matcher m = p.matcher(path);
         boolean matches = m.find();
@@ -100,10 +100,14 @@ public class KazooLock {
         }
     }
 
+    CuratorFramework getConnection() {
+        return ZooKeeperClient.getConnection(connectionString);
+    }
+
     void waitForNodeRemoval(String path)
             throws Exception{
         KazooLockWatcher klw = new KazooLockWatcher();
-        while (conn.checkExists().usingWatcher(klw).forPath(path) != null ){
+        while (getConnection().checkExists().usingWatcher(klw).forPath(path) != null) {
             WatchedEvent we = (WatchedEvent)klw.poll(timeout, unit);
             if (we == null){
                 throw new KazooLockException("Timeout Acquiring Lock for node: "+this.path);
@@ -116,22 +120,21 @@ public class KazooLock {
         LOG.log(Level.INFO, "KazooLock.acquire");
         // 1. Ensure path to be locked exists
         try {
-            conn.create()
-                .creatingParentsIfNeeded()
+            getConnection().create()
+                    .creatingParentsIfNeeded()
                 .forPath(path, identifier.getBytes(utf8));
         } catch (NodeExistsException ex) {
             // node already exists, nothing to do.
         }
 
         // 2. Create create path and determine our sequence
-        node = conn.create()
-                   .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
+        node = getConnection().create()                   .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
                 .forPath(create_path, identifier.getBytes(utf8));
         LOG.log(Level.INFO, "Lock contender created:" + node);
         sequence = sequenceNumberForPath(node);
 
         // 3. Wait for any child nodes with lower seq numbers
-        List<String> contenders = conn.getChildren().forPath(path);
+        List<String> contenders = getConnection().getChildren().forPath(path);
         for (String contender : contenders){
             LOG.log(Level.INFO, "Found contender for lock:{0}", contender);
             Integer contenderSequence = sequenceNumberForPath(contender);
@@ -151,7 +154,7 @@ public class KazooLock {
 
     }
     public void release() throws Exception{
-        conn.delete().forPath(node);
+        getConnection().delete().forPath(node);
     }
 
 }

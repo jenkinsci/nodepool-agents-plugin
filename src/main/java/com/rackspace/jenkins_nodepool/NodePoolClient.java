@@ -57,7 +57,7 @@ public class NodePoolClient {
 
     private static final Logger LOGGER = Logger.getLogger(NodePoolClient.class.getName());
 
-    private CuratorFramework conn;
+    private String connectionString;
 
     // these roots are relative to /nodepool which is the namespace
     // set on the curator framework connection
@@ -75,20 +75,7 @@ public class NodePoolClient {
     }
 
     public NodePoolClient(String connectionString, Integer priority, String credentialsId) {
-        this(ZooKeeperClient.createConnection(connectionString), priority, credentialsId);
-    }
-
-    public NodePoolClient(CuratorFramework conn, String credentialsId) {
-        this(conn, 100, credentialsId);
-    }
-
-    public NodePoolClient(ZooKeeperClient zkc, Integer priority, String credentialsId) {
-        this(zkc.getConnection(), priority, credentialsId);
-    }
-
-    // all constructors lead here
-    public NodePoolClient(CuratorFramework conn, Integer priority, String credentialsId) {
-        this.conn = conn;
+        this.connectionString = connectionString;
         this.requestRoot = requestRoot;
         this.priority = priority;
         this.credentialsId = credentialsId;
@@ -128,18 +115,22 @@ public class NodePoolClient {
         }
     }
 
+    CuratorFramework getConnection() {
+        return ZooKeeperClient.getConnection(connectionString);
+    }
+
     // TODO: similar with nodeSet for multiple nodes.
     // or just create multiple requests?
     public NodeRequest requestNode(String nPLabel, String jenkinsLabel) throws Exception {
-        final NodeRequest request = new NodeRequest(conn, nPLabel, jenkinsLabel);
+        final NodeRequest request = new NodeRequest(connectionString, nPLabel, jenkinsLabel);
         final String createPath = MessageFormat.format("/{0}/{1}-", this.requestRoot, priority.toString());
         LOGGER.info(MessageFormat.format("Creating request node: {0}", createPath));
-        String requestPath = conn.create()
+        String requestPath = getConnection().create()
                 .creatingParentsIfNeeded()
                 .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
                 .forPath(createPath, request.toString().getBytes());
 
-        LOGGER.info("Requested created at path: " + requestPath);
+        LOGGER.log(Level.INFO, "Requested created at path: {0}", requestPath);
 
         // get NodePool request id
         final String id = NodePoolClient.idForPath(requestPath);
@@ -158,7 +149,7 @@ public class NodePoolClient {
      * @throws Exception barf
      */
     public Map getZNode(String path) throws Exception {
-        byte[] jsonBytes = conn.getData().forPath(path);
+        byte[] jsonBytes = getConnection().getData().forPath(path);
         String jsonString = new String(jsonBytes, charset);
         final Map data = gson.fromJson(jsonString, HashMap.class);
         return data;
@@ -166,7 +157,7 @@ public class NodePoolClient {
 
     public boolean nodeExists(String path) throws Exception {
         // check if the ZNode at the given path exists
-        return conn.checkExists().forPath(path) != null;
+        return getConnection().checkExists().forPath(path) != null;
     }
 
     /**
@@ -218,7 +209,7 @@ public class NodePoolClient {
 
     public void deleteNode(String path) {
         try {
-            conn.delete().forPath(path);
+            getConnection().delete().forPath(path);
         } catch (Exception e) {
             // not sure what else we can do at this point.
             LOGGER.log(Level.WARNING, "Failed to delete node at path: " + path + ": " + e.getMessage(), e);

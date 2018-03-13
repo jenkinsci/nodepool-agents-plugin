@@ -16,19 +16,19 @@ public class NodePoolNode {
     private final KazooLock lock;
 
     private final Map data;
-    private final CuratorFramework conn;
+    private final String connectionString;
     private final String path;
     private static final Gson gson = new Gson();
     private static final Charset charset = Charset.forName("UTF-8");
     private final String id;
 
 
-    public NodePoolNode(CuratorFramework conn, String id) throws Exception {
+    public NodePoolNode(String connectionString, String id) throws Exception {
         data = new HashMap();
-        this.conn = conn;
+        this.connectionString = connectionString;
         this.path = MessageFormat.format("/nodes/{0}", id);
         this.id = id;
-        this.lock = new KazooLock(conn, getLockPath());
+        this.lock = new KazooLock(connectionString, getLockPath());
         this.updateFromZK();
     }
 
@@ -36,8 +36,13 @@ public class NodePoolNode {
         this.data.putAll(data);
     }
 
+    CuratorFramework getConnection() {
+        return ZooKeeperClient.getConnection(connectionString);
+    }
+
+
     public void updateFromZK() throws Exception {
-        byte[] bytes = conn.getData().forPath(this.path);
+        byte[] bytes = getConnection().getData().forPath(this.path);
         String jsonString = new String(bytes, charset);
         final Map zkData = gson.fromJson(jsonString, HashMap.class);
         updateFromMap(zkData);

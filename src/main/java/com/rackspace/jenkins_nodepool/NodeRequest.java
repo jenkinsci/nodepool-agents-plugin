@@ -32,7 +32,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
-import org.apache.curator.framework.CuratorFramework;
 
 enum State {
     requested, pending, fulfilled, failed
@@ -54,20 +53,20 @@ public class NodeRequest extends HashMap {
 
     private String nodePoolID;
     private String nodePath;
-    private final CuratorFramework conn;
+    private final String connectionString;
 
-    public NodeRequest(CuratorFramework conn, String label, String jenkinsLabel) {
-        this(conn, "jenkins", Arrays.asList(new String[]{label}), jenkinsLabel);
+    public NodeRequest(String connectionString, String label, String jenkinsLabel) {
+        this(connectionString, "jenkins", Arrays.asList(new String[]{label}), jenkinsLabel);
     }
 
     @SuppressFBWarnings
-    public NodeRequest(CuratorFramework conn, String requestor, List<String> labels, String jenkinsLabel) {
+    public NodeRequest(String connectionString, String requestor, List<String> labels, String jenkinsLabel) {
         put("node_types", new ArrayList(labels));
         put("requestor", requestor);
         put("state", State.requested);
         put("state_time", new Double(System.currentTimeMillis() / 1000));
         put("jenkins_label", jenkinsLabel);
-        this.conn = conn;
+        this.connectionString = connectionString;
     }
 
     // public methods
@@ -122,7 +121,7 @@ public class NodeRequest extends HashMap {
         }
         List<NodePoolNode> nodeObjects = new ArrayList();
         for (Object id : (List) get("nodes")) {
-            nodeObjects.add(new NodePoolNode(conn, (String) id));
+            nodeObjects.add(new NodePoolNode(connectionString, (String) id));
         }
 
         return nodeObjects;

@@ -23,7 +23,10 @@
  */
 package com.rackspace.jenkins_nodepool;
 
-import java.text.MessageFormat;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import org.apache.curator.RetryPolicy;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
@@ -33,58 +36,84 @@ import org.apache.curator.retry.ExponentialBackoffRetry;
  *
  * @author hughsaunders
  */
-public class ZooKeeperClient{
+public class ZooKeeperClient {
 
-	private CuratorFramework conn;  
-	private String requestRoot;
-	private String nodeRoot;
-	private String connectionString;
-	private String zkNamespace;
-	private RetryPolicy retryPolicy;	
-        
-        
-        public static CuratorFramework createConnection(String connectionString){
+    private CuratorFramework conn;
+    private String requestRoot;
+    private String nodeRoot;
+    private String connectionString;
+    private String zkNamespace;
+    private RetryPolicy retryPolicy;
+
+    // Store connections in a map, so everytime a connection with the
+    // same connectionString is requested, the same connection handle
+    // will be returned.
+    private static Map<String, ZooKeeperClient> instances = new HashMap();
+
+    public static ZooKeeperClient getClient(String connectionString) {
+        if (ZooKeeperClient.instances.containsKey(connectionString)) {
+            return ZooKeeperClient.instances.get(connectionString);
+        } else {
             ZooKeeperClient zkc = new ZooKeeperClient(connectionString);
-            zkc.connect();
-            return zkc.getConnection();
+            ZooKeeperClient.instances.put(connectionString, zkc);
+            return zkc;
         }
-	
+    }
 
-	public ZooKeeperClient(String connectionString) {
-		this(connectionString, 
-			"nodepool",
-			new ExponentialBackoffRetry(1000,3));
-	}
+    public static List<String> getConnectionStrings() {
+        return new ArrayList(ZooKeeperClient.instances.keySet());
+    }
 
-	public ZooKeeperClient(String connectionString, String zkNamespace, 
-                RetryPolicy retryPolicy) {
-		this.connectionString = connectionString;
-		this.zkNamespace = zkNamespace;
-		this.retryPolicy = retryPolicy;
-	}
+    public static CuratorFramework getConnection(String connectionString) {
+        return ZooKeeperClient.getClient(connectionString).conn;
+    }
 
-	public void connect(){
-		conn = CuratorFrameworkFactory.builder()
-		.connectString(connectionString)
-		.namespace(zkNamespace)
-		.retryPolicy(retryPolicy)
-		.build();
-		conn.start();
-	}
-	
-	public void disconnect(){
-		conn.close();	
-	}
-        
-        public CuratorFramework getConnection(){
-            if (conn == null){
-                throw new IllegalStateException("Attempt to get connection before calling connect");
-            }
-            return conn;
-        }
+    public ZooKeeperClient(String connectionString) {
+        this(connectionString,
+                "nodepool",
+                new ExponentialBackoffRetry(1000, 3));
+    }
 
+    public ZooKeeperClient(String connectionString, String zkNamespace,
+            RetryPolicy retryPolicy) {
+        this.connectionString = connectionString;
+        this.zkNamespace = zkNamespace;
+        this.retryPolicy = retryPolicy;
 
+        conn = CuratorFrameworkFactory.builder()
+                .connectString(connectionString)
+                .namespace(zkNamespace)
+                .retryPolicy(retryPolicy)
+                .build();
+        conn.start();
+    }
 
-	
-		
+    public CuratorFramework getConnection() {
+        return ZooKeeperClient.getConnection(connectionString);
+    }
+
+    public void disconnect() {
+        conn.close();
+    }
+
+    public String getRequestRoot() {
+        return requestRoot;
+    }
+
+    public String getNodeRoot() {
+        return nodeRoot;
+    }
+
+    public String getConnectionString() {
+        return connectionString;
+    }
+
+    public String getZkNamespace() {
+        return zkNamespace;
+    }
+
+    public RetryPolicy getRetryPolicy() {
+        return retryPolicy;
+    }
+
 }
