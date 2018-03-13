@@ -39,7 +39,8 @@ import org.apache.zookeeper.CreateMode;
 
 /**
  * Notes on what needs to be implemented form the Jenkins side.. Cloud:
- * provision: NodeProvisioner.PlannedNode Slave: createComputer (Pass in * enough information about node to free it, must be serialisable so it can be
+ * provision: NodeProvisioner.PlannedNode Slave: createComputer (Pass in *
+ * enough information about node to free it, must be serialisable so it can be
  * stored in global config incase a user manually reconfigures the node)
  * Computer onRemoved: Release the node here. RetentionStrategy
  * (CloudRetentionStrategy is based on idle minutes which doesn't work for our
@@ -173,26 +174,23 @@ public class NodePoolClient {
      *
      * @param request node request
      * @return node name as a String
+     * @throws java.lang.Exception
      */
-    public List<NodePoolNode> acceptNodes(NodeRequest request) {
+    public List<NodePoolNode> acceptNodes(NodeRequest request) throws Exception {
 
         // refer to the request "nodeset" to know which nodes to lock.
-        final List<String> nodes = (List<String>) request.get("nodes");
-        final List<NodePoolNode> acceptedNodes = new ArrayList<NodePoolNode>();
+        final List<NodePoolNode> nodes = request.getAllocatedNodes();
+        final List<NodePoolNode> acceptedNodes = new ArrayList<>();
 
         try {
-            for (String node : nodes) {
-                LOGGER.log(Level.INFO, "Accepting node " + node + " on behalf of request " + request.getNodePoolID());
+            for (NodePoolNode node : nodes) {
+                LOGGER.log(Level.INFO, "Accepting node {0} on behalf of request {1}", new Object[]{node, request.getNodePoolID()});
 
-                final String nodePath = "/nodes/" + node;
-                final String nodeLockPath = nodePath + "/lock";
-                    final KazooLock lock = new KazooLock(conn, nodeLockPath);
-                    lock.acquire();  // TODO debug making sure this lock stuff actually works
+                node.getLock().acquire();  // TODO debug making sure this lock stuff actually works
 
-                    final Map data = getZNode(nodePath);
-                    LOGGER.log(Level.INFO, "ZNode data: " + data);
+                LOGGER.log(Level.INFO, "ZNode data: {0}", node.getData());
 
-                    acceptedNodes.add(new NodePoolNode(node, lock));
+                acceptedNodes.add(node);
 
             }
         } catch (Exception e) {

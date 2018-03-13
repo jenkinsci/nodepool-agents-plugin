@@ -39,6 +39,17 @@ public class NodePoolSlave extends Slave {
 
     private static final Logger LOGGER = Logger.getLogger(NodePoolSlave.class.getName());
 
+    public NodePoolSlave(NodePoolNode node, String credentialsId) throws Descriptor.FormException, IOException {
+        this(
+                node.getName(),
+                node.getHost(),
+                node.getPort(),
+                node.getHostKey(),
+                node.getJenkinsLabel(),
+                credentialsId
+        );
+    }
+
     public NodePoolSlave(String name, String host, int port,
                          String hostKey, String credentialsId, String label) throws Descriptor.FormException, IOException {
 

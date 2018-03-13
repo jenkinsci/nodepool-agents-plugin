@@ -34,19 +34,15 @@ import java.util.Map;
 import java.util.logging.Logger;
 import org.apache.curator.framework.CuratorFramework;
 
-enum State{
-	requested, pending, fulfilled, failed
+enum State {
+    requested, pending, fulfilled, failed
 }
 
 /**
- * Represents a nodepool node request. Data format is JSON dump of following dict structure:
- * 	---
- * 	node_types:
- * 		- label1
- * 		- label2
- *	requestor: string id (eg hostname)
- * 	state: string requested|pending|fulfilled|failed
- * 	state_time: float seconds since epoch
+ * Represents a nodepool node request. Data format is JSON dump of following
+ * dict structure: --- node_types: - label1 - label2 requestor: string id (eg
+ * hostname) state: string requested|pending|fulfilled|failed state_time: float
+ * seconds since epoch
  *
  * @author hughsaunders
  */
@@ -58,6 +54,7 @@ public class NodeRequest extends HashMap {
 
     private String nodePoolID;
     private String nodePath;
+    private final CuratorFramework conn;
 
     public NodeRequest(CuratorFramework conn, String label, String jenkinsLabel) {
         this(conn, "jenkins", Arrays.asList(new String[]{label}), jenkinsLabel);
@@ -70,10 +67,10 @@ public class NodeRequest extends HashMap {
         put("state", State.requested);
         put("state_time", new Double(System.currentTimeMillis() / 1000));
         put("jenkins_label", jenkinsLabel);
+        this.conn = conn;
     }
 
     // public methods
-
     public String getNodePath() {
         return nodePath;
     }
@@ -91,53 +88,53 @@ public class NodeRequest extends HashMap {
     }
 
     public State getState() {
-        return (State)get("state");
+        return (State) get("state");
     }
 
     @Override
-    public String toString(){
+    public String toString() {
         String jsonStr = gson.toJson(this);
         return jsonStr;
     }
 
-    public byte[] getBytes(){
+    public byte[] getBytes() {
         return toString().getBytes(charset);
     }
 
     void updateFromMap(Map data) {
 
         // convert state time from string
-        final Double stateTime = (Double)data.get("state_time");
+        final Double stateTime = (Double) data.get("state_time");
         data.put("state_time", stateTime);
 
         // convert 'state' back into its corresponding enum value
-        final String stateString = (String)data.get("state");
+        final String stateString = (String) data.get("state");
         data.put("state", State.valueOf(stateString));
 
         putAll(data);
     }
 
-    public Map<String, String> getAllocatedNodes() {
+    public List<NodePoolNode> getAllocatedNodes() throws Exception {
         // Example fulfilled request
         // {"nodes": ["0000000000"], "node_types": ["debian"], "state": "fulfilled", "declined_by": [], "state_time": 1520849225.4513698, "reuse": false, "requestor": "NodePool:min-ready"}
-        if (get("state") != State.fulfilled){
+        if (get("state") != State.fulfilled) {
             throw new IllegalStateException("Attempt to get allocated nodes from a node request before it has been fulfilled");
         }
-        List<String> nodes = (List) get("nodes");
-        List<String> node_types = (List) get("node_types");
-        Map<String, String> nodesMap = new HashMap();
-        for (int i = 0; i < nodes.size(); i++) {
-            nodesMap.put(nodes.get(i), node_types.get(i));
+        List<NodePoolNode> nodeObjects = new ArrayList();
+        for (Object id : (List) get("nodes")) {
+            nodeObjects.add(new NodePoolNode(conn, (String) id));
         }
-        return nodesMap;
+
+        return nodeObjects;
+
     }
 
     String getNodePoolLabel() {
-        final List<String> labels = (List<String>)get("node_types");
+        final List<String> labels = (List<String>) get("node_types");
         return labels.get(0);
     }
 
     String getJenkinsLabel() {
-        return (String)get("jenkins_label");
+        return (String) get("jenkins_label");
     }
 }
