@@ -1,4 +1,4 @@
-package org.wherenow.jenkins_nodepool;
+package com.rackspace.jenkins_nodepool;
 
 /**
  * Representation of a node from NodePool (not necessarily a Jenkins slave)

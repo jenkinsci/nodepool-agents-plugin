@@ -21,13 +21,12 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package org.wherenow.jenkins_nodepool;
+package com.rackspace.jenkins_nodepool;
 
 import hudson.model.Descriptor;
 import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.plugins.sshslaves.verifiers.ManuallyProvidedKeyVerificationStrategy;
-import hudson.slaves.RetentionStrategy;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.logging.Logger;
@@ -64,7 +63,7 @@ public class NodePoolSlave extends Slave {
                         10, //retryWaitTime
                         new ManuallyProvidedKeyVerificationStrategy(hostKey)
                 ),
-                new RetentionStrategy.Demand(1, 1), //retention strategy TODO: use a more suitlable strategy
+                new SingleUseRetentionStrategy(), //retention strategy TODO: use a more suitlable strategy
                 new ArrayList() //nodeProperties
         );
     }

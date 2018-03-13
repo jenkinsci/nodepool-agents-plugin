@@ -1,5 +1,6 @@
-package org.wherenow.jenkins_nodepool;
+package com.rackspace.jenkins_nodepool;
 
+import com.rackspace.jenkins_nodepool.NodePoolCloud;
 import com.gargoylesoftware.htmlunit.html.HtmlForm;
 import com.gargoylesoftware.htmlunit.html.HtmlTextInput;
 import org.junit.Test;

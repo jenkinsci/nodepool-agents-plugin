@@ -21,8 +21,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package org.wherenow.jenkins_nodepool;
+package com.rackspace.jenkins_nodepool;
 
+import com.rackspace.jenkins_nodepool.ZooKeeperClient;
+import com.rackspace.jenkins_nodepool.NodeRequest;
 import com.google.gson.Gson;
 import java.net.URL;
 import java.util.HashMap;

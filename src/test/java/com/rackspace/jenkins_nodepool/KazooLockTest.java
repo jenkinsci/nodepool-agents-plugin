@@ -21,8 +21,11 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package org.wherenow.jenkins_nodepool;
+package com.rackspace.jenkins_nodepool;
 
+import com.rackspace.jenkins_nodepool.ZooKeeperClient;
+import com.rackspace.jenkins_nodepool.KazooLockException;
+import com.rackspace.jenkins_nodepool.KazooLock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;

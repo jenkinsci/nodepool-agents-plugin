@@ -21,8 +21,11 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package org.wherenow.jenkins_nodepool;
+package com.rackspace.jenkins_nodepool;
 
+import com.rackspace.jenkins_nodepool.ZooKeeperClient;
+import com.rackspace.jenkins_nodepool.NodePoolClient;
+import com.rackspace.jenkins_nodepool.NodeRequest;
 import org.apache.curator.framework.CuratorFramework;
 import org.junit.After;
 import org.junit.AfterClass;

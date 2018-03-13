@@ -21,20 +21,17 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package org.wherenow.jenkins_nodepool;
-
-import java.util.concurrent.LinkedBlockingQueue;
-import org.apache.curator.framework.api.CuratorWatcher;
-import org.apache.zookeeper.WatchedEvent;
+package com.rackspace.jenkins_nodepool;
 
 /**
  *
  * @author hughsaunders
  */
+public class KazooLockException extends Exception {
 
-public class ZkWatcher<T extends WatchedEvent> extends LinkedBlockingQueue<T> implements CuratorWatcher {
-    @Override
-    public void process(WatchedEvent we) {
-        add((T)we);
+    public KazooLockException(String message) {
+        super(message);
     }
+    
+    
 }
