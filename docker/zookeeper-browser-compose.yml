@@ -1,25 +1,6 @@
-version: '3'
+version: '2.1'
 
 services:
-
-#TODO: add nodepool webapp
-
-  zookeeper:
-    image: zookeeper
-    ports:
-      - 2181:2181
-
-  nodepool_launcher:
-    build: .
-    depends_on:
-      - zookeeper
-    volumes:
-      - "~/.config:/root/.config"
-    environment:
-      - NODEPOOL_CLOUD_NAME
-      - NODEPOOL_REGION_NAME
-      - NODEPOOL_KEYPAIR_NAME
-
   web:
     image: elkozmon/zoonavigator-web:latest
     container_name: zoonavigator-web
@@ -33,12 +14,9 @@ services:
     depends_on:
      - api
     restart: always
-
   api:
     image: elkozmon/zoonavigator-api:latest
     container_name: zoonavigator-api
     environment:
       SERVER_HTTP_PORT: 9000
     restart: always
-    links:
-      - zookeeper
