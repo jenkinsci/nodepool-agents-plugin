@@ -24,6 +24,8 @@
 package com.rackspace.jenkins_nodepool;
 
 import com.google.gson.Gson;
+import hudson.model.Label;
+import hudson.slaves.SlaveComputer;
 import java.nio.charset.Charset;
 import java.text.MessageFormat;
 import java.util.ArrayList;
@@ -34,8 +36,10 @@ import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import jenkins.model.Jenkins;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.KeeperException;
 
 /**
  * Notes on what needs to be implemented form the Jenkins side.. Cloud:
@@ -177,7 +181,7 @@ public class NodePoolClient {
             for (NodePoolNode node : nodes) {
                 LOGGER.log(Level.INFO, "Accepting node {0} on behalf of request {1}", new Object[]{node, request.getNodePoolID()});
 
-                node.getLock().acquire();  // TODO debug making sure this lock stuff actually works
+                node.setInUse(); // TODO: debug making sure this lock stuff actually works
 
                 LOGGER.log(Level.INFO, "ZNode data: {0}", node.getData());
 
@@ -191,7 +195,7 @@ public class NodePoolClient {
             // roll back acceptance on any nodes we managed to successfully accept
             for (NodePoolNode acceptedNode : acceptedNodes) {
                 try {
-                    acceptedNode.getLock().release();
+                    acceptedNode.release();
 
                 } catch (Exception lockException) {
                     LOGGER.log(Level.WARNING, "Failed to release lock on node " + acceptedNode.getName() + ": "
@@ -214,5 +218,105 @@ public class NodePoolClient {
             // not sure what else we can do at this point.
             LOGGER.log(Level.WARNING, "Failed to delete node at path: " + path + ": " + e.getMessage(), e);
         }
+    }
+
+    void provisionNode(Label assignedLabel) throws Exception {
+
+        // *** Request Node ***
+        //TODO: store prefix in config and pass in.
+        String npLabel = assignedLabel.getName().substring("nodepool-".length());
+        NodeRequest request = requestNode(npLabel, assignedLabel.getName());
+
+        // *** Poll request status and wait for fulfillment
+        //TODO: store timeout in config
+        Integer timeout = 1200 * 1000; //timeout in milliseconds
+        Long startTime = System.currentTimeMillis();
+        State requestState = State.requested;
+        List<NodePoolNode> allocatedNodes = null;
+        while (System.currentTimeMillis() < startTime + timeout) {
+
+            try {
+                request.updateFromZK();
+
+            } catch (KeeperException e) {
+                // connectivity issue with ZK - it should auto-reconnect and we can re-create the request then
+                LOGGER.log(Level.WARNING, e.getMessage(), e);
+            } catch (Exception e) {
+                // let other exceptions bubble through
+                throw new RuntimeException(e);
+            }
+
+            // node is updated now, check it's state:
+            requestState = request.getState();
+
+            LOGGER.log(Level.INFO, "Current state of request {0} is: {1}", new Object[]{request.getNodePoolID(), requestState});
+
+            if (requestState == State.failed) {
+                // TODO switch this logic to re-submit the NodeRequest?
+                LOGGER.log(Level.WARNING, "Request {0} failed.", request.getNodePoolID());
+                break;
+            }
+
+            boolean done = requestState == State.fulfilled;
+            if (done) {
+                try {
+                    // accept here so that if any error conditions occur, the above update logic will automatically re-submit
+                    // the node request:
+                    LOGGER.log(Level.INFO, "Nodes to accept:{0}", request.get("nodes"));
+                    allocatedNodes = acceptNodes(request);
+                    break;
+                } catch (Exception ex) {
+                    LOGGER.log(Level.SEVERE, null, ex);
+                }
+            }
+
+            Thread.sleep(5000);
+            //TODO: Configurable poll interval for instance ACTIVE
+        }
+        if (requestState != State.fulfilled || allocatedNodes == null) {
+            throw new Exception(MessageFormat.format("Failed to provision node for label {0}", assignedLabel.getName()));
+        }
+
+        // *** Get allocated nodes from the request and add to Jenkins
+        NodePoolNode node = allocatedNodes.get(0);
+        LOGGER.log(Level.INFO, "Receieved node from nodepool: {0}", node.getData());
+        NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId());
+        Jenkins jenkins = Jenkins.getInstance();
+        jenkins.checkPermission(SlaveComputer.CREATE);
+        jenkins.addNode(nps);
+        LOGGER.log(Level.INFO, "Added slave to Jenkins: {0}", nps);
+
+        // *** Create computer from node object and launch it
+        /*SlaveComputer c = (SlaveComputer) nps.createComputer();
+        Node n1 = c.getNode();
+        Node n2 = jenkins.getNode(nps.getNodeName());
+        Node n3 = jenkins.getNode(node.getName());
+        LOGGER.log(Level.INFO, "Number of Jenkins nodes: {0}", jenkins.getNodes().size());
+        jenkins.getNodes().forEach((n) -> {
+            LOGGER.log(Level.INFO, "Jenkins Node: {0}", n);
+        });
+        final Integer ssh_attempts = 3;
+        for (int cc = 0; cc < ssh_attempts; cc++) {
+            LOGGER.log(Level.INFO, "Node objected related to computer: {0}", c.getNode());
+            try {
+                LOGGER.log(Level.INFO, "Slave {0} connecting: {1}", new Object[]{nps, c.isConnecting()});
+                Future<?> connectFuture = c.connect(false);
+                connectFuture.get(); // wait for connection
+                //What does the above return?? (Declared as Object but always null)
+
+            } catch (ExecutionException ex) {
+                LOGGER.log(Level.INFO, "SSH Launch failed attempt {0}/{1}", new Object[]{cc + 1, ssh_attempts});
+            }
+            if (c.isOnline()) {
+                break;
+            }
+            Thread.sleep(5000);
+            //TODO: Configurable poll interval for instance SSH
+        }
+        if (c.isOnline()) {
+            LOGGER.log(Level.INFO, "Connected computer: {0}", c);
+
+        }
+        */
     }
 }

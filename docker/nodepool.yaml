@@ -14,7 +14,8 @@ providers:
 
     cloud-images:
       - name: debian-jessie-external
-        image-name: Ubuntu 16.04 LTS (Xenial Xerus) (PVHVM)
+        #image-name: Ubuntu 16.04 LTS (Xenial Xerus) (PVHVM)
+        image-name: nodepooljava
     pools:
       - name: main
         max-servers: 3

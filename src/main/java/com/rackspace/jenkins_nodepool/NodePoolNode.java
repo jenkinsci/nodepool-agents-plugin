@@ -48,6 +48,11 @@ public class NodePoolNode {
         updateFromMap(zkData);
     }
 
+    public void writeToZK() throws Exception {
+        //TODO: Implement this.
+        getConnection().setData().forPath(this.path, gson.toJson(data).getBytes(charset));
+    }
+
     public String getNPType() {
         return (String) data.get("type");
     }
@@ -68,7 +73,7 @@ public class NodePoolNode {
         return MessageFormat.format("{0}-{1}", getJenkinsLabel(), getId());
     }
 
-    public KazooLock getLock() {
+    private KazooLock getLock() {
         return lock;
     }
 
@@ -98,7 +103,19 @@ public class NodePoolNode {
         return getName();
     }
 
+    public void setInUse() throws Exception {
+        updateFromZK();
+        data.put("state", "in-use");
+        writeToZK();
+        lock.acquire();
+    }
+
     public void release() throws Exception {
+        // get up to date info, so we are less likely to lose data
+        // when writing back.
+        updateFromZK();
+        data.put("state", "used");
+        writeToZK();
         lock.release();
     }
 

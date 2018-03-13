@@ -23,10 +23,11 @@
  */
 package com.rackspace.jenkins_nodepool;
 
+import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
-import hudson.plugins.sshslaves.verifiers.ManuallyProvidedKeyVerificationStrategy;
+import hudson.plugins.sshslaves.verifiers.NonVerifyingKeyVerificationStrategy;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.logging.Logger;
@@ -38,20 +39,20 @@ import java.util.logging.Logger;
 public class NodePoolSlave extends Slave {
 
     private static final Logger LOGGER = Logger.getLogger(NodePoolSlave.class.getName());
-    private final NodePoolNode node;
+    private final NodePoolNode nodePoolNode;
 
-    public NodePoolSlave(NodePoolNode node, String credentialsId) throws Descriptor.FormException, IOException {
+    public NodePoolSlave(NodePoolNode nodePoolNode, String credentialsId) throws Descriptor.FormException, IOException {
 
         super(
-                node.getName(), // name
+                nodePoolNode.getName(), // name
                 "Nodepool Node", // description
                 "/var/lib/jenkins", // TODO this should be the path to the root of the workspace on the slave
-                "2", // num executors
+                "1", // num executors
                 Mode.EXCLUSIVE,
-                node.getJenkinsLabel(),
+                nodePoolNode.getJenkinsLabel(),
                 new SSHLauncher(
-                        node.getHost(),
-                        node.getPort(),
+                        nodePoolNode.getHost(),
+                        nodePoolNode.getPort(),
                         credentialsId,
                         "", //jvmoptions
                         null, // javapath
@@ -61,15 +62,25 @@ public class NodePoolSlave extends Slave {
                         300, //launchTimeoutSeconds
                         30, //maxNumRetries
                         10, //retryWaitTime
-                        new ManuallyProvidedKeyVerificationStrategy(node.getHostKey())
+                        //new ManuallyProvidedKeyVerificationStrategy(node.getHostKey())
+                        new NonVerifyingKeyVerificationStrategy()
+                //TODO: go back to verifying host key strategy
                 ),
-                new SingleUseRetentionStrategy(), //retention strategy TODO: use a more suitlable strategy
+                new SingleUseRetentionStrategy(),
+                //new RetentionStrategy.Always(),
                 new ArrayList() //nodeProperties
         );
-        this.node = node;
+        this.nodePoolNode = nodePoolNode;
     }
 
-    public NodePoolNode getNode() {
-        return node;
+    public NodePoolNode getNodePoolNode() {
+        return nodePoolNode;
     }
+
+    @Override
+    public Computer createComputer() {
+        NodePoolComputer npc = new NodePoolComputer(this, nodePoolNode);
+        return npc;
+    }
+
 }

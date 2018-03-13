@@ -24,6 +24,7 @@
 package com.rackspace.jenkins_nodepool;
 
 import java.nio.charset.Charset;
+import java.text.MessageFormat;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -38,11 +39,16 @@ import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException.NodeExistsException;
 import org.apache.zookeeper.WatchedEvent;
 
+
 /**
  * Partial Java implementation of the python module kazoo.recipe.lock
  * @author hughsaunders
  */
 public class KazooLock {
+
+    private enum State {
+        UNLOCKED, LOCKING, LOCKED
+    }
 
     private static final Logger LOG = Logger.getLogger(KazooLock.class.getName());
 
@@ -63,6 +69,7 @@ public class KazooLock {
     private String node;
     private Charset utf8;
     private Integer sequence;
+    private State state = State.UNLOCKED;
 
     public KazooLock(String connectionString, String path) {
         this(connectionString, path, "jenkins", 5, TimeUnit.SECONDS);
@@ -117,6 +124,7 @@ public class KazooLock {
     }
 
     public void acquire() throws Exception {
+        state = State.LOCKING;
         LOG.log(Level.INFO, "KazooLock.acquire");
         // 1. Ensure path to be locked exists
         try {
@@ -151,10 +159,21 @@ public class KazooLock {
                  */
             }
         }
+        LOG.log(Level.INFO, "Lock Acquired {0}", path);
+        state = State.LOCKED;
 
     }
-    public void release() throws Exception{
+    public void release() throws Exception {
+        LOG.log(Level.INFO, "Releasing Lock {0}", path);
+        if (state != State.LOCKED) {
+            throw new IllegalStateException(MessageFormat.format("Cannot unlock from state: {0}, Path: {1}", state, node));
+        }
+        if (node == null) {
+            throw new IllegalStateException(MessageFormat.format("Trying to unlock before lock has been locked. State:{0}, Path:{1}", state, node));
+        }
         getConnection().delete().forPath(node);
+        state = State.UNLOCKED;
+        LOG.log(Level.INFO, "Released Lock {0}", path);
     }
 
 }

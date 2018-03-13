@@ -24,43 +24,40 @@
 package com.rackspace.jenkins_nodepool;
 
 import hudson.Extension;
-import hudson.model.Build;
-import hudson.model.Node;
-import hudson.model.Run;
-import hudson.model.TaskListener;
-import hudson.model.listeners.RunListener;
+import hudson.model.Computer;
+import hudson.model.Label;
+import hudson.model.Queue;
+import hudson.model.queue.QueueListener;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import jenkins.model.GlobalConfiguration;
 
 @Extension
-public class NoodePoolRunListener extends RunListener<Build> {
+public class NodePoolQueueListener extends QueueListener {
 
-    private static final Logger LOG = Logger.getLogger(NoodePoolRunListener.class.getName());
-
-    public NoodePoolRunListener() {
-    }
-
+    private static final Logger LOG = Logger.getLogger(NodePoolQueueListener.class.getName());
 
     @Override
-    public void onCompleted(Build build, TaskListener listener) {
-        LOG.log(Level.INFO, "onCompleted:{0} {1}", new Object[]{build.toString(), listener.toString()});
-        Node node = build.getBuiltOn();
-        node.getAssignedLabels().stream().filter((label) -> (label.getName().startsWith("nodepool-"))).forEachOrdered((_item) -> {
+    public void onEnterWaiting(Queue.WaitingItem wi) {
+        final Label label = wi.getAssignedLabel();
+        LOG.log(Level.INFO, "NodePoolQueueListener received queue notification for label {0}.", new Object[]{label});
+
+        if (label == null || !label.getName().startsWith("nodepool-")) {
+            // skip events for builds that aren't nodepool related
+            return;
+        }
+        Computer.threadPoolForRemoting.submit(() -> {
             try {
-                if (!(node instanceof NodePoolSlave)) {
-                    return;
-                }
-                // this is  a nodepool node, kill it.
-                NodePoolSlave nps = (NodePoolSlave) node;
-                NodePoolNode npn = nps.getNode();
-                node.toComputer().doDoDelete();
-                npn.release();
+                NodePoolGlobalConfiguration config = GlobalConfiguration.all().get(NodePoolGlobalConfiguration.class);
+                String cs = config.getConnectionString();
+                String cid = config.getCredentialsId();
+                LOG.log(Level.INFO, "QueueLauncher thread starting , Label: {0}, Connection String: {1}, Creds ID: {2}", new Object[]{label, cs, cid});
+                NodePoolClient npc = new NodePoolClient(cs, cid);
+                npc.provisionNode(label);
+                LOG.log(Level.INFO, "QueueLauncher thread done, Label: {0}, Connection String: {1}, Creds ID: {2}", new Object[]{label, cs, cid});
             } catch (Exception ex) {
                 LOG.log(Level.SEVERE, null, ex);
             }
         });
-        Run r;
-        r.
-
     }
 }

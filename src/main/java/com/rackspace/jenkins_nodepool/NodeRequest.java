@@ -32,6 +32,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
+import org.apache.curator.framework.CuratorFramework;
 
 enum State {
     requested, pending, fulfilled, failed
@@ -113,6 +114,14 @@ public class NodeRequest extends HashMap {
         putAll(data);
     }
 
+    //TODO: refactor this into a superclass as its shared with NodePoolNode
+    public void updateFromZK() throws Exception {
+        byte[] bytes = getConnection().getData().forPath(this.nodePath);
+        String jsonString = new String(bytes, charset);
+        final Map zkData = gson.fromJson(jsonString, HashMap.class);
+        updateFromMap(zkData);
+    }
+
     public List<NodePoolNode> getAllocatedNodes() throws Exception {
         // Example fulfilled request
         // {"nodes": ["0000000000"], "node_types": ["debian"], "state": "fulfilled", "declined_by": [], "state_time": 1520849225.4513698, "reuse": false, "requestor": "NodePool:min-ready"}
@@ -126,6 +135,10 @@ public class NodeRequest extends HashMap {
 
         return nodeObjects;
 
+    }
+
+    CuratorFramework getConnection() {
+        return ZooKeeperClient.getConnection(connectionString);
     }
 
     String getNodePoolLabel() {
