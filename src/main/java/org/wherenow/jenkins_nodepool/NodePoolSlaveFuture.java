@@ -42,14 +42,14 @@ import java.util.logging.Logger;
  *
  * @author hughsaunders
  */
-public class NodePoolNodeFuture implements Future<Node> {
+public class NodePoolSlaveFuture implements Future<Node> {
 
-    private static final Logger LOGGER = Logger.getLogger(NodePoolNodeFuture.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(NodePoolSlaveFuture.class.getName());
 
     private NodePoolClient client;
     NodeRequest request;
 
-    public NodePoolNodeFuture(NodePoolClient client, NodeRequest request) throws IOException, Descriptor.FormException {
+    public NodePoolSlaveFuture(NodePoolClient client, NodeRequest request) throws IOException, Descriptor.FormException {
         this.client = client;
         this.request = request;
     }
@@ -96,7 +96,14 @@ public class NodePoolNodeFuture implements Future<Node> {
             LOGGER.log(Level.INFO, "Current state is now: " + requestState);
         }
 
-        return requestState == State.fulfilled;
+        boolean done = requestState == State.fulfilled;
+        if (done) {
+            // accept here so that if any error conditions occur, the above update logic will automatically re-submit
+            // the node request:
+            LOGGER.log(Level.INFO, "Nodes to accept:" + request.get("nodes"));
+            done = client.acceptNodes(request) != null;
+        }
+        return done;
     }
 
     private void updateNodeRequestFromZK() throws Exception {
@@ -145,9 +152,6 @@ public class NodePoolNodeFuture implements Future<Node> {
      */
     private Node getNode() throws ExecutionException {
         try {
-            LOGGER.log(Level.INFO, "Nodes to accept:" + request.get("nodes"));
-            final List<String> nodes = client.acceptNodes(request);
-            LOGGER.log(Level.INFO, "Accepted nodes: " + nodes);
 
             // ok we know the identity of the nodes to use
             // TODO do whatever stuff neeeds to happen to actually provision a Node now.
@@ -169,9 +173,9 @@ public class NodePoolNodeFuture implements Future<Node> {
 
                 String jenkinsLabel = (String) request.get("jenkins_label");
                 // TODO: Delete node request
-                LOGGER.log(Level.INFO, MessageFormat.format("Creating NodePoolNode: Host:{0}, Port:{1}, Host Key:{2}, Creds Id:{3}, Jenkins Label: {4}", host, port, hostKey, credentialsId, jenkinsLabel));
+                LOGGER.log(Level.INFO, MessageFormat.format("Creating NodePoolSlave: Host:{0}, Port:{1}, Host Key:{2}, Creds Id:{3}, Jenkins Label: {4}", host, port, hostKey, credentialsId, jenkinsLabel));
 
-                return new NodePoolNode(MessageFormat.format("{0}-{1}", type, jenkinsLabel, request.getNodePoolID()), host, port,
+                return new NodePoolSlave(MessageFormat.format("{0}-{1}", type, jenkinsLabel, request.getNodePoolID()), host, port,
                         hostKey, credentialsId, jenkinsLabel);
             }
 
