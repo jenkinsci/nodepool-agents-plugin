@@ -125,7 +125,7 @@ public class KazooLock {
 
     public void acquire() throws Exception {
         state = State.LOCKING;
-        LOG.log(Level.INFO, "KazooLock.acquire");
+        LOG.log(Level.FINEST, "KazooLock.acquire");
         // 1. Ensure path to be locked exists
         try {
             getConnection().create()
@@ -138,13 +138,13 @@ public class KazooLock {
         // 2. Create create path and determine our sequence
         node = getConnection().create()                   .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
                 .forPath(create_path, identifier.getBytes(utf8));
-        LOG.log(Level.INFO, "Lock contender created:" + node);
+        LOG.log(Level.FINEST, "Lock contender created:" + node);
         sequence = sequenceNumberForPath(node);
 
         // 3. Wait for any child nodes with lower seq numbers
         List<String> contenders = getConnection().getChildren().forPath(path);
         for (String contender : contenders){
-            LOG.log(Level.INFO, "Found contender for lock:{0}", contender);
+            LOG.log(Level.FINEST, "Found contender for lock:{0}", contender);
             Integer contenderSequence = sequenceNumberForPath(contender);
             if (contenderSequence < sequence){
                 // This contender is ahead of us in the queue,
@@ -164,7 +164,7 @@ public class KazooLock {
 
     }
     public void release() throws Exception {
-        LOG.log(Level.INFO, "Releasing Lock {0}", path);
+        LOG.log(Level.FINEST, "Releasing Lock {0}", path);
         if (state != State.LOCKED) {
             throw new IllegalStateException(MessageFormat.format("Cannot unlock from state: {0}, Path: {1}", state, node));
         }

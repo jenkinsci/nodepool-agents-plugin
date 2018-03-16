@@ -76,13 +76,10 @@ public class NodePoolGlobalConfiguration extends GlobalConfiguration {
         save();
     }
 
-    /*
-        java.lang.IllegalStateException: class
-        org.wherenow.jenkins_nodepool.NodePoolCloud$DescriptorImpl
-        doesn't have the doFillCredentialsIdItems method for filling a drop-down list
-
-        Shamelessly stolen from https://github.com/jenkinsci/ssh-slaves-plugin/blob/master/src/main/java/hudson/plugins/sshslaves/SSHConnector.java#L314
-
+    /**
+     * Shamelessly stolen from
+     * https://github.com/jenkinsci/ssh-slaves-plugin/blob/master/src/main/java/hudson/plugins/sshslaves/SSHConnector.java#L314
+     *
      */
     public ListBoxModel doFillCredentialsIdItems(@AncestorInPath ItemGroup context, @QueryParameter String credentialsId) {
         AccessControlled _context = (context instanceof AccessControlled ? (AccessControlled) context : Jenkins.getInstance());
@@ -103,7 +100,7 @@ public class NodePoolGlobalConfiguration extends GlobalConfiguration {
 
     @Override
     public String getDisplayName() {
-        return "Nodepool Queue Listener";
+        return "NodePool Global Configuration";
     }
 
 }

@@ -65,14 +65,14 @@ public class NodePoolClient {
 
     // these roots are relative to /nodepool which is the namespace
     // set on the curator framework connection
-    private String requestRoot = "requests";
-    private String requestLockRoot = "requests-lock";
-    private String nodeRoot = "nodes";
+    private final String requestRoot = "requests";
+    private final String requestLockRoot = "requests-lock";
+    private final String nodeRoot = "nodes";
     private Integer priority;
     private String credentialsId;
 
-    private static final Gson gson = new Gson();
-    private static final Charset charset = Charset.forName("UTF-8");
+    private static final Gson GSON = new Gson();
+    private static final Charset CHARSET = Charset.forName("UTF-8");
 
     public NodePoolClient(String connectionString, String credentialsId) {
         this(connectionString, 100, credentialsId);
@@ -80,7 +80,6 @@ public class NodePoolClient {
 
     public NodePoolClient(String connectionString, Integer priority, String credentialsId) {
         this.connectionString = connectionString;
-        this.requestRoot = requestRoot;
         this.priority = priority;
         this.credentialsId = credentialsId;
     }
@@ -128,18 +127,18 @@ public class NodePoolClient {
     public NodeRequest requestNode(String nPLabel, String jenkinsLabel) throws Exception {
         final NodeRequest request = new NodeRequest(connectionString, nPLabel, jenkinsLabel);
         final String createPath = MessageFormat.format("/{0}/{1}-", this.requestRoot, priority.toString());
-        LOGGER.info(MessageFormat.format("Creating request node: {0}", createPath));
+        LOGGER.finest(MessageFormat.format("Creating request node: {0}", createPath));
         String requestPath = getConnection().create()
                 .creatingParentsIfNeeded()
                 .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
                 .forPath(createPath, request.toString().getBytes());
 
-        LOGGER.log(Level.INFO, "Requested created at path: {0}", requestPath);
+        LOGGER.log(Level.FINEST, "Requeste created at path: {0}", requestPath);
 
         // get NodePool request id
-        final String id = NodePoolClient.idForPath(requestPath);
-        request.setNodePoolID(id);
-        request.setNodePath(requestPath);
+        final String id = idForPath(requestPath);
+        request.setZKID(id);
+        request.setPath(requestPath);
 
         return request;
 
@@ -154,8 +153,8 @@ public class NodePoolClient {
      */
     public Map getZNode(String path) throws Exception {
         byte[] jsonBytes = getConnection().getData().forPath(path);
-        String jsonString = new String(jsonBytes, charset);
-        final Map data = gson.fromJson(jsonString, HashMap.class);
+        String jsonString = new String(jsonBytes, CHARSET);
+        final Map data = GSON.fromJson(jsonString, HashMap.class);
         return data;
     }
 
@@ -179,11 +178,9 @@ public class NodePoolClient {
 
         try {
             for (NodePoolNode node : nodes) {
-                LOGGER.log(Level.INFO, "Accepting node {0} on behalf of request {1}", new Object[]{node, request.getNodePoolID()});
+                LOGGER.log(Level.FINE, "Accepting node {0} on behalf of request {1}", new Object[]{node, request.getZKID()});
 
                 node.setInUse(); // TODO: debug making sure this lock stuff actually works
-
-                LOGGER.log(Level.INFO, "ZNode data: {0}", node.getData());
 
                 acceptedNodes.add(node);
 
@@ -205,7 +202,7 @@ public class NodePoolClient {
 
         } finally {
             // regardless of success locking node, delete the request.
-            deleteNode(request.getNodePath());
+            deleteNode(request.getPath());
         }
 
         return acceptedNodes;
@@ -231,7 +228,7 @@ public class NodePoolClient {
         //TODO: store timeout in config
         Integer timeout = 1200 * 1000; //timeout in milliseconds
         Long startTime = System.currentTimeMillis();
-        State requestState = State.requested;
+        RequestState requestState = RequestState.requested;
         List<NodePoolNode> allocatedNodes = null;
         while (System.currentTimeMillis() < startTime + timeout) {
 
@@ -249,20 +246,19 @@ public class NodePoolClient {
             // node is updated now, check it's state:
             requestState = request.getState();
 
-            LOGGER.log(Level.INFO, "Current state of request {0} is: {1}", new Object[]{request.getNodePoolID(), requestState});
+            LOGGER.log(Level.FINEST, "Current state of request {0} is: {1}", new Object[]{request.getZKID(), requestState});
 
-            if (requestState == State.failed) {
+            if (requestState == RequestState.failed) {
                 // TODO switch this logic to re-submit the NodeRequest?
-                LOGGER.log(Level.WARNING, "Request {0} failed.", request.getNodePoolID());
+                LOGGER.log(Level.WARNING, "Request {0} failed.", request.getZKID());
                 break;
             }
 
-            boolean done = requestState == State.fulfilled;
+            boolean done = requestState == RequestState.fulfilled;
             if (done) {
                 try {
                     // accept here so that if any error conditions occur, the above update logic will automatically re-submit
                     // the node request:
-                    LOGGER.log(Level.INFO, "Nodes to accept:{0}", request.get("nodes"));
                     allocatedNodes = acceptNodes(request);
                     break;
                 } catch (Exception ex) {
@@ -273,50 +269,16 @@ public class NodePoolClient {
             Thread.sleep(5000);
             //TODO: Configurable poll interval for instance ACTIVE
         }
-        if (requestState != State.fulfilled || allocatedNodes == null) {
+        if (requestState != RequestState.fulfilled || allocatedNodes == null) {
             throw new Exception(MessageFormat.format("Failed to provision node for label {0}", assignedLabel.getName()));
         }
 
         // *** Get allocated nodes from the request and add to Jenkins
         NodePoolNode node = allocatedNodes.get(0);
-        LOGGER.log(Level.INFO, "Receieved node from nodepool: {0}", node.getData());
         NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId());
         Jenkins jenkins = Jenkins.getInstance();
         jenkins.checkPermission(SlaveComputer.CREATE);
         jenkins.addNode(nps);
         LOGGER.log(Level.INFO, "Added slave to Jenkins: {0}", nps);
-
-        // *** Create computer from node object and launch it
-        /*SlaveComputer c = (SlaveComputer) nps.createComputer();
-        Node n1 = c.getNode();
-        Node n2 = jenkins.getNode(nps.getNodeName());
-        Node n3 = jenkins.getNode(node.getName());
-        LOGGER.log(Level.INFO, "Number of Jenkins nodes: {0}", jenkins.getNodes().size());
-        jenkins.getNodes().forEach((n) -> {
-            LOGGER.log(Level.INFO, "Jenkins Node: {0}", n);
-        });
-        final Integer ssh_attempts = 3;
-        for (int cc = 0; cc < ssh_attempts; cc++) {
-            LOGGER.log(Level.INFO, "Node objected related to computer: {0}", c.getNode());
-            try {
-                LOGGER.log(Level.INFO, "Slave {0} connecting: {1}", new Object[]{nps, c.isConnecting()});
-                Future<?> connectFuture = c.connect(false);
-                connectFuture.get(); // wait for connection
-                //What does the above return?? (Declared as Object but always null)
-
-            } catch (ExecutionException ex) {
-                LOGGER.log(Level.INFO, "SSH Launch failed attempt {0}/{1}", new Object[]{cc + 1, ssh_attempts});
-            }
-            if (c.isOnline()) {
-                break;
-            }
-            Thread.sleep(5000);
-            //TODO: Configurable poll interval for instance SSH
-        }
-        if (c.isOnline()) {
-            LOGGER.log(Level.INFO, "Connected computer: {0}", c);
-
-        }
-        */
     }
 }

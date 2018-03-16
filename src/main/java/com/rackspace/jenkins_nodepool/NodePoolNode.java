@@ -1,56 +1,22 @@
 package com.rackspace.jenkins_nodepool;
 
-import com.google.gson.Gson;
-import java.nio.charset.Charset;
 import java.text.MessageFormat;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import org.apache.curator.framework.CuratorFramework;
+
 
 /**
  * Representation of a node from NodePool (not necessarily a Jenkins slave)
  */
-public class NodePoolNode {
+public class NodePoolNode extends ZooKeeperObject {
 
     private final KazooLock lock;
 
-    private final Map data;
-    private final String connectionString;
-    private final String path;
-    private static final Gson gson = new Gson();
-    private static final Charset charset = Charset.forName("UTF-8");
-    private final String id;
-
-
     public NodePoolNode(String connectionString, String id) throws Exception {
-        data = new HashMap();
-        this.connectionString = connectionString;
-        this.path = MessageFormat.format("/nodes/{0}", id);
-        this.id = id;
+        super(connectionString);
+        super.setPath(MessageFormat.format("/nodes/{0}", id));
+        super.setZKID(id);
+        super.updateFromZK();
         this.lock = new KazooLock(connectionString, getLockPath());
-        this.updateFromZK();
-    }
-
-    public void updateFromMap(Map data) {
-        this.data.putAll(data);
-    }
-
-    CuratorFramework getConnection() {
-        return ZooKeeperClient.getConnection(connectionString);
-    }
-
-
-    public void updateFromZK() throws Exception {
-        byte[] bytes = getConnection().getData().forPath(this.path);
-        String jsonString = new String(bytes, charset);
-        final Map zkData = gson.fromJson(jsonString, HashMap.class);
-        updateFromMap(zkData);
-    }
-
-    public void writeToZK() throws Exception {
-        //TODO: Implement this.
-        getConnection().setData().forPath(this.path, gson.toJson(data).getBytes(charset));
     }
 
     public String getNPType() {
@@ -58,23 +24,15 @@ public class NodePoolNode {
     }
 
     final String getLockPath() {
-        return MessageFormat.format("/nodes/{0}/lock", id);
+        return MessageFormat.format("/nodes/{0}/lock", zKID);
     }
 
     public String getJenkinsLabel() {
         return MessageFormat.format("nodepool-{0}", getNPType());
     }
 
-    public String getId() {
-        return id;
-    }
-
     public String getName() {
-        return MessageFormat.format("{0}-{1}", getJenkinsLabel(), getId());
-    }
-
-    private KazooLock getLock() {
-        return lock;
+        return MessageFormat.format("{0}-{1}", getJenkinsLabel(), getZKID());
     }
 
     public String getHost() {
@@ -94,28 +52,26 @@ public class NodePoolNode {
         return (List) data.get("host_keys");
     }
 
-    public Map getData() {
-        return data;
-    }
-
     @Override
     public String toString() {
         return getName();
     }
 
-    public void setInUse() throws Exception {
+    private void setState(String state) throws Exception {
+        // get up to date info, so we are less likely to lose data
+        // when writing back.
         updateFromZK();
-        data.put("state", "in-use");
+        data.put("state", state);
         writeToZK();
+    }
+
+    public void setInUse() throws Exception {
+        setState("in-use");
         lock.acquire();
     }
 
     public void release() throws Exception {
-        // get up to date info, so we are less likely to lose data
-        // when writing back.
-        updateFromZK();
-        data.put("state", "used");
-        writeToZK();
+        setState("used");
         lock.release();
     }
 

@@ -40,7 +40,7 @@ public class NodePoolQueueListener extends QueueListener {
     @Override
     public void onEnterWaiting(Queue.WaitingItem wi) {
         final Label label = wi.getAssignedLabel();
-        LOG.log(Level.INFO, "NodePoolQueueListener received queue notification for label {0}.", new Object[]{label});
+        LOG.log(Level.FINE, "NodePoolQueueListener received queue notification for label {0}.", new Object[]{label});
 
         if (label == null || !label.getName().startsWith("nodepool-")) {
             // skip events for builds that aren't nodepool related
@@ -51,10 +51,10 @@ public class NodePoolQueueListener extends QueueListener {
                 NodePoolGlobalConfiguration config = GlobalConfiguration.all().get(NodePoolGlobalConfiguration.class);
                 String cs = config.getConnectionString();
                 String cid = config.getCredentialsId();
-                LOG.log(Level.INFO, "QueueLauncher thread starting , Label: {0}, Connection String: {1}, Creds ID: {2}", new Object[]{label, cs, cid});
+                LOG.log(Level.FINEST, "QueueLauncher thread starting , Label: {0}, Connection String: {1}, Creds ID: {2}", new Object[]{label, cs, cid});
                 NodePoolClient npc = new NodePoolClient(cs, cid);
                 npc.provisionNode(label);
-                LOG.log(Level.INFO, "QueueLauncher thread done, Label: {0}, Connection String: {1}, Creds ID: {2}", new Object[]{label, cs, cid});
+                LOG.log(Level.FINEST, "QueueLauncher thread done, Label: {0}, Connection String: {1}, Creds ID: {2}", new Object[]{label, cs, cid});
             } catch (Exception ex) {
                 LOG.log(Level.SEVERE, null, ex);
             }

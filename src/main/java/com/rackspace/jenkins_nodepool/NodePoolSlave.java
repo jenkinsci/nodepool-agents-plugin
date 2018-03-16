@@ -30,7 +30,6 @@ import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.plugins.sshslaves.verifiers.NonVerifyingKeyVerificationStrategy;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.logging.Logger;
 
 /**
  *
@@ -38,7 +37,6 @@ import java.util.logging.Logger;
  */
 public class NodePoolSlave extends Slave {
 
-    private static final Logger LOGGER = Logger.getLogger(NodePoolSlave.class.getName());
     private final NodePoolNode nodePoolNode;
 
     public NodePoolSlave(NodePoolNode nodePoolNode, String credentialsId) throws Descriptor.FormException, IOException {

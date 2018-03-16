@@ -37,7 +37,7 @@ import javax.servlet.ServletException;
  * SingleUseRetentionStrategy This strategy will delete a NodePoolComputer as
  * soon as its single executor has completed a task.
  *
- * Extends always to ensure nodes are launched succesfully, then uses
+ * Extends always to ensure nodes are launched successfully, then uses
  * ExecutorListener to kill off each node as soon as it finishes a task.
  *
  * @author Rackspace
@@ -49,7 +49,7 @@ public class SingleUseRetentionStrategy extends RetentionStrategy.Always impleme
     @Override
     public void taskAccepted(Executor executor, Queue.Task task) {
         NodePoolComputer c = (NodePoolComputer) executor.getOwner();
-        LOG.log(Level.INFO, "Starting task {0} on NodePoolComputer {1}", new Object[]{task.getFullDisplayName(), c});
+        LOG.log(Level.FINE, "Starting task {0} on NodePoolComputer {1}", new Object[]{task.getFullDisplayName(), c});
     }
 
     @Override
@@ -72,7 +72,7 @@ public class SingleUseRetentionStrategy extends RetentionStrategy.Always impleme
             // talk to nodepool to release the node.
             final NodePoolComputer c = (NodePoolComputer) executor.getOwner();
             c.doToggleOffline("Disconnecting");
-            LOG.log(Level.INFO, "Deleting NodePoolNode {0} after task {1}", new Object[]{c, task.getFullDisplayName()});
+            LOG.log(Level.FINE, "Deleting NodePoolNode {0} after task {1}", new Object[]{c, task.getFullDisplayName()});
             Computer.threadPoolForRemoting.submit(() -> {
                 try {
                     c.doDoDelete();
