@@ -32,6 +32,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.model.GlobalConfiguration;
 
+//TODO: Scan build queue on startup for pipelines that persist across restarts as the
+// queue entry event won't refire.
+
 @Extension
 public class NodePoolQueueListener extends QueueListener {
 
@@ -42,13 +45,20 @@ public class NodePoolQueueListener extends QueueListener {
         final Label label = wi.getAssignedLabel();
         LOG.log(Level.FINE, "NodePoolQueueListener received queue notification for label {0}.", new Object[]{label});
 
+        final NodePoolGlobalConfiguration config = GlobalConfiguration.all().get(NodePoolGlobalConfiguration.class);
+        if (!config.isConfigured()) {
+            // can't do anything if we aren't configured.
+            LOG.log(Level.INFO, "NodePool plugin unconfigured, ignoring events.", new Object[]{label});
+            return;
+        }
+
         if (label == null || !label.getName().startsWith("nodepool-")) {
             // skip events for builds that aren't nodepool related
             return;
         }
         Computer.threadPoolForRemoting.submit(() -> {
             try {
-                NodePoolGlobalConfiguration config = GlobalConfiguration.all().get(NodePoolGlobalConfiguration.class);
+
                 String cs = config.getConnectionString();
                 String cid = config.getCredentialsId();
                 LOG.log(Level.FINEST, "QueueLauncher thread starting , Label: {0}, Connection String: {1}, Creds ID: {2}", new Object[]{label, cs, cid});

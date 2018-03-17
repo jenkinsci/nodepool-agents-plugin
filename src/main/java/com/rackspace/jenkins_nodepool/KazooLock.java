@@ -23,7 +23,6 @@
  */
 package com.rackspace.jenkins_nodepool;
 
-import java.nio.charset.Charset;
 import java.text.MessageFormat;
 import java.util.List;
 import java.util.UUID;
@@ -67,24 +66,24 @@ public class KazooLock {
     private final String create_path;
     //this is set to create_path+index number, when the node is created
     private String node;
-    private Charset utf8;
     private Integer sequence;
     private State state = State.UNLOCKED;
+    private NodePoolGlobalConfiguration config;
 
     public KazooLock(String connectionString, String path) {
-        this(connectionString, path, "jenkins", 5, TimeUnit.SECONDS);
+        this(connectionString, path, 5, TimeUnit.SECONDS);
     }
 
     public KazooLock(String connectionString,
-            String path, String identifier, long timeout, TimeUnit unit){
+            String path, long timeout, TimeUnit unit) {
+        this.config = NodePoolGlobalConfiguration.getInstance();
         this.connectionString = connectionString;
         this.path = path;
-        this.identifier = identifier;
+        this.identifier = config.getRequestor();
         this.timeout = timeout;
         this.unit = unit;
         this.prefix = UUID.randomUUID().toString() + node_name; //type 4
         this.create_path = this.path + "/" + this.prefix;
-        this.utf8 = Charset.forName("UTF-8");
     }
 
     private class KazooLockWatcher<T extends WatchedEvent>
@@ -130,14 +129,14 @@ public class KazooLock {
         try {
             getConnection().create()
                     .creatingParentsIfNeeded()
-                .forPath(path, identifier.getBytes(utf8));
+                    .forPath(path, identifier.getBytes(NodePoolGlobalConfiguration.CHARSET));
         } catch (NodeExistsException ex) {
             // node already exists, nothing to do.
         }
 
         // 2. Create create path and determine our sequence
         node = getConnection().create()                   .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
-                .forPath(create_path, identifier.getBytes(utf8));
+                .forPath(create_path, identifier.getBytes(NodePoolGlobalConfiguration.CHARSET));
         LOG.log(Level.FINEST, "Lock contender created:" + node);
         sequence = sequenceNumberForPath(node);
 
@@ -159,7 +158,7 @@ public class KazooLock {
                  */
             }
         }
-        LOG.log(Level.INFO, "Lock Acquired {0}", path);
+        LOG.log(Level.FINE, "Lock Acquired {0}", path);
         state = State.LOCKED;
 
     }
@@ -173,7 +172,7 @@ public class KazooLock {
         }
         getConnection().delete().forPath(node);
         state = State.UNLOCKED;
-        LOG.log(Level.INFO, "Released Lock {0}", path);
+        LOG.log(Level.FINE, "Released Lock {0}", path);
     }
 
 }

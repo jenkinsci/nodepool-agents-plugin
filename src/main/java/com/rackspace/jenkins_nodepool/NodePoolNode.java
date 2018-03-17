@@ -10,10 +10,15 @@ import java.util.List;
 public class NodePoolNode extends ZooKeeperObject {
 
     private final KazooLock lock;
+    private final String nodeRoot;
+    private final NodePoolGlobalConfiguration config;
 
     public NodePoolNode(String connectionString, String id) throws Exception {
         super(connectionString);
-        super.setPath(MessageFormat.format("/nodes/{0}", id));
+        this.config = NodePoolGlobalConfiguration.getInstance();
+        this.nodeRoot = config.getNodeRoot();
+        super.setPath(MessageFormat.format("/{0}/{1}",
+                new Object[]{nodeRoot, id}));
         super.setZKID(id);
         super.updateFromZK();
         this.lock = new KazooLock(connectionString, getLockPath());
@@ -24,11 +29,13 @@ public class NodePoolNode extends ZooKeeperObject {
     }
 
     final String getLockPath() {
-        return MessageFormat.format("/nodes/{0}/lock", zKID);
+        return MessageFormat.format("/{0}/{1}/lock",
+                new Object[]{nodeRoot, zKID});
     }
 
     public String getJenkinsLabel() {
-        return MessageFormat.format("nodepool-{0}", getNPType());
+        return MessageFormat.format("{0}{1}",
+                new Object[]{config.getLabelPrefix(), getNPType()});
     }
 
     public String getName() {

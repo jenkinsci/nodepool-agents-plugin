@@ -24,9 +24,9 @@
 package com.rackspace.jenkins_nodepool;
 
 import com.google.gson.Gson;
-import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.apache.curator.framework.CuratorFramework;
 
@@ -36,18 +36,19 @@ import org.apache.curator.framework.CuratorFramework;
  * @author Rackspace
  */
 public abstract class ZooKeeperObject {
-    private static final Logger LOGGER = Logger.getLogger(ZooKeeperObject.class.getName());
+    private static final Logger LOG = Logger.getLogger(ZooKeeperObject.class.getName());
     static final Gson GSON = new Gson();
-    static final Charset CHARSET = Charset.forName("UTF-8");
 
     final Map data;
     final String connectionString;
     String path;
     String zKID;
+    NodePoolGlobalConfiguration config;
 
     public ZooKeeperObject(String connectionString) {
         data = new HashMap();
         this.connectionString = connectionString;
+        config = NodePoolGlobalConfiguration.getInstance();
     }
 
     public String getPath() {
@@ -76,13 +77,18 @@ public abstract class ZooKeeperObject {
 
     public final void updateFromZK() throws Exception {
         byte[] bytes = getConnection().getData().forPath(this.path);
-        String jsonString = new String(bytes, CHARSET);
+        String jsonString = new String(bytes, NodePoolGlobalConfiguration.CHARSET);
+        LOG.log(Level.FINEST, "Read ZNODE: {0}, Data: {1}", new Object[]{path, jsonString});
         final Map zkData = GSON.fromJson(jsonString, HashMap.class);
         updateFromMap(zkData);
     }
 
+    public String getJson() {
+        return GSON.toJson(data);
+    }
+
     public void writeToZK() throws Exception {
-        getConnection().setData().forPath(this.path, GSON.toJson(data).getBytes(CHARSET));
+        getConnection().setData().forPath(this.path, getJson().getBytes(NodePoolGlobalConfiguration.CHARSET));
     }
 
 }

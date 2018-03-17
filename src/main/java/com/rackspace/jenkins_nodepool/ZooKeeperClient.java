@@ -37,7 +37,6 @@ import org.apache.curator.retry.ExponentialBackoffRetry;
  * @author hughsaunders
  */
 public class ZooKeeperClient {
-
     private CuratorFramework conn;
     private String requestRoot;
     private String nodeRoot;
@@ -70,7 +69,7 @@ public class ZooKeeperClient {
 
     public ZooKeeperClient(String connectionString) {
         this(connectionString,
-                "nodepool",
+                NodePoolGlobalConfiguration.getInstance().getZooKeeperRoot(),
                 new ExponentialBackoffRetry(1000, 3));
     }
 

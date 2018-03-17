@@ -23,12 +23,16 @@
  */
 package com.rackspace.jenkins_nodepool;
 
+import static com.rackspace.jenkins_nodepool.NodePoolClient.idForPath;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.apache.zookeeper.CreateMode;
 
 /**
  * Represents a nodepool node request. Data format is JSON dump of following
@@ -44,18 +48,36 @@ public class NodeRequest extends ZooKeeperObject {
     // what creates them and what should clean them up?
     private static final Logger LOGGER = Logger.getLogger(NodeRequest.class.getName());
 
-    public NodeRequest(String connectionString, String label, String jenkinsLabel) {
-        this(connectionString, "jenkins", Arrays.asList(new String[]{label}), jenkinsLabel);
+    public NodeRequest(String connectionString, String label, String jenkinsLabel) throws Exception {
+        this(connectionString, Arrays.asList(new String[]{label}), jenkinsLabel);
     }
 
     @SuppressFBWarnings
-    public NodeRequest(String connectionString, String requestor, List<String> labels, String jenkinsLabel) {
+    public NodeRequest(String connectionString, List<String> labels, String jenkinsLabel) throws Exception {
         super(connectionString);
         data.put("node_types", new ArrayList(labels));
-        data.put("requestor", requestor);
+        data.put("requestor", config.getRequestor());
         data.put("state", RequestState.requested);
         data.put("state_time", new Double(System.currentTimeMillis() / 1000));
         data.put("jenkins_label", jenkinsLabel);
+        // sets path and zkid
+        createZNode();
+    }
+
+    private void createZNode() throws Exception {
+        final String createPath = MessageFormat.format("/{0}/{1}-",
+                config.getRequestRoot(), config.getPriority());
+        LOGGER.finest(MessageFormat.format("Creating request node: {0}",
+                createPath));
+        String requestPath = getConnection().create()
+                .creatingParentsIfNeeded()
+                .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
+                .forPath(createPath, getJson().getBytes());
+
+        LOGGER.log(Level.FINEST, "Requeste created at path: {0}", requestPath);
+
+        setZKID(idForPath(requestPath));
+        setPath(requestPath);
     }
 
     public RequestState getState() {

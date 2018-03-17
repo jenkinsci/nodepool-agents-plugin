@@ -26,7 +26,6 @@ package com.rackspace.jenkins_nodepool;
 import com.google.gson.Gson;
 import hudson.model.Label;
 import hudson.slaves.SlaveComputer;
-import java.nio.charset.Charset;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -38,7 +37,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.model.Jenkins;
 import org.apache.curator.framework.CuratorFramework;
-import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 
 /**
@@ -61,27 +59,23 @@ public class NodePoolClient {
 
     private static final Logger LOGGER = Logger.getLogger(NodePoolClient.class.getName());
 
-    private String connectionString;
-
-    // these roots are relative to /nodepool which is the namespace
-    // set on the curator framework connection
-    private final String requestRoot = "requests";
-    private final String requestLockRoot = "requests-lock";
-    private final String nodeRoot = "nodes";
-    private Integer priority;
-    private String credentialsId;
+    private final String connectionString;
+    private final String requestRoot;
+    private final String requestLockRoot = "requests-lock"; //TODO: is this needed?
+    private final String nodeRoot;
+    private final String priority;
+    private final String credentialsId;
+    private final NodePoolGlobalConfiguration config;
 
     private static final Gson GSON = new Gson();
-    private static final Charset CHARSET = Charset.forName("UTF-8");
 
     public NodePoolClient(String connectionString, String credentialsId) {
-        this(connectionString, 100, credentialsId);
-    }
-
-    public NodePoolClient(String connectionString, Integer priority, String credentialsId) {
+        this.config = NodePoolGlobalConfiguration.getInstance();
         this.connectionString = connectionString;
-        this.priority = priority;
+        this.priority = config.getPriority();
         this.credentialsId = credentialsId;
+        this.requestRoot = config.getRequestRoot();
+        this.nodeRoot = config.getNodeRoot();
     }
 
     public String getRequestRoot() {
@@ -96,7 +90,7 @@ public class NodePoolClient {
         return nodeRoot;
     }
 
-    public Integer getPriority() {
+    public String getPriority() {
         return priority;
     }
 
@@ -122,28 +116,6 @@ public class NodePoolClient {
         return ZooKeeperClient.getConnection(connectionString);
     }
 
-    // TODO: similar with nodeSet for multiple nodes.
-    // or just create multiple requests?
-    public NodeRequest requestNode(String nPLabel, String jenkinsLabel) throws Exception {
-        final NodeRequest request = new NodeRequest(connectionString, nPLabel, jenkinsLabel);
-        final String createPath = MessageFormat.format("/{0}/{1}-", this.requestRoot, priority.toString());
-        LOGGER.finest(MessageFormat.format("Creating request node: {0}", createPath));
-        String requestPath = getConnection().create()
-                .creatingParentsIfNeeded()
-                .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
-                .forPath(createPath, request.toString().getBytes());
-
-        LOGGER.log(Level.FINEST, "Requeste created at path: {0}", requestPath);
-
-        // get NodePool request id
-        final String id = idForPath(requestPath);
-        request.setZKID(id);
-        request.setPath(requestPath);
-
-        return request;
-
-    }
-
     /**
      * Get data for a node
      *
@@ -153,7 +125,7 @@ public class NodePoolClient {
      */
     public Map getZNode(String path) throws Exception {
         byte[] jsonBytes = getConnection().getData().forPath(path);
-        String jsonString = new String(jsonBytes, CHARSET);
+        String jsonString = new String(jsonBytes, NodePoolGlobalConfiguration.CHARSET);
         final Map data = GSON.fromJson(jsonString, HashMap.class);
         return data;
     }
@@ -222,7 +194,7 @@ public class NodePoolClient {
         // *** Request Node ***
         //TODO: store prefix in config and pass in.
         String npLabel = assignedLabel.getName().substring("nodepool-".length());
-        NodeRequest request = requestNode(npLabel, assignedLabel.getName());
+        NodeRequest request = new NodeRequest(connectionString, npLabel, assignedLabel.getName());
 
         // *** Poll request status and wait for fulfillment
         //TODO: store timeout in config
@@ -234,13 +206,9 @@ public class NodePoolClient {
 
             try {
                 request.updateFromZK();
-
             } catch (KeeperException e) {
                 // connectivity issue with ZK - it should auto-reconnect and we can re-create the request then
                 LOGGER.log(Level.WARNING, e.getMessage(), e);
-            } catch (Exception e) {
-                // let other exceptions bubble through
-                throw new RuntimeException(e);
             }
 
             // node is updated now, check it's state:
@@ -279,6 +247,6 @@ public class NodePoolClient {
         Jenkins jenkins = Jenkins.getInstance();
         jenkins.checkPermission(SlaveComputer.CREATE);
         jenkins.addNode(nps);
-        LOGGER.log(Level.INFO, "Added slave to Jenkins: {0}", nps);
+        LOGGER.log(Level.INFO, "Added NodePool slave to Jenkins: {0}", nps);
     }
 }

@@ -72,7 +72,7 @@ public class SingleUseRetentionStrategy extends RetentionStrategy.Always impleme
             // talk to nodepool to release the node.
             final NodePoolComputer c = (NodePoolComputer) executor.getOwner();
             c.doToggleOffline("Disconnecting");
-            LOG.log(Level.FINE, "Deleting NodePoolNode {0} after task {1}", new Object[]{c, task.getFullDisplayName()});
+            LOG.log(Level.INFO, "Deleting NodePoolNode {0} after task {1}", new Object[]{c, task.getFullDisplayName()});
             Computer.threadPoolForRemoting.submit(() -> {
                 try {
                     c.doDoDelete();
