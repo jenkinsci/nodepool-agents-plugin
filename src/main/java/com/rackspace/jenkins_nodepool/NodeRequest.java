@@ -23,11 +23,9 @@
  */
 package com.rackspace.jenkins_nodepool;
 
-import static com.rackspace.jenkins_nodepool.NodePoolClient.idForPath;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.text.MessageFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
@@ -47,16 +45,26 @@ public class NodeRequest extends ZooKeeperObject {
     //TODO: check requests-lock znodes, they seem to be stacking up.
     // what creates them and what should clean them up?
     private static final Logger LOGGER = Logger.getLogger(NodeRequest.class.getName());
+    private static final List<NodeRequest> REQUESTS = new ArrayList();
 
-    public NodeRequest(String connectionString, String label, String jenkinsLabel) throws Exception {
-        this(connectionString, Arrays.asList(new String[]{label}), jenkinsLabel);
+    // constructors are private to ensure that this static factory method is used
+    // so that instances are addded to the requests list.
+    // Adding the instance to a static list from a constructor throws
+    // a warning about leaking 'this'.
+    public static NodeRequest createNodeRequest(NodePool nodePool,
+            String jenkinsLabel) throws Exception {
+        NodeRequest nr = new NodeRequest(nodePool, jenkinsLabel);
+        REQUESTS.add(nr);
+        return nr;
     }
 
     @SuppressFBWarnings
-    public NodeRequest(String connectionString, List<String> labels, String jenkinsLabel) throws Exception {
-        super(connectionString);
-        data.put("node_types", new ArrayList(labels));
-        data.put("requestor", config.getRequestor());
+    private NodeRequest(NodePool nodePool, String jenkinsLabel) throws Exception {
+        super(nodePool);
+        List<String> node_types = new ArrayList();
+        node_types.add(nodePool.nodePoolLabelFromJenkinsLabel(jenkinsLabel));
+        data.put("node_types", node_types);
+        data.put("requestor", nodePool.getRequestor());
         data.put("state", RequestState.requested);
         data.put("state_time", new Double(System.currentTimeMillis() / 1000));
         data.put("jenkins_label", jenkinsLabel);
@@ -66,18 +74,22 @@ public class NodeRequest extends ZooKeeperObject {
 
     private void createZNode() throws Exception {
         final String createPath = MessageFormat.format("/{0}/{1}-",
-                config.getRequestRoot(), config.getPriority());
+                nodePool.getRequestRoot(), nodePool.getPriority());
         LOGGER.finest(MessageFormat.format("Creating request node: {0}",
                 createPath));
-        String requestPath = getConnection().create()
+        String requestPath = nodePool.getConn().create()
                 .creatingParentsIfNeeded()
                 .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
                 .forPath(createPath, getJson().getBytes());
 
         LOGGER.log(Level.FINEST, "Requeste created at path: {0}", requestPath);
 
-        setZKID(idForPath(requestPath));
+        setZKID(nodePool.idForPath(requestPath));
         setPath(requestPath);
+    }
+
+    public static List<NodeRequest> getActiveRequests() {
+        return REQUESTS;
     }
 
     public RequestState getState() {
@@ -92,10 +104,15 @@ public class NodeRequest extends ZooKeeperObject {
         }
         List<NodePoolNode> nodeObjects = new ArrayList();
         for (Object id : (List) data.get("nodes")) {
-            nodeObjects.add(new NodePoolNode(connectionString, (String) id));
+            nodeObjects.add(new NodePoolNode(nodePool, (String) id));
         }
-
         return nodeObjects;
+    }
+
+    @Override
+    public void delete() {
+        super.delete();
+        NodeRequest.REQUESTS.remove(this);
     }
 
     @Override

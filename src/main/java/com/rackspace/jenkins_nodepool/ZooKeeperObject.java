@@ -28,8 +28,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import org.apache.curator.framework.CuratorFramework;
 
+//TODO: serialise to JSON properly with XStream
 /**
  * Base class for zookeeper proxy objects.
  *
@@ -40,15 +40,13 @@ public abstract class ZooKeeperObject {
     static final Gson GSON = new Gson();
 
     final Map data;
-    final String connectionString;
     String path;
     String zKID;
-    NodePoolGlobalConfiguration config;
+    NodePool nodePool;
 
-    public ZooKeeperObject(String connectionString) {
+    public ZooKeeperObject(NodePool nodePool) {
         data = new HashMap();
-        this.connectionString = connectionString;
-        config = NodePoolGlobalConfiguration.getInstance();
+        this.nodePool = nodePool;
     }
 
     public String getPath() {
@@ -71,13 +69,9 @@ public abstract class ZooKeeperObject {
         this.data.putAll(data);
     }
 
-    CuratorFramework getConnection() {
-        return ZooKeeperClient.getConnection(connectionString);
-    }
-
     public final void updateFromZK() throws Exception {
-        byte[] bytes = getConnection().getData().forPath(this.path);
-        String jsonString = new String(bytes, NodePoolGlobalConfiguration.CHARSET);
+        byte[] bytes = nodePool.getConn().getData().forPath(this.path);
+        String jsonString = new String(bytes, nodePool.getCharset());
         LOG.log(Level.FINEST, "Read ZNODE: {0}, Data: {1}", new Object[]{path, jsonString});
         final Map zkData = GSON.fromJson(jsonString, HashMap.class);
         updateFromMap(zkData);
@@ -88,7 +82,16 @@ public abstract class ZooKeeperObject {
     }
 
     public void writeToZK() throws Exception {
-        getConnection().setData().forPath(this.path, getJson().getBytes(NodePoolGlobalConfiguration.CHARSET));
+        nodePool.getConn().setData().forPath(this.path, getJson().getBytes(nodePool.getCharset()));
+    }
+
+    public void delete() {
+        try {
+            nodePool.getConn().delete().forPath(path);
+        } catch (Exception e) {
+            // not sure what else we can do at this point.
+            LOG.log(Level.WARNING, "Failed to delete node at path: " + path + ": " + e.getMessage(), e);
+        }
     }
 
 }

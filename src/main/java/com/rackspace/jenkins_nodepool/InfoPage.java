@@ -24,39 +24,37 @@
 package com.rackspace.jenkins_nodepool;
 
 import hudson.Extension;
-import hudson.model.Computer;
-import hudson.model.Label;
-import hudson.model.Queue;
-import hudson.model.queue.QueueListener;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import hudson.model.RootAction;
 
-//TODO: Scan build queue on startup for pipelines that persist across restarts as the
-// queue entry event won't refire.
-
+/**
+ *
+ * @author Rackspace
+ */
 @Extension
-public class NodePoolQueueListener extends QueueListener {
+public class InfoPage implements RootAction {
 
-    private static final Logger LOG = Logger.getLogger(NodePoolQueueListener.class.getName());
+    private final NodePools nodePools;
 
-    private final NodePools nodePools = NodePools.instance;
-
-    @Override
-    public void onEnterWaiting(Queue.WaitingItem wi) {
-        final Label label = wi.getAssignedLabel();
-        LOG.log(Level.FINE, "NodePoolQueueListener received queue notification for label {0}.", new Object[]{label});
-
-        if (label == null) {
-            return;
-        }
-
-        Computer.threadPoolForRemoting.submit(() -> {
-            try {
-                nodePools.provisionNode(label.toString());
-            } catch (Exception ex) {
-                LOG.log(Level.SEVERE, null, ex);
-            }
-        });
+    public InfoPage() {
+        nodePools = NodePools.instance;
     }
 
+    @Override
+    public String getIconFileName() {
+        return "gear.png";
+    }
+
+    @Override
+    public String getDisplayName() {
+        return "NodePool";
+    }
+
+    @Override
+    public String getUrlName() {
+        return "nodepool";
+    }
+
+    public NodePools getNodePools() {
+        return nodePools;
+    }
 }

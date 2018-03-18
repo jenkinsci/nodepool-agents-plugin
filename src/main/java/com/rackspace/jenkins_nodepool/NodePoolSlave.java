@@ -77,6 +77,7 @@ public class NodePoolSlave extends Slave {
     @Override
     public Computer createComputer() {
         NodePoolComputer npc = new NodePoolComputer(this, nodePoolNode);
+        nodePoolNode.setComputer(npc);
         return npc;
     }
 

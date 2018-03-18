@@ -10,18 +10,17 @@ import java.util.List;
 public class NodePoolNode extends ZooKeeperObject {
 
     private final KazooLock lock;
-    private final String nodeRoot;
-    private final NodePoolGlobalConfiguration config;
+    private final NodePool nodePool;
+    private NodePoolComputer computer;
 
-    public NodePoolNode(String connectionString, String id) throws Exception {
-        super(connectionString);
-        this.config = NodePoolGlobalConfiguration.getInstance();
-        this.nodeRoot = config.getNodeRoot();
+    public NodePoolNode(NodePool nodePool, String id) throws Exception {
+        super(nodePool);
+        this.nodePool = nodePool;
         super.setPath(MessageFormat.format("/{0}/{1}",
-                new Object[]{nodeRoot, id}));
+                new Object[]{nodePool.getNodeRoot(), id}));
         super.setZKID(id);
         super.updateFromZK();
-        this.lock = new KazooLock(connectionString, getLockPath());
+        this.lock = new KazooLock(getLockPath(), nodePool);
     }
 
     public String getNPType() {
@@ -30,12 +29,12 @@ public class NodePoolNode extends ZooKeeperObject {
 
     final String getLockPath() {
         return MessageFormat.format("/{0}/{1}/lock",
-                new Object[]{nodeRoot, zKID});
+                new Object[]{nodePool.getNodeRoot(), zKID});
     }
 
     public String getJenkinsLabel() {
         return MessageFormat.format("{0}{1}",
-                new Object[]{config.getLabelPrefix(), getNPType()});
+                new Object[]{nodePool.getLabelPrefix(), getNPType()});
     }
 
     public String getName() {
@@ -80,6 +79,15 @@ public class NodePoolNode extends ZooKeeperObject {
     public void release() throws Exception {
         setState("used");
         lock.release();
+        nodePool.removeComputer(computer);
+    }
+
+    void setComputer(NodePoolComputer npc) {
+        computer = npc;
+    }
+
+    public NodePoolComputer getComputer() {
+        return computer;
     }
 
 }

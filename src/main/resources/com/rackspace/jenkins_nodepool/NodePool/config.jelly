@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?jelly escape-by-default='true'?>
-<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form" xmlns:c="/lib/credentials">
-    <f:section title="Nodepool">
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form" xmlns:c="/lib/credentials" xmlns:st="jelly:stapler">
         <f:entry title="Zookeeper Connection String" field="connectionString">
             <f:textbox/>
         </f:entry>
@@ -20,11 +19,10 @@
             <f:entry title="ZooKeeper Root" field="zooKeeperRoot">
                 <f:textbox default="nodepool"></f:textbox>
             </f:entry>
-            <!-- TODO: help for added fields -->
             <f:entry title="Node Root" field="nodeRoot">
                 <f:textbox default="nodes"></f:textbox>
             </f:entry>
-            <f:entry title="Requet Root" field="requestRoot">
+            <f:entry title="Request Root" field="requestRoot">
                 <f:textbox default="requests"></f:textbox>
             </f:entry>
             <f:entry title="Requestor" field="requestor">
@@ -35,5 +33,4 @@
                 <f:textbox default="100"></f:textbox>
             </f:entry>
         </f:advanced>
-    </f:section>
-</j:jelly>
+</j:jelly>  
