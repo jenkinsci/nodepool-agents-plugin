@@ -24,8 +24,6 @@
 package com.rackspace.jenkins_nodepool;
 
 import hudson.Extension;
-import hudson.model.Describable;
-import hudson.model.Descriptor;
 import hudson.model.Queue;
 import hudson.model.labels.LabelAtom;
 import java.util.Arrays;
@@ -35,17 +33,67 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import jenkins.model.GlobalConfiguration;
 import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
-import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.StaplerRequest;
 
-public class NodePools implements Describable<NodePools>, Iterable<NodePool> {
+@Extension
+public class NodePools extends GlobalConfiguration implements Iterable<NodePool> {
 
     private static final Logger LOG = Logger.getLogger(NodePools.class.getName());
-    public static NodePools instance;
+    public static NodePools get() {
+        return GlobalConfiguration.all().get(NodePools.class);
+    }
 
-    private final List<NodePool> nodePools;
+    private List<NodePool> nodePools;
+
+    public NodePools() {
+        load();
+    }
+
+    @Override
+    public boolean configure(StaplerRequest req, JSONObject json) throws FormException {
+        super.configure(req, json);
+        if (!json.containsKey("nodePools")) {
+            // if the last nodepool configuration is removed
+            // the nodePools field is not included in the json
+            // so the field is not updated. This means the
+            // last configuration will appear to be removed
+            // in the ui, but will reappear on refresh. :(
+            // To prevent that we clear the array if no
+            // nodePools are supplied.
+            nodePools.clear();
+        }
+        save();
+        return true;
+    }
+
+    public List<NodePool> getNodePools() {
+        return nodePools;
+    }
+
+    @Override
+    public Iterator<NodePool> iterator() {
+        return nodePools.iterator();
+    }
+    public List<NodePool> nodePoolsForLabel(String label) {
+        return stream()
+                .filter((NodePool np) -> label.startsWith(np.getLabelPrefix()))
+                .collect(Collectors.toList());
+    }
+
+    public void provisionNode(String label) {
+        for (NodePool np : nodePoolsForLabel(label)) {
+            try {
+                np.provisionNode(new LabelAtom(label));
+                break;
+            } catch (Exception ex) {
+                LOG.log(Level.SEVERE, null, ex);
+            }
+        };
+    }
 
     // scan queue for builds waiting for instance.
     // TODO: call this on startup
@@ -74,86 +122,12 @@ public class NodePools implements Describable<NodePools>, Iterable<NodePool> {
         queueLabels.forEach((label) -> provisionNode(label));
     }
 
-    public void provisionNode(String label) {
-        for (NodePool np : nodePoolsForLabel(label)) {
-            try {
-                np.provisionNode(new LabelAtom(label));
-                break;
-            } catch (Exception ex) {
-                LOG.log(Level.SEVERE, null, ex);
-            }
-        };
-    }
-
-    public List<NodePool> nodePoolsForLabel(String label) {
-        return stream()
-                .filter((NodePool np) -> label.startsWith(np.getLabelPrefix()))
-                .collect(Collectors.toList());
-    }
-
-    @DataBoundConstructor
-    public NodePools(List<NodePool> nodePools) {
+    @DataBoundSetter
+    public void setNodePools(List<NodePool> nodePools) {
         this.nodePools = nodePools;
-        NodePools.instance = this;
-    }
-
-    private void initNPList() {
-        if (nodePools == null) {
-            //nodePools = new ArrayList<>();
-        }
-    }
-
-    @Override
-    public Descriptor<NodePools> getDescriptor() {
-        return new NodePoolsDescriptor();
-    }
-
-    @Extension
-    public static class NodePoolsDescriptor extends Descriptor<NodePools> {
-
-        @Override
-        public String getDisplayName() {
-            return "NodePools";
-        }
-
-        public List<NodePool> getNodePools() {
-            return NodePools.instance.getNodePools();
-        }
-
-        @Override
-        public boolean configure(StaplerRequest req, JSONObject json) throws FormException {
-            super.configure(req, json);
-            save();
-            return true;
-        }
-
-    }
-
-
-    public List<NodePool> getNodePools() {
-        initNPList();
-        return nodePools;
-    }
-
-    //public void setNodePools(List<NodePool> nodePools) {
-        //this.nodePools = nodePools;
-        //save();
-    //}
-
-    public void add(NodePool np) {
-        initNPList();
-        nodePools.add(np);
-    }
-
-    @Override
-    public Iterator<NodePool> iterator() {
-        initNPList();
-        return nodePools.iterator();
     }
 
     public Stream<NodePool> stream() {
-        initNPList();
         return nodePools.stream();
     }
-
 }

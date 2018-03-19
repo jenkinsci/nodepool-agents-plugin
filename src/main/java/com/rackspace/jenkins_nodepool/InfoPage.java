@@ -36,7 +36,7 @@ public class InfoPage implements RootAction {
     private final NodePools nodePools;
 
     public InfoPage() {
-        nodePools = NodePools.instance;
+        nodePools = NodePools.get();
     }
 
     @Override

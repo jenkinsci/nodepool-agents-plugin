@@ -39,7 +39,7 @@ public class NodePoolQueueListener extends QueueListener {
 
     private static final Logger LOG = Logger.getLogger(NodePoolQueueListener.class.getName());
 
-    private final NodePools nodePools = NodePools.instance;
+    private final NodePools nodePools = NodePools.get();
 
     @Override
     public void onEnterWaiting(Queue.WaitingItem wi) {

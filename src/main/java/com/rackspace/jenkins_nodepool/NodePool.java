@@ -71,31 +71,6 @@ import org.kohsuke.stapler.StaplerResponse;
 public class NodePool implements Describable<NodePool> {
 
     private static final Logger LOG = Logger.getLogger(NodePool.class.getName());
-
-    private String credentialsId;
-    private String connectionString;
-    private String labelPrefix;
-    private String requestRoot;
-    private String nodeRoot;
-    private String priority;
-    private String requestor;
-    private String zooKeeperRoot;
-    private final Charset charset = Charset.forName("UTF-8");
-    @XStreamOmitField
-    private final Gson gson = new Gson();
-
-    @XStreamOmitField
-    private CuratorFramework conn;
-
-    private List<NodeRequest> requests;
-    private List<NodePoolComputer> computers;
-
-    public NodePool() {
-        conn = NodePool.createZKConnection(connectionString, getZooKeeperRoot());
-        initTrackers();
-        NodePools.instance.add(this);
-    }
-
     static CuratorFramework createZKConnection(String connectionString,
             String zkRoot) {
         CuratorFramework conn = CuratorFrameworkFactory.builder()
@@ -105,6 +80,27 @@ public class NodePool implements Describable<NodePool> {
                 .build();
         conn.start();
         return conn;
+    }
+    private final Charset charset = Charset.forName("UTF-8");
+    private List<NodePoolComputer> computers;
+    @XStreamOmitField
+    private CuratorFramework conn;
+    private String connectionString;
+    private String credentialsId;
+    @XStreamOmitField
+    private final Gson gson = new Gson();
+    private String labelPrefix;
+    private String nodeRoot;
+    private String priority;
+    private String requestRoot;
+    private String requestor;
+
+    private List<NodeRequest> requests;
+    private String zooKeeperRoot;
+
+    public NodePool() {
+        conn = NodePool.createZKConnection(connectionString, getZooKeeperRoot());
+        initTrackers();
     }
 
     @DataBoundConstructor
@@ -121,113 +117,55 @@ public class NodePool implements Describable<NodePool> {
         this.zooKeeperRoot = zooKeeperRoot;
         this.nodeRoot = nodeRoot;
         initTrackers();
-        NodePools.instance.add(this);
     }
+    /**
+     * Accept the node that was created to satisfy the given request.
+     *
+     * @param request node request
+     * @return node name as a String
+     * @throws java.lang.Exception
+     */
+    public List<NodePoolNode> acceptNodes(NodeRequest request) throws Exception {
 
-    private void initTrackers() {
-        if (requests == null) {
-            requests = new ArrayList();
+        // refer to the request "nodeset" to know which nodes to lock.
+        final List<NodePoolNode> allocatedNodes = request.getAllocatedNodes();
+        final List<NodePoolNode> acceptedNodes = new ArrayList<>();
+
+        try {
+            for (NodePoolNode node : allocatedNodes) {
+                LOG.log(Level.FINE, "Accepting node {0} on behalf of request {1}", new Object[]{node, request.getZKID()});
+
+                node.setInUse(); // TODO: debug making sure this lock stuff actually works
+
+                acceptedNodes.add(node);
+
+            }
+        } catch (Exception e) {
+            // (if we hit this, then the request will get re-created on the next isDone() poll.)
+            LOG.log(Level.WARNING, "Failed to lock node" + e.getMessage(), e);
+
+            // roll back acceptance on any nodes we managed to successfully accept
+            for (NodePoolNode acceptedNode : acceptedNodes) {
+                try {
+                    acceptedNode.release();
+
+                } catch (Exception lockException) {
+                    LOG.log(Level.WARNING, "Failed to release lock on node " + acceptedNode.getName() + ": "
+                            + lockException.getMessage(), lockException);
+                }
+            }
+
+        } finally {
+            // regardless of success locking node, delete the request.
+            requests.remove(request);
+            request.delete();
         }
-        if (computers == null) {
-            this.computers = new ArrayList();
-        }
-    }
 
-    public List<NodeRequest> getRequests() {
-        return requests;
+        return acceptedNodes;
     }
-
-    public void setRequests(List<NodeRequest> requests) {
-        this.requests = requests;
-    }
-
-    public void removeComputer(NodePoolComputer c) {
-        computers.remove(c);
-    }
-
-    public List<NodePoolComputer> getNodes() {
-        return computers;
-    }
-
-    public void setNodes(List<NodePoolComputer> nodes) {
-        this.computers = nodes;
-    }
-
-    public String getNodeRoot() {
-        return nodeRoot;
-    }
-
-    public void setNodeRoot(String nodeRoot) {
-        this.nodeRoot = nodeRoot;
-    }
-
-    public final String getZooKeeperRoot() {
-        return zooKeeperRoot;
-    }
-
-    public void setZooKeeperRoot(String zooKeeperRoot) {
-        this.zooKeeperRoot = zooKeeperRoot;
-    }
-
-    public String getLabelPrefix() {
-        return labelPrefix;
-    }
-
-    public void setLabelPrefix(String labelPrefix) {
-        this.labelPrefix = labelPrefix;
-    }
-
-    public String getRequestRoot() {
-        return requestRoot;
-    }
-
-    public void setRequestRoot(String requestRoot) {
-        this.requestRoot = requestRoot;
-    }
-
-    public String getPriority() {
-        return priority;
-    }
-
-    public void setPriority(String priority) {
-        this.priority = priority;
-    }
-
-    public String getRequestor() {
-        return requestor;
-    }
-
-    public void setRequestor(String requestor) {
-        this.requestor = requestor;
-    }
-
-    public String getCredentialsId() {
-        return credentialsId;
-    }
-
-    public void setCredentialsId(String credentialsId) {
-        this.credentialsId = credentialsId;
-    }
-
-    public String getConnectionString() {
-        return connectionString;
-    }
-
-    public void setConnectionString(String connectionString) {
-        if (!connectionString.equals(this.connectionString)) {
-            conn = NodePool.createZKConnection(connectionString, getZooKeeperRoot());
-        }
-        this.connectionString = connectionString;
-    }
-
     public Charset getCharset() {
         return charset;
     }
-
-    public Gson getGson() {
-        return gson;
-    }
-
     public CuratorFramework getConn() {
         if (conn == null) {
             conn = NodePool.createZKConnection(connectionString, zooKeeperRoot);
@@ -235,6 +173,61 @@ public class NodePool implements Describable<NodePool> {
         return conn;
     }
 
+    public String getConnectionString() {
+        return connectionString;
+    }
+    public String getCredentialsId() {
+        return credentialsId;
+    }
+    @Override
+    public Descriptor<NodePool> getDescriptor() {
+        return new NodePoolDescriptor();
+
+    }
+    public Gson getGson() {
+        return gson;
+    }
+
+    public String getLabelPrefix() {
+        return labelPrefix;
+    }
+    public String getNodeRoot() {
+        return nodeRoot;
+    }
+    public List<NodePoolComputer> getNodes() {
+        return computers;
+    }
+
+    public String getPriority() {
+        return priority;
+    }
+    public String getRequestRoot() {
+        return requestRoot;
+    }
+
+    public String getRequestor() {
+        return requestor;
+    }
+    public List<NodeRequest> getRequests() {
+        return requests;
+    }
+    /**
+     * Get data for a node
+     *
+     * @param path path to query
+     * @return Map representing the json data stored on the node.
+     * @throws Exception barf
+     */
+    public Map getZNode(String path) throws Exception {
+        byte[] jsonBytes = conn.getData().forPath(path);
+        String jsonString = new String(jsonBytes, charset);
+        final Map data = gson.fromJson(jsonString, HashMap.class);
+        return data;
+    }
+
+    public final String getZooKeeperRoot() {
+        return zooKeeperRoot;
+    }
     //TODO: figure out how to reuse the form validation functions or dedupe this somehow.
     public final Boolean isConfigured() {
         if (connectionString == null || !connectionString.contains(":")) {
@@ -248,9 +241,73 @@ public class NodePool implements Describable<NodePool> {
         }
         return true;
     }
-
     public String nodePoolLabelFromJenkinsLabel(String jenkinsLabel) {
         return jenkinsLabel.substring(getLabelPrefix().length());
+    }
+    public void removeComputer(NodePoolComputer c) {
+        computers.remove(c);
+    }
+
+    public void setConnectionString(String connectionString) {
+        if (!connectionString.equals(this.connectionString)) {
+            conn = NodePool.createZKConnection(connectionString, getZooKeeperRoot());
+        }
+        this.connectionString = connectionString;
+    }
+
+    public void setCredentialsId(String credentialsId) {
+        this.credentialsId = credentialsId;
+    }
+
+    public void setLabelPrefix(String labelPrefix) {
+        this.labelPrefix = labelPrefix;
+    }
+
+    public void setNodeRoot(String nodeRoot) {
+        this.nodeRoot = nodeRoot;
+    }
+
+    public void setNodes(List<NodePoolComputer> nodes) {
+        this.computers = nodes;
+    }
+
+    public void setPriority(String priority) {
+        this.priority = priority;
+    }
+
+    public void setRequestRoot(String requestRoot) {
+        this.requestRoot = requestRoot;
+    }
+
+    public void setRequestor(String requestor) {
+        this.requestor = requestor;
+    }
+
+    public void setRequests(List<NodeRequest> requests) {
+        this.requests = requests;
+    }
+
+    public void setZooKeeperRoot(String zooKeeperRoot) {
+        this.zooKeeperRoot = zooKeeperRoot;
+    }
+
+    private void initTrackers() {
+        if (requests == null) {
+            requests = new ArrayList();
+        }
+        if (computers == null) {
+            this.computers = new ArrayList();
+        }
+    }
+
+    String idForPath(String path) throws NodePoolException {
+        if (path.contains("-")) {
+            List<String> parts = Arrays.asList(path.split("-"));
+            return parts.get(parts.size() - 1);
+
+        } else {
+            throw new NodePoolException("Invalid node path while looking for request id: " + path);
+        }
     }
 
     void provisionNode(Label assignedLabel) throws Exception {
@@ -317,82 +374,6 @@ public class NodePool implements Describable<NodePool> {
         jenkins.checkPermission(SlaveComputer.CREATE);
         jenkins.addNode(nps);
         LOG.log(Level.INFO, "Added NodePool slave to Jenkins: {0}", nps);
-    }
-
-    /**
-     * Accept the node that was created to satisfy the given request.
-     *
-     * @param request node request
-     * @return node name as a String
-     * @throws java.lang.Exception
-     */
-    public List<NodePoolNode> acceptNodes(NodeRequest request) throws Exception {
-
-        // refer to the request "nodeset" to know which nodes to lock.
-        final List<NodePoolNode> allocatedNodes = request.getAllocatedNodes();
-        final List<NodePoolNode> acceptedNodes = new ArrayList<>();
-
-        try {
-            for (NodePoolNode node : allocatedNodes) {
-                LOG.log(Level.FINE, "Accepting node {0} on behalf of request {1}", new Object[]{node, request.getZKID()});
-
-                node.setInUse(); // TODO: debug making sure this lock stuff actually works
-
-                acceptedNodes.add(node);
-
-            }
-        } catch (Exception e) {
-            // (if we hit this, then the request will get re-created on the next isDone() poll.)
-            LOG.log(Level.WARNING, "Failed to lock node" + e.getMessage(), e);
-
-            // roll back acceptance on any nodes we managed to successfully accept
-            for (NodePoolNode acceptedNode : acceptedNodes) {
-                try {
-                    acceptedNode.release();
-
-                } catch (Exception lockException) {
-                    LOG.log(Level.WARNING, "Failed to release lock on node " + acceptedNode.getName() + ": "
-                            + lockException.getMessage(), lockException);
-                }
-            }
-
-        } finally {
-            // regardless of success locking node, delete the request.
-            requests.remove(request);
-            request.delete();
-        }
-
-        return acceptedNodes;
-    }
-
-    String idForPath(String path) throws NodePoolException {
-        if (path.contains("-")) {
-            List<String> parts = Arrays.asList(path.split("-"));
-            return parts.get(parts.size() - 1);
-
-        } else {
-            throw new NodePoolException("Invalid node path while looking for request id: " + path);
-        }
-    }
-
-    /**
-     * Get data for a node
-     *
-     * @param path path to query
-     * @return Map representing the json data stored on the node.
-     * @throws Exception barf
-     */
-    public Map getZNode(String path) throws Exception {
-        byte[] jsonBytes = conn.getData().forPath(path);
-        String jsonString = new String(jsonBytes, charset);
-        final Map data = gson.fromJson(jsonString, HashMap.class);
-        return data;
-    }
-
-    @Override
-    public Descriptor<NodePool> getDescriptor() {
-        return new NodePoolDescriptor();
-
     }
 
     @Extension

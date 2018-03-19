@@ -3,7 +3,7 @@
 <j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form" xmlns:c="/lib/credentials" xmlns:st="jelly:stapler" xmlns:d="jelly:define">
     <f:section title="Nodepools">
         <f:entry title="" field="nodePools">
-            <f:repeatableProperty field="nodePools" add="Add Another NodePool Connection">
+            <f:repeatableProperty field="nodePools" add="Add Another NodePool Connection" minimum="1">
                 <f:entry title="">
                     <div align="right">
                         <f:repeatableDeleteButton value="Delete NodePool Connection"/>
@@ -11,9 +11,5 @@
                 </f:entry>
             </f:repeatableProperty>
         </f:entry>
-        <!-- TODO: button to scan queue -->
-        <!--<f:entry title="" >
-            <input type="button" value="Scan Queue for builds that need a node" title="Scan Queue for builds that need a node" />
-        </f:entry>-->
     </f:section>
 </j:jelly>  
