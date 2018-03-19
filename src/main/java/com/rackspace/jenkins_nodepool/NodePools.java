@@ -24,8 +24,10 @@
 package com.rackspace.jenkins_nodepool;
 
 import hudson.Extension;
+import hudson.model.FreeStyleProject;
+import hudson.model.Label;
 import hudson.model.Queue;
-import hudson.model.labels.LabelAtom;
+import hudson.model.Queue.Task;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
@@ -78,16 +80,16 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
     public Iterator<NodePool> iterator() {
         return nodePools.iterator();
     }
-    public List<NodePool> nodePoolsForLabel(String label) {
+    public List<NodePool> nodePoolsForLabel(Label label) {
         return stream()
-                .filter((NodePool np) -> label.startsWith(np.getLabelPrefix()))
+                .filter((NodePool np) -> label.getName().startsWith(np.getLabelPrefix()))
                 .collect(Collectors.toList());
     }
 
-    public void provisionNode(String label) {
+    public void provisionNode(Label label, Task task) {
         for (NodePool np : nodePoolsForLabel(label)) {
             try {
-                np.provisionNode(new LabelAtom(label));
+                np.provisionNode(label, task);
                 break;
             } catch (Exception ex) {
                 LOG.log(Level.SEVERE, null, ex);
@@ -99,7 +101,11 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
     // TODO: call this on startup
     public void scanQueue() {
 
-        List<NodeRequest> activeRequests = NodeRequest.getActiveRequests();
+        List<NodeRequest> activeRequests = nodePools.stream()
+                .map(NodePool::getRequests)
+                .flatMap(List::stream)
+                .collect(Collectors.toList());
+
         Jenkins jenkins = Jenkins.getInstance();
         List<Queue.Item> queueItems = Arrays.asList(jenkins.getQueue().getItems());
 
@@ -111,6 +117,7 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
         List<String> requestLabels = activeRequests
                 .stream()
                 .map(NodeRequest::getJenkinsLabel)
+                .map(Label::toString)
                 .collect(Collectors.toList());
 
         requestLabels.forEach((label) -> queueLabels.remove(label));
@@ -119,7 +126,9 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
         // corresponding request.
         // If multiple nodepools match the prefix, use the first one we
         // come across, if that throws an exception the next will be tried.
-        queueLabels.forEach((label) -> provisionNode(label));
+        Jenkins j = Jenkins.getInstance();
+        Task t = new FreeStyleProject(j, "Queue Scan"); //TODO: does this actually create a project?
+        queueLabels.forEach((label) -> provisionNode(j.getLabel(label), t));
     }
 
     @DataBoundSetter

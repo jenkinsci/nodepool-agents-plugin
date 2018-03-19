@@ -1,5 +1,6 @@
 package com.rackspace.jenkins_nodepool;
 
+import com.thoughtworks.xstream.annotations.XStreamOmitField;
 import java.text.MessageFormat;
 import java.util.List;
 
@@ -11,6 +12,7 @@ public class NodePoolNode extends ZooKeeperObject {
 
     private final KazooLock lock;
     private final NodePool nodePool;
+    @XStreamOmitField
     private NodePoolComputer computer;
 
     public NodePoolNode(NodePool nodePool, String id) throws Exception {

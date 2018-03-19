@@ -16,13 +16,23 @@
                 </ul>
                 <h3> Requests </h3>
                 <!-- TODO: show the queue item that relates to this request -->
-                <ul>
+                <table>
+                    <tr>
+                    <th>Request</th>
+                    <th>Label</th>
+                    <th>Age</th>
+                    </tr>
+                        
                     <j:forEach var="request" items="${np.Requests}">
-                        <li>
-                            <p>${request}</p>
-                        </li>
+                        <tr>
+                            <td>${request}</td>
+                            <td>$(request.label}</td>
+                            <td>TODO: age</td>
+                        </tr>
+                        
                     </j:forEach>
-                </ul>
+                </table>
+                
             </j:forEach>
             <!-- todo: queue scan button -->
         </l:main-panel>

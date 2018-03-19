@@ -24,7 +24,10 @@
 package com.rackspace.jenkins_nodepool;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import hudson.model.Label;
+import hudson.model.Queue.Task;
 import java.text.MessageFormat;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -45,22 +48,14 @@ public class NodeRequest extends ZooKeeperObject {
     //TODO: check requests-lock znodes, they seem to be stacking up.
     // what creates them and what should clean them up?
     private static final Logger LOGGER = Logger.getLogger(NodeRequest.class.getName());
-    private static final List<NodeRequest> REQUESTS = new ArrayList();
 
-    // constructors are private to ensure that this static factory method is used
-    // so that instances are addded to the requests list.
-    // Adding the instance to a static list from a constructor throws
-    // a warning about leaking 'this'.
-    public static NodeRequest createNodeRequest(NodePool nodePool,
-            String jenkinsLabel) throws Exception {
-        NodeRequest nr = new NodeRequest(nodePool, jenkinsLabel);
-        REQUESTS.add(nr);
-        return nr;
-    }
+    private final Long startTime;
+    private final Task task;
 
     @SuppressFBWarnings
-    private NodeRequest(NodePool nodePool, String jenkinsLabel) throws Exception {
+    public NodeRequest(NodePool nodePool, Task task) throws Exception {
         super(nodePool);
+        String jenkinsLabel = task.getAssignedLabel().getDisplayName();
         List<String> node_types = new ArrayList();
         node_types.add(nodePool.nodePoolLabelFromJenkinsLabel(jenkinsLabel));
         data.put("node_types", node_types);
@@ -70,6 +65,8 @@ public class NodeRequest extends ZooKeeperObject {
         data.put("jenkins_label", jenkinsLabel);
         // sets path and zkid
         createZNode();
+        startTime = System.currentTimeMillis();
+        this.task = task;
     }
 
     private void createZNode() throws Exception {
@@ -86,10 +83,6 @@ public class NodeRequest extends ZooKeeperObject {
 
         setZKID(nodePool.idForPath(requestPath));
         setPath(requestPath);
-    }
-
-    public static List<NodeRequest> getActiveRequests() {
-        return REQUESTS;
     }
 
     public RequestState getState() {
@@ -110,12 +103,6 @@ public class NodeRequest extends ZooKeeperObject {
     }
 
     @Override
-    public void delete() {
-        super.delete();
-        NodeRequest.REQUESTS.remove(this);
-    }
-
-    @Override
     public void updateFromMap(Map newData) {
         super.updateFromMap(newData);
         // convert state time from string
@@ -127,12 +114,26 @@ public class NodeRequest extends ZooKeeperObject {
         data.put("state", RequestState.valueOf(stateString));
     }
 
-    String getNodePoolLabel() {
+    public String getNodePoolLabel() {
         final List<String> labels = (List<String>) data.get("node_types");
         return labels.get(0);
     }
 
-    String getJenkinsLabel() {
-        return (String) data.get("jenkins_label");
+    public Label getJenkinsLabel() {
+        return task.getAssignedLabel();
+    }
+
+    public String getAge() {
+        Duration d = Duration.ofMillis(System.currentTimeMillis() - startTime);
+        long s = d.getSeconds();
+        if (s < 60) {
+            return MessageFormat.format("{0}s", d.getSeconds());
+        } else {
+            return MessageFormat.format("{0}m", d.getSeconds() / 60);
+        }
+    }
+
+    public Task getTask() {
+        return task;
     }
 }

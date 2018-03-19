@@ -36,6 +36,7 @@ import hudson.model.Describable;
 import hudson.model.Descriptor;
 import hudson.model.ItemGroup;
 import hudson.model.Label;
+import hudson.model.Queue.Task;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.security.ACL;
 import hudson.security.AccessControlled;
@@ -310,16 +311,16 @@ public class NodePool implements Describable<NodePool> {
         }
     }
 
-    void provisionNode(Label assignedLabel) throws Exception {
+    void provisionNode(Label label, Task task) throws Exception {
 
         // *** Request Node ***
         //TODO: store prefix in config and pass in.
-        String npLabel = nodePoolLabelFromJenkinsLabel(assignedLabel.getName());
-        NodeRequest request = NodeRequest.createNodeRequest(this, assignedLabel.getName());
+        NodeRequest request = new NodeRequest(this, task);
         requests.add(request);
 
         // *** Poll request status and wait for fulfillment
         //TODO: store timeout in config
+        //TODO: Curator async stuff to avoid polling
         Integer timeout = 1200 * 1000; //timeout in milliseconds
         Long startTime = System.currentTimeMillis();
         RequestState requestState = RequestState.requested;
@@ -364,7 +365,7 @@ public class NodePool implements Describable<NodePool> {
             //TODO: Configurable poll interval for instance ACTIVE
         }
         if (requestState != RequestState.fulfilled || allocatedNodes == null) {
-            throw new Exception(MessageFormat.format("Failed to provision node for label {0}", assignedLabel.getName()));
+            throw new Exception(MessageFormat.format("Failed to provision node for label {0}", task.getAssignedLabel().getName()));
         }
 
         // *** Get allocated nodes from the request and add to Jenkins
