@@ -4,7 +4,7 @@ ENV NODEPOOL_REPO https://github.com/openstack-infra/nodepool
 ENV NODEPOOL_SHA 3de0b20faa6f90437eb62c56ec23c59c6e15b5fa
 
 RUN apt-get update
-RUN apt-get install -y python3.5 python3-pip git build-essential curl sudo
+RUN apt-get install -y python3.5 python3-pip git build-essential curl sudo libffi-dev libssl-dev
 
 WORKDIR /root
 RUN git clone $NODEPOOL_REPO
