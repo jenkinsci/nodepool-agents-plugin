@@ -28,6 +28,7 @@ import hudson.model.FreeStyleProject;
 import hudson.model.Label;
 import hudson.model.Queue;
 import hudson.model.Queue.Task;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
@@ -53,6 +54,9 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
 
     public NodePools() {
         load();
+        if (nodePools == null) {
+            nodePools = new ArrayList();
+        }
     }
 
     @Override
