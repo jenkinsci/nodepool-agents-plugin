@@ -1,0 +1,15 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form" xmlns:s="/lib/samples">
+    <l:pane width="2" title="NodePool Requests">
+        <j:forEach var="np" items="${it.nodePools}">
+            <ol>
+            <j:forEach var="request" items="${np.Requests}">
+                <li>
+                    <a href="${request.jenkinsLabel.url}"> ${request.jenkinsLabel} </a>&#160;
+                    <a href="${request.task.url}"> ${request.task.fullDisplayName} </a> (${request.age})
+                </li>
+            </j:forEach>
+            </ol>
+        </j:forEach>
+    </l:pane>
+</j:jelly>

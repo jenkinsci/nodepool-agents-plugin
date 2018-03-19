@@ -23,7 +23,7 @@
  */
 package com.rackspace.jenkins_nodepool;
 
-import java.nio.charset.Charset;
+import java.text.MessageFormat;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -32,11 +32,11 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.api.CuratorWatcher;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException.NodeExistsException;
 import org.apache.zookeeper.WatchedEvent;
+
 
 /**
  * Partial Java implementation of the python module kazoo.recipe.lock
@@ -44,12 +44,14 @@ import org.apache.zookeeper.WatchedEvent;
  */
 public class KazooLock {
 
+    private enum State {
+        UNLOCKED, LOCKING, LOCKED
+    }
+
     private static final Logger LOG = Logger.getLogger(KazooLock.class.getName());
 
-    private String connectionString;
     // Path is the path to the node to be locked
     private final String path;
-    private final String identifier;
     private final String node_name = "__lock__";
     private final String prefix;
     private final Long timeout;
@@ -61,23 +63,21 @@ public class KazooLock {
     private final String create_path;
     //this is set to create_path+index number, when the node is created
     private String node;
-    private Charset utf8;
     private Integer sequence;
+    private State state = State.UNLOCKED;
+    private NodePool nodePool;
 
-    public KazooLock(String connectionString, String path) {
-        this(connectionString, path, "jenkins", 5, TimeUnit.SECONDS);
+    public KazooLock(String path, NodePool nodePool) {
+        this(path, 5, TimeUnit.SECONDS, nodePool);
     }
 
-    public KazooLock(String connectionString,
-            String path, String identifier, long timeout, TimeUnit unit){
-        this.connectionString = connectionString;
+    public KazooLock(String path, long timeout, TimeUnit unit, NodePool nodePool) {
+        this.nodePool = nodePool;
         this.path = path;
-        this.identifier = identifier;
         this.timeout = timeout;
         this.unit = unit;
         this.prefix = UUID.randomUUID().toString() + node_name; //type 4
         this.create_path = this.path + "/" + this.prefix;
-        this.utf8 = Charset.forName("UTF-8");
     }
 
     private class KazooLockWatcher<T extends WatchedEvent>
@@ -100,43 +100,41 @@ public class KazooLock {
         }
     }
 
-    CuratorFramework getConnection() {
-        return ZooKeeperClient.getConnection(connectionString);
-    }
-
     void waitForNodeRemoval(String path)
             throws Exception{
         KazooLockWatcher klw = new KazooLockWatcher();
-        while (getConnection().checkExists().usingWatcher(klw).forPath(path) != null) {
+        while (nodePool.getConn().checkExists().usingWatcher(klw).forPath(path) != null) {
             WatchedEvent we = (WatchedEvent)klw.poll(timeout, unit);
             if (we == null){
                 throw new KazooLockException("Timeout Acquiring Lock for node: "+this.path);
             }
-
         }
     }
 
     public void acquire() throws Exception {
-        LOG.log(Level.INFO, "KazooLock.acquire");
+        state = State.LOCKING;
+        LOG.log(Level.FINEST, "KazooLock.acquire");
+        byte[] requestor = nodePool.getRequestor().getBytes(nodePool.getCharset());
         // 1. Ensure path to be locked exists
         try {
-            getConnection().create()
+            nodePool.getConn().create()
                     .creatingParentsIfNeeded()
-                .forPath(path, identifier.getBytes(utf8));
+                    .forPath(path, requestor);
         } catch (NodeExistsException ex) {
             // node already exists, nothing to do.
         }
 
         // 2. Create create path and determine our sequence
-        node = getConnection().create()                   .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
-                .forPath(create_path, identifier.getBytes(utf8));
-        LOG.log(Level.INFO, "Lock contender created:" + node);
+        node = nodePool.getConn().create()
+                .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
+                .forPath(create_path, requestor);
+        LOG.log(Level.FINEST, "Lock contender created:" + node);
         sequence = sequenceNumberForPath(node);
 
         // 3. Wait for any child nodes with lower seq numbers
-        List<String> contenders = getConnection().getChildren().forPath(path);
+        List<String> contenders = nodePool.getConn().getChildren().forPath(path);
         for (String contender : contenders){
-            LOG.log(Level.INFO, "Found contender for lock:{0}", contender);
+            LOG.log(Level.FINEST, "Found contender for lock:{0}", contender);
             Integer contenderSequence = sequenceNumberForPath(contender);
             if (contenderSequence < sequence){
                 // This contender is ahead of us in the queue,
@@ -151,10 +149,21 @@ public class KazooLock {
                  */
             }
         }
+        LOG.log(Level.FINE, "Lock Acquired {0}", path);
+        state = State.LOCKED;
 
     }
-    public void release() throws Exception{
-        getConnection().delete().forPath(node);
+    public void release() throws Exception {
+        LOG.log(Level.FINEST, "Releasing Lock {0}", path);
+        if (state != State.LOCKED) {
+            throw new IllegalStateException(MessageFormat.format("Cannot unlock from state: {0}, Path: {1}", state, node));
+        }
+        if (node == null) {
+            throw new IllegalStateException(MessageFormat.format("Trying to unlock before lock has been locked. State:{0}, Path:{1}", state, node));
+        }
+        nodePool.getConn().delete().forPath(node);
+        state = State.UNLOCKED;
+        LOG.log(Level.FINE, "Released Lock {0}", path);
     }
 
 }

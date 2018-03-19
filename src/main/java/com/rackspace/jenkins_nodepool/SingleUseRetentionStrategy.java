@@ -24,35 +24,64 @@
 package com.rackspace.jenkins_nodepool;
 
 import hudson.model.Computer;
+import hudson.model.Executor;
+import hudson.model.ExecutorListener;
+import hudson.model.Queue;
 import hudson.slaves.RetentionStrategy;
 import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.servlet.ServletException;
 
 /**
- * SingleUseRetentionStrategy This strategy will delete a computer once it is
- * idle, if it has at least one associated build.
+ * SingleUseRetentionStrategy This strategy will delete a NodePoolComputer as
+ * soon as its single executor has completed a task.
  *
- * @author hughsaunders
+ * Extends always to ensure nodes are launched successfully, then uses
+ * ExecutorListener to kill off each node as soon as it finishes a task.
+ *
+ * @author Rackspace
  */
-public class SingleUseRetentionStrategy extends RetentionStrategy {
+public class SingleUseRetentionStrategy extends RetentionStrategy.Always implements ExecutorListener {
 
     private static final Logger LOG = Logger.getLogger(SingleUseRetentionStrategy.class.getName());
 
-    /**
-     *
-     * @param c Computer
-     * @return
-     */
     @Override
-    public long check(Computer c) {
-        if (!c.getBuilds().isEmpty() && c.countBusy() == 0) {
-            try {
-                c.doDoDelete();
-            } catch (IOException ex) {
-                LOG.log(Level.SEVERE, null, ex);
-            }
+    public void taskAccepted(Executor executor, Queue.Task task) {
+        NodePoolComputer c = (NodePoolComputer) executor.getOwner();
+        LOG.log(Level.FINE, "Starting task {0} on NodePoolComputer {1}", new Object[]{task.getFullDisplayName(), c});
+    }
+
+    @Override
+    public void taskCompleted(Executor executor, Queue.Task task, long durationMS) {
+        deleteNodePoolComputer(executor, task);
+    }
+
+    @Override
+    public void taskCompletedWithProblems(Executor executor, Queue.Task task, long durationMS, Throwable problems) {
+        deleteNodePoolComputer(executor, task);
+    }
+
+    private void deleteNodePoolComputer(Executor executor, Queue.Task task) {
+        try {
+            // When an executor finishes a task, there is a race between
+            // the scheduler reusing it and this listener killing the computer.
+            // In order to give ourselves the best chance in this race,
+            // the computer is marked as offline in the listener thread
+            // before the deleter thread is kicked off to actually go and
+            // talk to nodepool to release the node.
+            final NodePoolComputer c = (NodePoolComputer) executor.getOwner();
+            c.doToggleOffline("Disconnecting");
+            LOG.log(Level.INFO, "Deleting NodePoolNode {0} after task {1}", new Object[]{c, task.getFullDisplayName()});
+            Computer.threadPoolForRemoting.submit(() -> {
+                try {
+                    c.doDoDelete();
+                } catch (IOException ex) {
+                    LOG.log(Level.SEVERE, null, ex);
+                }
+            });
+        } catch (IOException | ServletException ex) {
+            LOG.log(Level.SEVERE, null, ex);
         }
-        return 2;
     }
 }

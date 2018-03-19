@@ -24,40 +24,35 @@
 package com.rackspace.jenkins_nodepool;
 
 import hudson.Extension;
-import hudson.model.Build;
-import hudson.model.Node;
-import hudson.model.TaskListener;
-import hudson.model.listeners.RunListener;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import hudson.model.Label;
+import hudson.widgets.Widget;
+import jenkins.model.Jenkins;
 
+/**
+ *
+ * @author Rackspcae
+ */
 @Extension
-public class SingleUseSlaveListener extends RunListener<Build> {
+public class RequestsWidget extends Widget {
 
-    private static final Logger LOG = Logger.getLogger(SingleUseSlaveListener.class.getName());
+    private final NodePools nodePools;
 
-    public SingleUseSlaveListener() {
+    public RequestsWidget() {
+        nodePools = NodePools.get();
     }
 
+    public NodePools getNodePools() {
+        return nodePools;
+    }
 
     @Override
-    public void onCompleted(Build build, TaskListener listener) {
-        LOG.log(Level.INFO, "onCompleted:{0} {1}", new Object[]{build.toString(), listener.toString()});
-        Node node = build.getBuiltOn();
-        node.getAssignedLabels().stream().filter((label) -> (label.getName().startsWith("nodepool-"))).forEachOrdered((_item) -> {
-            try {
-                if (!(node instanceof NodePoolSlave)) {
-                    return;
-                }
-                // this is  a nodepool node, kill it.
-                NodePoolSlave nps = (NodePoolSlave) node;
-                NodePoolNode npn = nps.getNode();
-                node.toComputer().doDoDelete();
-                npn.release();
-            } catch (Exception ex) {
-                LOG.log(Level.SEVERE, null, ex);
-            }
-        });
+    public String getUrlName() {
+        return "nodepoolRequests";
+    }
 
+    public String getLabelUrl(String l) {
+        Jenkins j = Jenkins.getInstance();
+        Label label = j.getLabel(l);
+        return label.getUrl();
     }
 }

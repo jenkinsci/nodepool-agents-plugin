@@ -2,6 +2,8 @@ version: '3'
 
 services:
 
+#TODO: add nodepool webapp
+
   zookeeper:
     image: zookeeper
     ports:
