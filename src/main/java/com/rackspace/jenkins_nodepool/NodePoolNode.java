@@ -11,13 +11,11 @@ import java.util.List;
 public class NodePoolNode extends ZooKeeperObject {
 
     private final KazooLock lock;
-    private final NodePool nodePool;
     @XStreamOmitField
     private NodePoolComputer computer;
 
     public NodePoolNode(NodePool nodePool, String id) throws Exception {
         super(nodePool);
-        this.nodePool = nodePool;
         super.setPath(MessageFormat.format("/{0}/{1}",
                 new Object[]{nodePool.getNodeRoot(), id}));
         super.setZKID(id);
