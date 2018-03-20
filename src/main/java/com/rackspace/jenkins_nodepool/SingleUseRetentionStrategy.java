@@ -54,11 +54,14 @@ public class SingleUseRetentionStrategy extends RetentionStrategy.Always impleme
 
     @Override
     public void taskCompleted(Executor executor, Queue.Task task, long durationMS) {
+        LOG.log(Level.FINE, "Task " + task.getFullDisplayName() + " completed normally");
         deleteNodePoolComputer(executor, task);
     }
 
     @Override
     public void taskCompletedWithProblems(Executor executor, Queue.Task task, long durationMS, Throwable problems) {
+        LOG.log(Level.FINE, "Task " + task.getFullDisplayName() + " completed with problems", problems);
+
         deleteNodePoolComputer(executor, task);
     }
 
@@ -73,6 +76,7 @@ public class SingleUseRetentionStrategy extends RetentionStrategy.Always impleme
             final NodePoolComputer c = (NodePoolComputer) executor.getOwner();
             c.doToggleOffline("Disconnecting");
             LOG.log(Level.INFO, "Deleting NodePoolNode {0} after task {1}", new Object[]{c, task.getFullDisplayName()});
+
             Computer.threadPoolForRemoting.submit(() -> {
                 try {
                     c.doDoDelete();

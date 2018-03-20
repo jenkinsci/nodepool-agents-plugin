@@ -13,15 +13,14 @@ providers:
     region-name: %NODEPOOL_REGION_NAME%
 
     cloud-images:
-      - name: debian-jessie-external
-        #image-name: Ubuntu 16.04 LTS (Xenial Xerus) (PVHVM)
+      - name: debian-stretch-external
         image-name: nodepooljava
     pools:
       - name: main
         max-servers: 10
         labels:
           - name: debian
-            cloud-image: debian-jessie-external
+            cloud-image: debian-stretch-external
             flavor-name: performance1-4
             key-name: %NODEPOOL_KEYPAIR_NAME%
 

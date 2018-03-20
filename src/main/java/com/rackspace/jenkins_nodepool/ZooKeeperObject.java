@@ -69,11 +69,15 @@ public abstract class ZooKeeperObject {
         this.data.putAll(data);
     }
 
-    public final void updateFromZK() throws Exception {
+    public Map getFromZK() throws Exception {
         byte[] bytes = nodePool.getConn().getData().forPath(this.path);
         String jsonString = new String(bytes, nodePool.getCharset());
         LOG.log(Level.FINEST, "Read ZNODE: {0}, Data: {1}", new Object[]{path, jsonString});
-        final Map zkData = GSON.fromJson(jsonString, HashMap.class);
+        return GSON.fromJson(jsonString, HashMap.class);
+    }
+
+    public final void updateFromZK() throws Exception {
+        final Map zkData = getFromZK();
         updateFromMap(zkData);
     }
 
@@ -94,4 +98,7 @@ public abstract class ZooKeeperObject {
         }
     }
 
+    public boolean exists() throws Exception {
+        return nodePool.getConn().checkExists().forPath(getPath()) != null;
+    }
 }
