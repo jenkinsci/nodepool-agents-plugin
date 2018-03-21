@@ -69,12 +69,26 @@ import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
 
+/**
+ * Representation of a ZooKeeper+NodePool cluster configuration.
+ * <p>
+ * Instances hold configuration data entered in the Jenkins UI and are serialized/deserialized via Stapler
+ */
+
 public class NodePool implements Describable<NodePool> {
 
     private static final Logger LOG = Logger.getLogger(NodePool.class.getName());
-    static CuratorFramework createZKConnection(String connectionString,
+
+    /**
+     * Create a curator managed connection to ZooKeeper
+     *
+     * @param connectionString  ZooKeeper connection string
+     * @param zkRoot  root path to prefix onto all Curator (ZK) requests
+     * @return CuratorFramework connection wrapper instance
+     */
+    private static CuratorFramework createZKConnection(String connectionString,
             String zkRoot) {
-        CuratorFramework conn = CuratorFrameworkFactory.builder()
+        final CuratorFramework conn = CuratorFrameworkFactory.builder()
                 .connectString(connectionString)
                 .namespace(zkRoot)
                 .retryPolicy(new ExponentialBackoffRetry(1000, 3))
@@ -82,28 +96,80 @@ public class NodePool implements Describable<NodePool> {
         conn.start();
         return conn;
     }
+
     private final Charset charset = Charset.forName("UTF-8");
+
+    /**
+     * List of Jenkins Computers that are associated with this NodePool cluster.
+     */
     private List<NodePoolComputer> computers;
+
     @XStreamOmitField
     private CuratorFramework conn;
+
+    /**
+     * ZooKeeper connection string
+     */
     private String connectionString;
+
+    /**
+     * Jenkins sourced credential identifier
+     */
     private String credentialsId;
+
+    /**
+     * Serializer used for saving node request data to/from ZooKeeper
+     */
     @XStreamOmitField
     private final Gson gson = new Gson();
+
+    /**
+     * Prefix used to associate select Jenkins labels with this NodePool cluster.
+     */
     private String labelPrefix;
+
+    /**
+     * ZNode prefix prepended to all nodes
+     */
     private String nodeRoot;
+
+    /**
+     * Priority value used as part of the node request path.
+     */
     private String priority;
+
+    /**
+     * ZNode path prefix prepended to all node requests.
+     */
     private String requestRoot;
+
+    /**
+     * Name of process submitting a node request.
+     */
     private String requestor;
 
+    /**
+     * List of node requests submitted to this NodePool cluster
+     */
     private List<NodeRequest> requests;
+
+    /**
+     * Prefix used to prepend to all NodePool related ZNodes
+     */
     private String zooKeeperRoot;
 
-    public NodePool() {
-        conn = NodePool.createZKConnection(connectionString, getZooKeeperRoot());
-        initTrackers();
-    }
-
+    /**
+     * Constructor invoked by Jenkins's Stapler library.
+     *
+     * @param connectionString  ZooKeeper connection string
+     * @param credentialsId  Credential information identifier
+     * @param labelPrefix  Prefix for labels served by this NodePool cluster
+     * @param requestRoot  Prefix of node requests
+     * @param priority  Priority value of node requests
+     * @param requestor  Name of process making node requests
+     * @param zooKeeperRoot  Prefix of all NodePool-related ZNodes
+     * @param nodeRoot  Prefix of nodes
+     */
     @DataBoundConstructor
     public NodePool(String connectionString,
             String credentialsId, String labelPrefix, String requestRoot,
@@ -122,9 +188,9 @@ public class NodePool implements Describable<NodePool> {
     /**
      * Accept the node that was created to satisfy the given request.
      *
-     * @param request node request
+     * @param request  node request
      * @return node name as a String
-     * @throws java.lang.Exception
+     * @throws java.lang.Exception on ZooKeeper error
      */
     public List<NodePoolNode> acceptNodes(NodeRequest request) throws Exception {
 
@@ -164,9 +230,11 @@ public class NodePool implements Describable<NodePool> {
 
         return acceptedNodes;
     }
+
     public Charset getCharset() {
         return charset;
     }
+
     public CuratorFramework getConn() {
         if (conn == null) {
             conn = NodePool.createZKConnection(connectionString, zooKeeperRoot);
@@ -177,6 +245,7 @@ public class NodePool implements Describable<NodePool> {
     public String getConnectionString() {
         return connectionString;
     }
+
     public String getCredentialsId() {
         return credentialsId;
     }
@@ -185,6 +254,7 @@ public class NodePool implements Describable<NodePool> {
         return new NodePoolDescriptor();
 
     }
+
     public Gson getGson() {
         return gson;
     }
@@ -209,21 +279,9 @@ public class NodePool implements Describable<NodePool> {
     public String getRequestor() {
         return requestor;
     }
+
     public List<NodeRequest> getRequests() {
         return requests;
-    }
-    /**
-     * Get data for a node
-     *
-     * @param path path to query
-     * @return Map representing the json data stored on the node.
-     * @throws Exception barf
-     */
-    public Map getZNode(String path) throws Exception {
-        byte[] jsonBytes = conn.getData().forPath(path);
-        String jsonString = new String(jsonBytes, charset);
-        final Map data = gson.fromJson(jsonString, HashMap.class);
-        return data;
     }
 
     public final String getZooKeeperRoot() {
@@ -242,9 +300,21 @@ public class NodePool implements Describable<NodePool> {
         }
         return true;
     }
+
+    /**
+     * Convert the given jenkins label into its NodePool equivalent
+     *
+     * @param jenkinsLabel  jenkins label
+     * @return  NodePool label without the prefix
+     */
     public String nodePoolLabelFromJenkinsLabel(String jenkinsLabel) {
         return jenkinsLabel.substring(getLabelPrefix().length());
     }
+
+    /**
+     * Remove a computer from the tracking list
+     * @param c  computer
+     */
     public void removeComputer(NodePoolComputer c) {
         computers.remove(c);
     }
@@ -301,6 +371,13 @@ public class NodePool implements Describable<NodePool> {
         }
     }
 
+    /**
+     * Extract the request id from the given path
+     *
+     * @param path  path to node request
+     * @return request id
+     * @throws NodePoolException if the request id cannot be found
+     */
     String idForPath(String path) throws NodePoolException {
         if (path.contains("-")) {
             List<String> parts = Arrays.asList(path.split("-"));
@@ -311,18 +388,25 @@ public class NodePool implements Describable<NodePool> {
         }
     }
 
+    /**
+     * Submit request for node(s) required to execute the given task
+     *
+     * @param label  Jenkins label
+     * @param task  task/build being executed
+     * @throws Exception on ZooKeeper error
+     */
     void provisionNode(Label label, Task task) throws Exception {
 
         // *** Request Node ***
         //TODO: store prefix in config and pass in.
-        NodeRequest request = new NodeRequest(this, task);
+        final NodeRequest request = new NodeRequest(this, task);
         requests.add(request);
 
         // *** Poll request status and wait for fulfillment
         //TODO: store timeout in config
         //TODO: Curator async stuff to avoid polling
-        Integer timeout = 1200 * 1000; //timeout in milliseconds
-        Long startTime = System.currentTimeMillis();
+        final Integer timeout = 1200 * 1000; //timeout in milliseconds
+        final Long startTime = System.currentTimeMillis();
         RequestState requestState = RequestState.requested;
         List<NodePoolNode> allocatedNodes = null;
         while (System.currentTimeMillis() < startTime + timeout) {
@@ -345,7 +429,7 @@ public class NodePool implements Describable<NodePool> {
                 break;
             }
 
-            boolean done = requestState == RequestState.fulfilled;
+            final boolean done = requestState == RequestState.fulfilled;
             if (done) {
                 try {
                     // accept here so that if any error conditions occur, the above update logic will automatically re-submit
@@ -369,13 +453,18 @@ public class NodePool implements Describable<NodePool> {
         }
 
         // *** Get allocated nodes from the request and add to Jenkins
-        NodePoolNode node = allocatedNodes.get(0);
-        NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId());
-        Jenkins jenkins = Jenkins.getInstance();
+        final NodePoolNode node = allocatedNodes.get(0);
+        final NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId());
+        final Jenkins jenkins = Jenkins.getInstance();
         jenkins.checkPermission(SlaveComputer.CREATE);
         jenkins.addNode(nps);
         LOG.log(Level.INFO, "Added NodePool slave to Jenkins: {0}", nps);
     }
+
+    /**
+     * Descriptor class to support configuration of a NodePool instance in the Jenkins UI
+     *
+     */
 
     @Extension
     public static class NodePoolDescriptor extends Descriptor<NodePool> {
@@ -431,6 +520,9 @@ public class NodePool implements Describable<NodePool> {
          * Shamelessly stolen from
          * https://github.com/jenkinsci/ssh-slaves-plugin/blob/master/src/main/java/hudson/plugins/sshslaves/SSHConnector.java#L314
          *
+         * @param context  item grouping context
+         * @param credentialsId  Jenkins credential identifier
+         * @return a list box model
          */
         public ListBoxModel doFillCredentialsIdItems(@AncestorInPath ItemGroup context, @QueryParameter String credentialsId) {
             AccessControlled _context = (context instanceof AccessControlled ? (AccessControlled) context : Jenkins.getInstance());

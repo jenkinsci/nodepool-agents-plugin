@@ -32,13 +32,25 @@ import java.io.IOException;
 import java.util.ArrayList;
 
 /**
+ * Representation of a Jenkins slave sourced from NodePool.
  *
  * @author hughsaunders
  */
 public class NodePoolSlave extends Slave {
 
+    /**
+     * The node from the associated NodePool cluster.
+     */
     private final NodePoolNode nodePoolNode;
 
+    /**
+     * Create a new slave
+     *
+     * @param nodePoolNode  the node from NodePool
+     * @param credentialsId  the Jenkins credential identifier
+     * @throws Descriptor.FormException  on configuration exception
+     * @throws IOException on configuration exception
+     */
     public NodePoolSlave(NodePoolNode nodePoolNode, String credentialsId) throws Descriptor.FormException, IOException {
 
         super(
@@ -74,6 +86,7 @@ public class NodePoolSlave extends Slave {
         return nodePoolNode;
     }
 
+    // TODO seems odd storing the computer object on the node since it's related to the slave object here.
     @Override
     public Computer createComputer() {
         NodePoolComputer npc = new NodePoolComputer(this, nodePoolNode);

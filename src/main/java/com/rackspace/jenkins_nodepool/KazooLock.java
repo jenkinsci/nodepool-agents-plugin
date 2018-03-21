@@ -39,7 +39,8 @@ import org.apache.zookeeper.WatchedEvent;
 
 
 /**
- * Partial Java implementation of the python module kazoo.recipe.lock
+ * Partial Java implementation of the Python module kazoo.recipe.lock
+ *
  * @author hughsaunders
  */
 public class KazooLock {
@@ -50,27 +51,71 @@ public class KazooLock {
 
     private static final Logger LOG = Logger.getLogger(KazooLock.class.getName());
 
-    // Path is the path to the node to be locked
+    /**
+     * Path to the lock ZNode to be created on acquisition
+     */
     private final String path;
+
+
     private final String node_name = "__lock__";
     private final String prefix;
+
+    /**
+     * Lock acquisition timeout value.
+     */
     private final Long timeout;
+
+    /**
+     * Time measurement unit of lock acquisition timeout value.
+     */
     private final TimeUnit unit;
-    /** create_path is the path we create to represent our lock or place in the
-     * queue. The actual node name will have a sequence number appended by
-     * zookeeper. The full node path is stored in self.node
+
+    /**
+     * Path to a temporary node to create in order to "queue" with other processes attempting to acquire the same lock.
+     * <p>
+     * The actual node name will have a sequence number appended by
+     * ZooKeeper. The full node path is stored in self.node
      */
     private final String create_path;
-    //this is set to create_path+index number, when the node is created
+
+    /**
+     * Path to actual ZNodecreated with the create_path.
+     */
     private String node;
+
+    /**
+     * A number indicating the current process's "place in line" waiting to acquire the lock
+     */
     private Integer sequence;
+
+    /**
+     * Lock status value
+     */
     private State state = State.UNLOCKED;
+
+    /**
+     * Reference to information about the NodePool/ZooKeeper cluster being used.
+     */
     private NodePool nodePool;
 
+    /**
+     * Create a new lock object.
+     *
+     * @param path  the path to the lock ZNode that will be created upon acquiring the lock
+     * @param nodePool  node pool object containing ZooKeeper connection information
+     */
     public KazooLock(String path, NodePool nodePool) {
         this(path, 5, TimeUnit.SECONDS, nodePool);
     }
 
+    /**
+     * Create a new lock object.
+     *
+     * @param path  the path to the lock ZNode that will be created upon acquiring the lock
+     * @param timeout  time to wait until lock acquisition is deemed a failure
+     * @param unit  unit of time for the timeout
+     * @param nodePool  node pool object containing ZooKeeper connection information
+     */
     public KazooLock(String path, long timeout, TimeUnit unit, NodePool nodePool) {
         this.nodePool = nodePool;
         this.path = path;
@@ -89,6 +134,14 @@ public class KazooLock {
         }
     }
 
+    /**
+     * Given the path to the temporary ZNode created to queue for locking, extract the number at the end of the
+     * path.  This represents a sequence number for queueing for the lock.
+     *
+     * @param path  path to temporary lock acquisition ZNode
+     * @return integer sequence number
+     * @throws KazooLockException  if there is an issue with the node path not conforming to the expected format
+     */
     static Integer sequenceNumberForPath(String path) throws KazooLockException {
         Pattern p = Pattern.compile("_([0-9]+)$");
         Matcher m = p.matcher(path);
@@ -100,21 +153,31 @@ public class KazooLock {
         }
     }
 
-    void waitForNodeRemoval(String path)
-            throws Exception{
-        KazooLockWatcher klw = new KazooLockWatcher();
+    /**
+     * Poll for the given contender ZNode to disappear
+     *
+     * @param path  path to the lock contender ZNode
+     * @throws Exception  on lock acquisition timeout or ZooKeeper error
+     */
+    private void waitForNodeRemoval(String path) throws Exception {
+        final KazooLockWatcher klw = new KazooLockWatcher();
         while (nodePool.getConn().checkExists().usingWatcher(klw).forPath(path) != null) {
-            WatchedEvent we = (WatchedEvent)klw.poll(timeout, unit);
+            final WatchedEvent we = (WatchedEvent)klw.poll(timeout, unit);
             if (we == null){
                 throw new KazooLockException("Timeout Acquiring Lock for node: "+this.path);
             }
         }
     }
 
+    /**
+     * Acquire the lock for the current process
+     *
+     * @throws Exception if any ZooKeeper error occurs
+     */
     public void acquire() throws Exception {
         state = State.LOCKING;
         LOG.log(Level.FINEST, "KazooLock.acquire");
-        byte[] requestor = nodePool.getRequestor().getBytes(nodePool.getCharset());
+        final byte[] requestor = nodePool.getRequestor().getBytes(nodePool.getCharset());
         // 1. Ensure path to be locked exists
         try {
             nodePool.getConn().create()
@@ -132,10 +195,10 @@ public class KazooLock {
         sequence = sequenceNumberForPath(node);
 
         // 3. Wait for any child nodes with lower seq numbers
-        List<String> contenders = nodePool.getConn().getChildren().forPath(path);
-        for (String contender : contenders){
+        final List<String> contenders = nodePool.getConn().getChildren().forPath(path);
+        for (final String contender : contenders){
             LOG.log(Level.FINEST, "Found contender for lock:{0}", contender);
-            Integer contenderSequence = sequenceNumberForPath(contender);
+            final Integer contenderSequence = sequenceNumberForPath(contender);
             if (contenderSequence < sequence){
                 // This contender is ahead of us in the queue,
                 // watch and wait
@@ -153,6 +216,12 @@ public class KazooLock {
         state = State.LOCKED;
 
     }
+
+    /**
+     * Release the lock
+     *
+     * @throws Exception on ZooKeeper error or lock state error.
+     */
     public void release() throws Exception {
         LOG.log(Level.FINEST, "Releasing Lock {0}", path);
         if (state != State.LOCKED) {

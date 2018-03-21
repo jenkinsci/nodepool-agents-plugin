@@ -42,6 +42,10 @@ import net.sf.json.JSONObject;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.StaplerRequest;
 
+/**
+ * Top level Jenkins configuration class to manage all NodePool configuration
+ */
+
 @Extension
 public class NodePools extends GlobalConfiguration implements Iterable<NodePool> {
 
