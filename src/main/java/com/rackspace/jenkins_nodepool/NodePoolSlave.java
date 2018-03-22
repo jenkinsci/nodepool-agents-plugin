@@ -28,6 +28,8 @@ import hudson.model.Descriptor;
 import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.plugins.sshslaves.verifiers.ManuallyProvidedKeyVerificationStrategy;
+import hudson.slaves.RetentionStrategy;
+
 import java.io.IOException;
 import java.util.ArrayList;
 
@@ -73,10 +75,10 @@ public class NodePoolSlave extends Slave {
                         30, //maxNumRetries
                         10, //retryWaitTime
                         new ManuallyProvidedKeyVerificationStrategy(nodePoolNode.getHostKey())
-                //new NonVerifyingKeyVerificationStrategy()
-                //TODO: go back to verifying host key strategy
+                        //new NonVerifyingKeyVerificationStrategy()
+                        //TODO: go back to verifying host key strategy
                 ),
-                new SingleUseRetentionStrategy(),
+                new RetentionStrategy.Always(), //retentionStrategy
                 new ArrayList() //nodeProperties
         );
         this.nodePoolNode = nodePoolNode;

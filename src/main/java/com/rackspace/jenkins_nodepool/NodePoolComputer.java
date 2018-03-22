@@ -23,12 +23,17 @@
  */
 package com.rackspace.jenkins_nodepool;
 
+import hudson.model.Computer;
+import hudson.model.Executor;
+import hudson.model.Queue;
 import hudson.model.Slave;
 import hudson.slaves.SlaveComputer;
 import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.kohsuke.stapler.HttpResponse;
+
+import javax.servlet.ServletException;
 
 /**
  *
@@ -82,5 +87,48 @@ public class NodePoolComputer extends SlaveComputer {
     @Override
     public String getDisplayName() {
         return toString();
+    }
+
+    @Override
+    public void taskAccepted(Executor executor, Queue.Task task) {
+        super.taskAccepted(executor, task);
+
+        NodePoolComputer c = (NodePoolComputer) executor.getOwner();
+        LOG.log(Level.FINE, "Starting task {0} on NodePoolComputer {1}", new Object[]{task.getFullDisplayName(), c});
+    }
+
+    @Override
+    public void taskCompleted(Executor executor, Queue.Task task, long durationMS) {
+        super.taskCompleted(executor, task, durationMS);
+
+        LOG.log(Level.FINE, "Task " + task.getFullDisplayName() + " completed normally");
+        deleteNodePoolComputer(executor, task);
+    }
+
+    @Override
+    public void taskCompletedWithProblems(Executor executor, Queue.Task task, long durationMS, Throwable problems) {
+        super.taskCompletedWithProblems(executor, task, durationMS, problems);
+
+        LOG.log(Level.FINE, "Task " + task.getFullDisplayName() + " completed with problems", problems);
+
+        deleteNodePoolComputer(executor, task);
+    }
+
+    private void deleteNodePoolComputer(Executor executor, Queue.Task task) {
+
+        // indicate that the agent has been programmatically suspended.  this will safely mark the computer as
+        // unavailable for tasks before the executor is freed up and Jenkins attempts to send it another task.
+        final NodePoolComputer c = (NodePoolComputer) executor.getOwner();
+        c.setAcceptingTasks(false);
+
+        LOG.log(Level.INFO, "Deleting NodePoolNode {0} after task {1}", new Object[]{c, task.getFullDisplayName()});
+
+        Computer.threadPoolForRemoting.submit(() -> {
+            try {
+                c.doDoDelete();
+            } catch (IOException ex) {
+                LOG.log(Level.SEVERE, null, ex);
+            }
+        });
     }
 }
