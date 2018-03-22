@@ -1,0 +1,11 @@
+#!/bin/bash
+
+mkdir -p ${RE_HOOK_ARTIFACT_DIR}
+mkdir -p ${RE_HOOK_RESULT_DIR}
+
+# copy junit test results
+cp target/surefire-reports/*.xml ${RE_HOOK_RESULT_DIR}
+
+# translate findbugs results
+. /opt/findbugs2junit/bin/activate
+findbugs2junit target/findbugs.xml ${RE_HOOK_RESULT_DIR}/findbugs.xml

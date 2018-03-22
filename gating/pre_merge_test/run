@@ -1,0 +1,6 @@
+#!/bin/bash -x
+
+if [[ ${RE_JOB_SCENARIO} == "lint" ]]
+then
+    gating/pre_merge_test/runLint
+fi;
