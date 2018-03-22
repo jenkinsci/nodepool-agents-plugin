@@ -34,6 +34,10 @@ import java.util.logging.Logger;
 //TODO: Scan build queue on startup for pipelines that persist across restarts as the
 // queue entry event won't refire.
 
+/**
+ * Listener to capture the start of new builds and provision NodePool nodes
+ */
+
 @Extension
 public class NodePoolQueueListener extends QueueListener {
 
@@ -41,6 +45,11 @@ public class NodePoolQueueListener extends QueueListener {
 
     private final NodePools nodePools = NodePools.get();
 
+    /**
+     * When a build is started, kick off a task to create any required NodePool nodes to service it.
+     *
+     * @param wi  item waiting in build queue
+     */
     @Override
     public void onEnterWaiting(Queue.WaitingItem wi) {
         final Label label = wi.getAssignedLabel();

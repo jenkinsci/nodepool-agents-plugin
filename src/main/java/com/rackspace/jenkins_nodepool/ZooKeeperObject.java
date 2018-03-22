@@ -33,17 +33,36 @@ import java.util.logging.Logger;
 /**
  * Base class for zookeeper proxy objects.
  *
- * @author Rackspace
  */
 public abstract class ZooKeeperObject {
     private static final Logger LOG = Logger.getLogger(ZooKeeperObject.class.getName());
     static final Gson GSON = new Gson();
 
+    /**
+     * Copy (possible stale) of data held in a ZNode
+     */
     final Map data;
+
+    /**
+     * Path to ZNode
+     */
     String path;
+
+    /**
+     * An identifier associated with a ZNode
+     */
     String zKID;
+
+    /**
+     * Associated NodePool + ZK information
+     */
     NodePool nodePool;
 
+    /**
+     * Initialize local copy of ZNode data
+     *
+     * @param nodePool associated NodePool cluster
+     */
     public ZooKeeperObject(NodePool nodePool) {
         data = new HashMap();
         this.nodePool = nodePool;
@@ -69,6 +88,12 @@ public abstract class ZooKeeperObject {
         this.data.putAll(data);
     }
 
+    /**
+     * Get a copy of this object's data from the ZNode
+     *
+     * @return Map of the ZNode data
+     * @throws Exception on ZooKeeper error
+     */
     public Map getFromZK() throws Exception {
         byte[] bytes = nodePool.getConn().getData().forPath(this.path);
         String jsonString = new String(bytes, nodePool.getCharset());
@@ -76,6 +101,11 @@ public abstract class ZooKeeperObject {
         return GSON.fromJson(jsonString, HashMap.class);
     }
 
+    /**
+     * Update this instance from values in the associated ZNode
+     *
+     * @throws Exception on ZooKeeper error
+     */
     public final void updateFromZK() throws Exception {
         final Map zkData = getFromZK();
         updateFromMap(zkData);
@@ -89,6 +119,9 @@ public abstract class ZooKeeperObject {
         nodePool.getConn().setData().forPath(this.path, getJson().getBytes(nodePool.getCharset()));
     }
 
+    /**
+     * Delete the associated ZNode
+     */
     public void delete() {
         try {
             nodePool.getConn().delete().forPath(path);
@@ -98,6 +131,12 @@ public abstract class ZooKeeperObject {
         }
     }
 
+    /**
+     * Check if the associated ZNode exists
+     *
+     * @return true if the node exists
+     * @throws Exception  on ZooKeeper error
+     */
     public boolean exists() throws Exception {
         return nodePool.getConn().checkExists().forPath(getPath()) != null;
     }

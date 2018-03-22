@@ -15,19 +15,26 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+ * This class listens to Jenkins "Computer" events as a means to start a background thread that will cleanup
+ * used or orphaned NodePool slaves.
+ */
+
 @Extension
 public class JanitorialListener extends ComputerListener {
 
     private static final Logger LOGGER = Logger.getLogger(JanitorialListener.class.getName());
 
     private static Thread janitorThread;
-    private static final Object lock = new Object();
 
     /**
-     * We don't really care about reacting to Computer related events, but the master computer
-     * coming online is a convenient place to get "start-time" behavior in a plugin.
-     *
-     * Just fire the janitor thread to run in the background and reap orphaned NodePool nodes.
+     * A simple lock object used to ensure that the janitor thread is initialized only once.
+     */
+    private static final Object lock = new Object();
+
+
+    /**
+     * Starts the background janitor thread.
      */
     public JanitorialListener() {
         LOGGER.log(Level.INFO, "Initializing janitor thread");
@@ -39,6 +46,10 @@ public class JanitorialListener extends ComputerListener {
         }
     }
 }
+
+/**
+ * This class implements the logic for the background janitor thread.
+ */
 
 class Janitor implements Runnable {
     private static final Logger LOGGER = Logger.getLogger(JanitorialListener.class.getName());
@@ -68,6 +79,17 @@ class Janitor implements Runnable {
         }
     }
 
+    /**
+     * Examines all the nodes Jenkins currently has, and looks for NodePool nodes that should be removed from
+     * Jenkins.
+     * <p>
+     * Nodes are removed under these conditions:
+     * <p><ul>
+     * <li>The node in question is no longer in NodePool/ZooKeeper</li>
+     * <li>The node has a invalid label</li>
+     * <li>The node was previously used for a build</li>
+     * </ul>
+     */
     private void clean() {
 
         final Jenkins jenkins = Jenkins.getInstance();
@@ -104,6 +126,14 @@ class Janitor implements Runnable {
 
     }
 
+    /**
+     * Mark the given slave node as offline and then remove it from Jenkins.
+     * <p>
+     * If an error occurs, swallow it and assume the cleanup will be tried again later.
+     *
+     * @param nodePoolSlave  the node to remove
+     * @param reason  the reason why the node is being removed
+     */
     private void cleanNode(NodePoolSlave nodePoolSlave, String reason) {
         try {
             nodePoolSlave.toComputer().doToggleOffline(reason);
@@ -116,12 +146,24 @@ class Janitor implements Runnable {
         }
     }
 
+    /**
+     * Check if the given slave node has a label that doesn't match any configured NodePool clusters.
+     *
+     * @param nodePoolSlave  the node to check
+     * @return true if the label is invalid
+     */
     private boolean hasInvalidLabel(NodePoolSlave nodePoolSlave) {
         final String nodeLabel = nodePoolSlave.getLabelString();
         final List<NodePool> nodePools = NodePools.get().nodePoolsForLabel(new LabelAtom(nodeLabel));
         return (nodePools == null || nodePools.size() == 0);
     }
 
+    /**
+     * Check if the given slave node has disappeared in ZooKeeper
+     *
+     * @param nodePoolSlave  the node to check
+     * @return true if the node has disappeared
+     */
     private boolean isMissing(NodePoolSlave nodePoolSlave) {
         if (nodePoolSlave.toComputer().isOffline()) {
             // agent is offline - confirm that this node still exists in ZK/NP:
@@ -142,6 +184,12 @@ class Janitor implements Runnable {
         return false;
     }
 
+    /**
+     * We only want to use each node once, so check if the given node has ever *completed* any build.
+     *
+     * @param nodePoolSlave  the node to check
+     * @return true if the node has previously completed a build
+     */
     private boolean isPreviouslyUsed(NodePoolSlave nodePoolSlave) {
 
         final NodePoolComputer computer = (NodePoolComputer)nodePoolSlave.toComputer();
@@ -158,7 +206,7 @@ class Janitor implements Runnable {
 
         // a build has completed, if any executor is idle, we can safely assume it's done and the slave should be
         // reaped
-        for (Executor executor : computer.getAllExecutors()) {
+        for (final Executor executor : computer.getAllExecutors()) {
 
             if (executor.isIdle()) {
                 LOGGER.log(Level.FINE, "Executor " + executor + " of slave " + nodePoolSlave

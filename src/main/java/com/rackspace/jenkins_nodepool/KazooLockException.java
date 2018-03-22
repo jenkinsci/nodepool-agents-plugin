@@ -24,6 +24,7 @@
 package com.rackspace.jenkins_nodepool;
 
 /**
+ * Exception thrown when an issue occurs with acquiring locks.
  *
  * @author hughsaunders
  */

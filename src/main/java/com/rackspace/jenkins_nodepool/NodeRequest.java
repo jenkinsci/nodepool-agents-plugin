@@ -49,14 +49,28 @@ public class NodeRequest extends ZooKeeperObject {
     // what creates them and what should clean them up?
     private static final Logger LOGGER = Logger.getLogger(NodeRequest.class.getName());
 
+    /**
+     * Request start time.
+     */
     private final Long startTime;
+
+    /**
+     * Associatd Jenkins task that triggered this request
+     */
     private final Task task;
 
+    /**
+     * Create new request
+     *
+     * @param nodePool  NodePool cluster to use
+     * @param task  Associated Jenkins task/build
+     * @throws Exception  on ZooKeeper error
+     */
     @SuppressFBWarnings
     public NodeRequest(NodePool nodePool, Task task) throws Exception {
         super(nodePool);
-        String jenkinsLabel = task.getAssignedLabel().getDisplayName();
-        List<String> node_types = new ArrayList();
+        final String jenkinsLabel = task.getAssignedLabel().getDisplayName();
+        final List<String> node_types = new ArrayList();
         node_types.add(nodePool.nodePoolLabelFromJenkinsLabel(jenkinsLabel));
         data.put("node_types", node_types);
         data.put("requestor", nodePool.getRequestor());
@@ -69,12 +83,17 @@ public class NodeRequest extends ZooKeeperObject {
         this.task = task;
     }
 
+    /**
+     * Create the ZNode associated with this node request
+     *
+     * @throws Exception  on ZooKeeper error
+     */
     private void createZNode() throws Exception {
         final String createPath = MessageFormat.format("/{0}/{1}-",
                 nodePool.getRequestRoot(), nodePool.getPriority());
         LOGGER.finest(MessageFormat.format("Creating request node: {0}",
                 createPath));
-        String requestPath = nodePool.getConn().create()
+        final String requestPath = nodePool.getConn().create()
                 .creatingParentsIfNeeded()
                 .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
                 .forPath(createPath, getJson().getBytes());
@@ -89,19 +108,30 @@ public class NodeRequest extends ZooKeeperObject {
         return (RequestState) data.get("state");
     }
 
+    /**
+     * Get list of NodePool nodes that have been allocated to fulfill this request
+     *
+     * @return  list of nodes
+     * @throws Exception on ZooKeeper error
+     */
     public List<NodePoolNode> getAllocatedNodes() throws Exception {
         // Example fulfilled request
         // {"nodes": ["0000000000"], "node_types": ["debian"], "state": "fulfilled", "declined_by": [], "state_time": 1520849225.4513698, "reuse": false, "requestor": "NodePool:min-ready"}
         if (data.get("state") != RequestState.fulfilled) {
             throw new IllegalStateException("Attempt to get allocated nodes from a node request before it has been fulfilled");
         }
-        List<NodePoolNode> nodeObjects = new ArrayList();
+        final List<NodePoolNode> nodeObjects = new ArrayList();
         for (Object id : (List) data.get("nodes")) {
             nodeObjects.add(new NodePoolNode(nodePool, (String) id));
         }
         return nodeObjects;
     }
 
+    /**
+     * Update the local copy of the request data from values source from ZooKeeper
+     *
+     * @param newData  map of data values from ZooKeeper
+     */
     @Override
     public void updateFromMap(Map newData) {
         super.updateFromMap(newData);

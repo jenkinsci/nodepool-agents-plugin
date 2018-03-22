@@ -24,6 +24,7 @@
 package com.rackspace.jenkins_nodepool;
 
 /**
+ * For NodePool related errors
  *
  * @author hughsaunders
  */

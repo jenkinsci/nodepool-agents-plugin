@@ -29,6 +29,7 @@ import hudson.widgets.Widget;
 import jenkins.model.Jenkins;
 
 /**
+ * Jenkins UI widget to show information about requests being handled via NodePool
  *
  * @author Rackspcae
  */

@@ -24,6 +24,7 @@
 package com.rackspace.jenkins_nodepool;
 
 /**
+ * State values of node requests
  *
  * @author Rackspace
  */
