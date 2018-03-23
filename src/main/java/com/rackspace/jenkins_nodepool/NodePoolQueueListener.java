@@ -28,8 +28,11 @@ import hudson.model.Computer;
 import hudson.model.Label;
 import hudson.model.Queue;
 import hudson.model.queue.QueueListener;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
+import jenkins.model.Jenkins;
 
 //TODO: Scan build queue on startup for pipelines that persist across restarts as the
 // queue entry event won't refire.
@@ -56,6 +59,20 @@ public class NodePoolQueueListener extends QueueListener {
         LOG.log(Level.FINE, "NodePoolQueueListener received queue notification for label {0}.", new Object[]{label});
 
         if (label == null) {
+            return;
+        }
+        List<NodePool> nps = nodePools.nodePoolsForLabel(label);
+        // if Jenkins is restarted while a NodePool node is being used
+        // by a pipeline, Jenkins will attempt to connect to that node
+        // on restart. Jenkins will supply the full name (eg ${nodepool-prefix}${label}-{id})
+        // Theres no point in attempting to recreate the same node or
+        // resume the build, so we intercept such requests and kill the
+        // job that caused them.
+        // Note that this won't kill builds for non NodePool labels as we check
+        // for a prefix match.
+        if (!nps.isEmpty() && Pattern.matches(".*-[0-9]+$", label.getName())) {
+            LOG.log(Level.WARNING, "Killing queued task {0} as it refers to specific NodePool node {1}", new Object[]{wi.task, label});
+            Jenkins.getInstance().getQueue().cancel(wi.task);
             return;
         }
 

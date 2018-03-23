@@ -28,7 +28,6 @@ import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
 import com.cloudbees.plugins.credentials.domains.DomainRequirement;
 import com.google.gson.Gson;
-import com.thoughtworks.xstream.annotations.XStreamOmitField;
 import com.trilead.ssh2.Connection;
 import hudson.Extension;
 import hudson.model.Computer;
@@ -53,7 +52,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 import javax.servlet.ServletException;
 import jenkins.model.Jenkins;
 import org.apache.curator.framework.CuratorFramework;
@@ -70,7 +68,12 @@ import org.kohsuke.stapler.StaplerResponse;
 /**
  * Representation of a ZooKeeper+NodePool cluster configuration.
  * <p>
- * Instances hold configuration data entered in the Jenkins UI and are serialized/deserialized via Stapler
+ * Instances hold configuration data entered in the Jenkins UI and are
+ * serialised/deserialised via Stapler. This class does not implement
+ * serialisable, it would be useful if it did, as then readObject could be used
+ * to initTransients. However making it serialisable causes problems with the
+ * Charset field which doesn't implement serialisable but does serialise just
+ * fine * via xstreame :/
  */
 
 public class NodePool implements Describable<NodePool> {
@@ -97,13 +100,7 @@ public class NodePool implements Describable<NodePool> {
 
     private final Charset charset = Charset.forName("UTF-8");
 
-    /**
-     * List of Jenkins Computers that are associated with this NodePool cluster.
-     */
-    private List<NodePoolComputer> computers;
-
-    @XStreamOmitField
-    private CuratorFramework conn;
+    private transient CuratorFramework conn;
 
     /**
      * ZooKeeper connection string
@@ -118,8 +115,7 @@ public class NodePool implements Describable<NodePool> {
     /**
      * Serializer used for saving node request data to/from ZooKeeper
      */
-    @XStreamOmitField
-    private final Gson gson = new Gson();
+    private transient final Gson gson = new Gson();
 
     /**
      * Prefix used to associate select Jenkins labels with this NodePool cluster.
@@ -149,7 +145,7 @@ public class NodePool implements Describable<NodePool> {
     /**
      * List of node requests submitted to this NodePool cluster
      */
-    private List<NodeRequest> requests;
+    private transient List<NodeRequest> requests;
 
     /**
      * Prefix used to prepend to all NodePool related ZNodes
@@ -181,8 +177,9 @@ public class NodePool implements Describable<NodePool> {
         this.labelPrefix = labelPrefix;
         this.zooKeeperRoot = zooKeeperRoot;
         this.nodeRoot = nodeRoot;
-        initTrackers();
+        initTransients();
     }
+
     /**
      * Accept the node that was created to satisfy the given request.
      *
@@ -191,6 +188,8 @@ public class NodePool implements Describable<NodePool> {
      * @throws java.lang.Exception on ZooKeeper error
      */
     public List<NodePoolNode> acceptNodes(NodeRequest request) throws Exception {
+
+        initTransients();
 
         // refer to the request "nodeset" to know which nodes to lock.
         final List<NodePoolNode> allocatedNodes = request.getAllocatedNodes();
@@ -234,9 +233,7 @@ public class NodePool implements Describable<NodePool> {
     }
 
     public CuratorFramework getConn() {
-        if (conn == null) {
-            conn = NodePool.createZKConnection(connectionString, zooKeeperRoot);
-        }
+        initTransients();
         return conn;
     }
 
@@ -263,9 +260,6 @@ public class NodePool implements Describable<NodePool> {
     public String getNodeRoot() {
         return nodeRoot;
     }
-    public List<NodePoolComputer> getNodes() {
-        return computers;
-    }
 
     public String getPriority() {
         return priority;
@@ -279,6 +273,7 @@ public class NodePool implements Describable<NodePool> {
     }
 
     public List<NodeRequest> getRequests() {
+        initTransients();
         return requests;
     }
 
@@ -309,14 +304,6 @@ public class NodePool implements Describable<NodePool> {
         return jenkinsLabel.substring(getLabelPrefix().length());
     }
 
-    /**
-     * Remove a computer from the tracking list
-     * @param c  computer
-     */
-    public void removeComputer(NodePoolComputer c) {
-        computers.remove(c);
-    }
-
     public void setConnectionString(String connectionString) {
         if (!connectionString.equals(this.connectionString)) {
             conn = NodePool.createZKConnection(connectionString, getZooKeeperRoot());
@@ -336,10 +323,6 @@ public class NodePool implements Describable<NodePool> {
         this.nodeRoot = nodeRoot;
     }
 
-    public void setNodes(List<NodePoolComputer> nodes) {
-        this.computers = nodes;
-    }
-
     public void setPriority(String priority) {
         this.priority = priority;
     }
@@ -354,18 +337,19 @@ public class NodePool implements Describable<NodePool> {
 
     public void setRequests(List<NodeRequest> requests) {
         this.requests = requests;
+        initTransients();
     }
 
     public void setZooKeeperRoot(String zooKeeperRoot) {
         this.zooKeeperRoot = zooKeeperRoot;
     }
 
-    private void initTrackers() {
+    private void initTransients() {
         if (requests == null) {
             requests = new ArrayList();
         }
-        if (computers == null) {
-            this.computers = new ArrayList();
+        if (conn == null && connectionString != null) {
+            conn = NodePool.createZKConnection(connectionString, zooKeeperRoot);
         }
     }
 
@@ -395,6 +379,7 @@ public class NodePool implements Describable<NodePool> {
      */
     void provisionNode(Label label, Task task) throws Exception {
 
+        initTransients();
         // *** Request Node ***
         //TODO: store prefix in config and pass in.
         final NodeRequest request = new NodeRequest(this, task);
@@ -433,10 +418,6 @@ public class NodePool implements Describable<NodePool> {
                     // accept here so that if any error conditions occur, the above update logic will automatically re-submit
                     // the node request:
                     allocatedNodes = acceptNodes(request);
-                    computers.addAll(allocatedNodes
-                            .stream()
-                            .map(NodePoolNode::getComputer)
-                            .collect(Collectors.toList()));
                     break;
                 } catch (Exception ex) {
                     LOG.log(Level.SEVERE, null, ex);
