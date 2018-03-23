@@ -1,0 +1,16 @@
+# Files to ignore
+
+# Ignore any build folders
+target/
+build/
+.gradle/
+
+# Ignore any log files
+*.log
+
+# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+hs_err_pid*
+
+# Ignore IntelliJ folder/files
+.idea/
+*.iml

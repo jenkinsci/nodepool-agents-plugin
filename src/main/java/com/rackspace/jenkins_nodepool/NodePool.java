@@ -50,9 +50,8 @@ import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -62,7 +61,6 @@ import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.zookeeper.CreateMode;
-import org.apache.zookeeper.KeeperException;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
@@ -404,52 +402,30 @@ public class NodePool implements Describable<NodePool> {
 
         // *** Poll request status and wait for fulfillment
         //TODO: store timeout in config
-        //TODO: Curator async stuff to avoid polling
-        final Integer timeout = 1200 * 1000; //timeout in milliseconds
-        final Long startTime = System.currentTimeMillis();
-        RequestState requestState = RequestState.requested;
+        final Integer timeout = 1200; //timeout in seconds
         List<NodePoolNode> allocatedNodes = null;
-        while (System.currentTimeMillis() < startTime + timeout) {
 
+        // Let's create a node pool watcher and wait until the request is in the desired state (or until we're timed out
+        final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
+                conn.getZookeeperClient().getZooKeeper(), request.getPath(), RequestState.fulfilled);
+        if (watcher.waitUntilDone(timeout, TimeUnit.SECONDS)) {
             try {
-                request.updateFromZK();
-            } catch (KeeperException e) {
-                // connectivity issue with ZK - it should auto-reconnect and we can re-create the request then
-                LOG.log(Level.WARNING, e.getMessage(), e);
+                // accept here so that if any error conditions occur, the above update logic will automatically re-submit
+                // the node request:
+                allocatedNodes = acceptNodes(request);
+                computers.addAll(allocatedNodes
+                        .stream()
+                        .map(NodePoolNode::getComputer)
+                        .collect(Collectors.toList()));
+            } catch (Exception ex) {
+                throw new Exception(ex.getClass().getCanonicalName() + " occurred while adding nodes. Message: " + ex.getLocalizedMessage());
             }
 
-            // node is updated now, check it's state:
-            requestState = request.getState();
-
-            LOG.log(Level.FINEST, "Current state of request {0} is: {1}", new Object[]{request.getZKID(), requestState});
-
-            if (requestState == RequestState.failed) {
-                // TODO switch this logic to re-submit the NodeRequest?
-                LOG.log(Level.WARNING, "Request {0} failed.", request.getZKID());
-                break;
-            }
-
-            final boolean done = requestState == RequestState.fulfilled;
-            if (done) {
-                try {
-                    // accept here so that if any error conditions occur, the above update logic will automatically re-submit
-                    // the node request:
-                    allocatedNodes = acceptNodes(request);
-                    computers.addAll(allocatedNodes
-                            .stream()
-                            .map(NodePoolNode::getComputer)
-                            .collect(Collectors.toList()));
-                    break;
-                } catch (Exception ex) {
-                    LOG.log(Level.SEVERE, null, ex);
-                }
-            }
-
-            Thread.sleep(5000);
-            //TODO: Configurable poll interval for instance ACTIVE
-        }
-        if (requestState != RequestState.fulfilled || allocatedNodes == null) {
-            throw new Exception(MessageFormat.format("Failed to provision node for label {0}", task.getAssignedLabel().getName()));
+        } else {
+            // TODO: daviddeal - Should we retry if failed - maybe look at the state again??
+            //if (requestState == RequestState.failed) {
+            throw new Exception( "NodePool watcher expired waiting for request state to be: " + RequestState.fulfilled +
+                    ". Provisioning failed for node label: " + task.getAssignedLabel().getName());
         }
 
         // *** Get allocated nodes from the request and add to Jenkins
