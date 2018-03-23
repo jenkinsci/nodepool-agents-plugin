@@ -96,7 +96,7 @@ public class NodeRequest extends ZooKeeperObject {
         final String requestPath = nodePool.getConn().create()
                 .creatingParentsIfNeeded()
                 .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
-                .forPath(createPath, getJson().getBytes());
+                .forPath(createPath, getJson().getBytes(nodePool.getCharset()));
 
         LOGGER.log(Level.FINEST, "Requeste created at path: {0}", requestPath);
 

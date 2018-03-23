@@ -50,9 +50,7 @@ import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -476,7 +474,7 @@ public class NodePool implements Describable<NodePool> {
                 protected void check() throws IOException, ServletException {
                     try {
                         CuratorFramework testConn = NodePool.createZKConnection(connectionString, zooKeeperRoot);
-                        String node = testConn.create()
+                        testConn.create()
                                 .creatingParentsIfNeeded()
                                 .withMode(CreateMode.EPHEMERAL)
                                 .forPath(MessageFormat.format("/testing/{0}", req.getSession().getId()));
