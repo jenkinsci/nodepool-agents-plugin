@@ -4,4 +4,4 @@
 
     tasks:
       - shell: |
-          docker image rm hughsaunders/jenkinsnodepool
+          docker image rm {{DOCKER_REPO}}
