@@ -3,4 +3,10 @@
 if [[ ${RE_JOB_SCENARIO} == "lint" ]]
 then
     gating/pre_merge_test/runLint
-fi;
+fi
+
+
+if [[ ${RE_JOB_SCENARIO} == "unit" ]]
+then
+    gating/pre_merge_test/runUnit
+fi
