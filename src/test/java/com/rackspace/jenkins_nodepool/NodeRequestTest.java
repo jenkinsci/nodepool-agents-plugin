@@ -23,23 +23,17 @@
  */
 package com.rackspace.jenkins_nodepool;
 
-import com.rackspace.jenkins_nodepool.ZooKeeperClient;
-import com.rackspace.jenkins_nodepool.NodeRequest;
 import com.google.gson.Gson;
-import java.net.URL;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.jar.Attributes;
-import java.util.jar.Manifest;
 import java.util.logging.Logger;
 import org.apache.curator.framework.CuratorFramework;
-import org.junit.Test;
 import static org.junit.Assert.*;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
-import org.jvnet.tiger_types.Types;
+import org.junit.Test;
 
 /**
  *
@@ -51,7 +45,6 @@ public class NodeRequestTest {
     static Gson gson;
     private String label = "testlabel";
     private CuratorFramework conn;
-    private ZooKeeperClient zkc;
 
     @ClassRule
     public static NodePoolRule npr = new NodePoolRule();
@@ -69,7 +62,7 @@ public class NodeRequestTest {
 
     @Test
     public void TestSerialisation() {
-        NodeRequest nr = new NodeRequest(conn, label);
+        NodeRequest nr = new NodeRequest(m.conn, label);
         String json = nr.toString();
 
         LOG.fine("TestSerialisation json string: " + json);

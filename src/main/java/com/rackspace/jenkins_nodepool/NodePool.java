@@ -87,7 +87,7 @@ public class NodePool implements Describable<NodePool> {
      * @param zkRoot  root path to prefix onto all Curator (ZK) requests
      * @return CuratorFramework connection wrapper instance
      */
-    private static CuratorFramework createZKConnection(String connectionString,
+    public static CuratorFramework createZKConnection(String connectionString,
             String zkRoot) {
         final CuratorFramework conn = CuratorFrameworkFactory.builder()
                 .connectString(connectionString)
