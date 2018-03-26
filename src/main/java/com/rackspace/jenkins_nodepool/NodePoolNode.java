@@ -1,6 +1,5 @@
 package com.rackspace.jenkins_nodepool;
 
-import com.thoughtworks.xstream.annotations.XStreamOmitField;
 import java.text.MessageFormat;
 import java.util.List;
 
@@ -16,10 +15,6 @@ public class NodePoolNode extends ZooKeeperObject {
      * The lock on the node ZNode
      */
     private final KazooLock lock;
-
-    // TODO should computer really be an attribute of this class?  (it is more closely related to NodePoolSlave.)
-    @XStreamOmitField
-    private NodePoolComputer computer;
 
     /**
      * @param nodePool  NodePool
@@ -117,15 +112,6 @@ public class NodePoolNode extends ZooKeeperObject {
     public void release() throws Exception {
         setState("used");
         lock.release();
-        nodePool.removeComputer(computer);
-    }
-
-    void setComputer(NodePoolComputer npc) {
-        computer = npc;
-    }
-
-    public NodePoolComputer getComputer() {
-        return computer;
     }
 
 }

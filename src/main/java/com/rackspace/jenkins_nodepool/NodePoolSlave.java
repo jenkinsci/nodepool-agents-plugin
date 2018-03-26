@@ -29,9 +29,11 @@ import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.plugins.sshslaves.verifiers.ManuallyProvidedKeyVerificationStrategy;
 import hudson.slaves.RetentionStrategy;
-
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import jenkins.model.Jenkins;
 
 /**
  * Representation of a Jenkins slave sourced from NodePool.
@@ -41,9 +43,19 @@ import java.util.ArrayList;
 public class NodePoolSlave extends Slave {
 
     /**
+     * Class logger
+     */
+    private static final Logger LOG = Logger.getLogger(NodePoolSlave.class.getName());
+
+    /**
      * The node from the associated NodePool cluster.
      */
-    private final NodePoolNode nodePoolNode;
+    private transient final NodePoolNode nodePoolNode;
+
+    /**
+     * Increment this when modifying this class.
+     */
+    static final long serialVersionUID = 1L;
 
     /**
      * Create a new slave
@@ -88,11 +100,18 @@ public class NodePoolSlave extends Slave {
         return nodePoolNode;
     }
 
+    // Called for deserialisation
+    private void readObject(java.io.ObjectInputStream in)
+            throws IOException, ClassNotFoundException {
+        in.defaultReadObject(); // call default deserializer
+        LOG.log(Level.WARNING, "Removing NodePool Slave {0} on startup as its a nodepool node that will have been destroyed", this.toString());
+        Jenkins.getInstance().removeNode(this);
+    }
+
     // TODO seems odd storing the computer object on the node since it's related to the slave object here.
     @Override
     public Computer createComputer() {
         NodePoolComputer npc = new NodePoolComputer(this, nodePoolNode);
-        nodePoolNode.setComputer(npc);
         return npc;
     }
 

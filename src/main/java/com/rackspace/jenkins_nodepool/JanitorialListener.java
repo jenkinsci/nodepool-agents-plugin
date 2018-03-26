@@ -1,19 +1,19 @@
 package com.rackspace.jenkins_nodepool;
 
 import hudson.Extension;
+import hudson.model.Computer;
 import hudson.model.Executor;
 import hudson.model.Node;
 import hudson.model.Run;
+import hudson.model.TaskListener;
 import hudson.model.labels.LabelAtom;
 import hudson.slaves.ComputerListener;
 import hudson.util.RunList;
-import jenkins.model.Jenkins;
-
-import javax.servlet.ServletException;
 import java.io.IOException;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import jenkins.model.Jenkins;
 
 /**
  * This class listens to Jenkins "Computer" events as a means to start a background thread that will cleanup
@@ -32,15 +32,30 @@ public class JanitorialListener extends ComputerListener {
      */
     private static final Object lock = new Object();
 
+    /**
+     * Start the Janitor thread when the master node comes online
+     *
+     * @param c Computer thats coming online
+     * @param listener
+     * @throws IOException
+     * @throws InterruptedException
+     */
+    @Override
+    public void onOnline(Computer c, TaskListener listener) throws IOException, InterruptedException {
+        if (c.getNode() == Jenkins.getInstance().getNode("master")) {
+            startJanitor();
+        }
+
+    }
 
     /**
-     * Starts the background janitor thread.
+     * Start the Janitor Thread
      */
-    public JanitorialListener() {
+    public void startJanitor() {
         LOGGER.log(Level.INFO, "Initializing janitor thread");
-        synchronized(lock) {
+        synchronized (lock) {
             if (janitorThread == null) {
-                janitorThread = new Thread(new Janitor());
+                janitorThread = new Thread(new Janitor(), "Nodepool Janitor Thread");
                 janitorThread.start();
             }
         }
@@ -61,7 +76,7 @@ class Janitor implements Runnable {
         // by default, sleep for 60 seconds between cleaning attempts.
         final String sleepSeconds = System.getProperty(Janitor.class.getName() + ".sleep_seconds",
                 SLEEP_SECS_DEFAULT);
-        sleepMilliseconds = Integer.valueOf(sleepSeconds) * 1000;
+        sleepMilliseconds = Integer.parseInt(sleepSeconds) * 1000;
     }
 
     @Override
@@ -136,12 +151,21 @@ class Janitor implements Runnable {
      */
     private void cleanNode(NodePoolSlave nodePoolSlave, String reason) {
         try {
-            nodePoolSlave.toComputer().doToggleOffline(reason);
-            nodePoolSlave.toComputer().doDoDelete();
+            NodePoolComputer c = (NodePoolComputer) nodePoolSlave.toComputer();
+            NodePoolNode npn = nodePoolSlave.getNodePoolNode();
+            if (c == null) {
+                if (npn == null) {
+                    LOGGER.log(Level.WARNING, "Can't cleanup nodePoolSlave that has neither a computer nor node associated with it {0}", nodePoolSlave);
+                } else {
+                    LOGGER.log(Level.WARNING, "Releasing NodePoolNode with no associated computer {0}", npn);
+                    npn.release();
+                }
+            } else {
+                c.doToggleOffline(reason);
+                c.doDoDelete();
+            }
 
-        } catch (IOException e) {
-            LOGGER.log(Level.WARNING, "Failed to clean node " + nodePoolSlave, e);
-        } catch (ServletException e) {
+        } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Failed to clean node " + nodePoolSlave, e);
         }
     }
@@ -165,7 +189,8 @@ class Janitor implements Runnable {
      * @return true if the node has disappeared
      */
     private boolean isMissing(NodePoolSlave nodePoolSlave) {
-        if (nodePoolSlave.toComputer().isOffline()) {
+        NodePoolComputer c = (NodePoolComputer) nodePoolSlave.toComputer();
+        if (c == null || c.isOffline()) {
             // agent is offline - confirm that this node still exists in ZK/NP:
             final NodePoolNode nodePoolNode = nodePoolSlave.getNodePoolNode();
 
@@ -192,7 +217,10 @@ class Janitor implements Runnable {
      */
     private boolean isPreviouslyUsed(NodePoolSlave nodePoolSlave) {
 
-        final NodePoolComputer computer = (NodePoolComputer)nodePoolSlave.toComputer();
+        final NodePoolComputer computer = (NodePoolComputer) nodePoolSlave.toComputer();
+        if (computer == null) {
+            return false;
+        }
         final RunList builds = computer.getBuilds();
         if (builds == null || builds.iterator().hasNext() == false) {
             // unused

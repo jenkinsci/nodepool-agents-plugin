@@ -28,6 +28,7 @@ import hudson.model.FreeStyleProject;
 import hudson.model.Label;
 import hudson.model.Queue;
 import hudson.model.Queue.Task;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -58,10 +59,23 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
 
     public NodePools() {
         load();
+        initTransients();
+
+    }
+
+    // Called for deserialisation
+    public void readObject(java.io.ObjectInputStream in)
+            throws IOException, ClassNotFoundException {
+        in.defaultReadObject(); // call default deserializer
+        initTransients();
+    }
+
+    private void initTransients() {
         if (nodePools == null) {
             nodePools = new ArrayList();
         }
     }
+
 
     @Override
     public boolean configure(StaplerRequest req, JSONObject json) throws FormException {

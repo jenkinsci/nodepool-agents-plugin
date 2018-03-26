@@ -33,8 +33,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.kohsuke.stapler.HttpResponse;
 
-import javax.servlet.ServletException;
-
 /**
  *
  * @author hughsaunders
@@ -42,7 +40,12 @@ import javax.servlet.ServletException;
 public class NodePoolComputer extends SlaveComputer {
 
     private static final Logger LOG = Logger.getLogger(NodePoolComputer.class.getName());
-
+    /**
+     * We can get the name from the nodePoolNode object but we store name
+     * separately incase nodePoolNode is null after deserialisation then we can
+     * use a sensible name in logs.
+     */
+    private String name;
     private NodePoolNode nodePoolNode;
 
     public NodePoolComputer(Slave slave) {
@@ -52,9 +55,22 @@ public class NodePoolComputer extends SlaveComputer {
         throw new IllegalStateException("Attempting to initialise NodePoolComputer without supplying a NodePoolNode.");
     }
 
-    public NodePoolComputer(NodePoolSlave nps, NodePoolNode npn) {
+    public NodePoolComputer(final NodePoolSlave nps, final NodePoolNode npn) {
         super(nps);
         setNodePoolNode(npn);
+        if (npn != null) {
+            name = npn.getName();
+        } else {
+        Computer.threadPoolForRemoting.submit(() -> {
+            try {
+                    LOG.log(Level.WARNING, "Removing NodePool Computer {0} on startup as its a nodepool node that will have been destroyed", this.toString());
+                    doDoDelete();
+                } catch (IOException ex) {
+                    LOG.log(Level.SEVERE, "Failed to remove NodePool Computer {0}.", this.toString());
+                    LOG.log(Level.SEVERE, null, ex);
+                }
+            });
+        }
     }
 
     public final void setNodePoolNode(NodePoolNode npn) {
@@ -68,7 +84,9 @@ public class NodePoolComputer extends SlaveComputer {
     @Override
     public HttpResponse doDoDelete() throws IOException {
         try {
-            nodePoolNode.release();
+            if (nodePoolNode != null) {
+                nodePoolNode.release();
+            }
         } catch (Exception ex) {
             LOG.log(Level.SEVERE, null, ex);
         }
@@ -77,10 +95,12 @@ public class NodePoolComputer extends SlaveComputer {
 
     @Override
     public String toString() {
-        if (nodePoolNode == null) {
-            return super.toString();
-        } else {
+        if (nodePoolNode != null) {
             return nodePoolNode.getName();
+        } else if (name != null) {
+            return name;
+        } else {
+            return super.toString();
         }
     }
 

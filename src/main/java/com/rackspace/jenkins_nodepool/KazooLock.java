@@ -125,7 +125,7 @@ public class KazooLock {
         this.create_path = this.path + "/" + this.prefix;
     }
 
-    private class KazooLockWatcher<T extends WatchedEvent>
+    private static class KazooLockWatcher<T extends WatchedEvent>
             extends LinkedBlockingQueue<T> implements CuratorWatcher {
 
         @Override
@@ -147,7 +147,7 @@ public class KazooLock {
         Matcher m = p.matcher(path);
         boolean matches = m.find();
         if (matches){
-            return new Integer(m.group(1));
+            return Integer.valueOf(m.group(1));
         } else {
             throw new KazooLockException("Found non sequential node: "+path);
         }

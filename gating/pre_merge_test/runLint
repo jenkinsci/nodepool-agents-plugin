@@ -1,0 +1,7 @@
+#!/bin/bash -xeu
+
+#Ensure that the cached maven repo is used.
+[[ $HOME != /root ]] && mv /root/.m2 ~/
+
+mvn compile
+mvn findbugs:check
