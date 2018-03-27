@@ -23,7 +23,7 @@
  */
 package com.rackspace.jenkins_nodepool;
 
-import java.text.MessageFormat;
+import com.google.gson.Gson;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
@@ -51,7 +51,7 @@ public class ZooKeeperObjectTest {
     String key;
     String value;
     String path;
-    String data;
+    Map map;
 
     public ZooKeeperObjectTest() {
     }
@@ -67,13 +67,13 @@ public class ZooKeeperObjectTest {
     @Before
     public void setUp() {
         path = "/tgfzk";
-        value = "a map value";
-        key = "map key";
+
         m = new Mocks();
         zko = new ZooKeeperObjectImpl(m.np);
         zko.setPath(path);
-        data = MessageFormat.format("'{'\"{0}\":\"{1}\"'}'", key, value);
         assert m.np.getConn() != null;
+        map = new HashMap();
+        map.put(key, value);
     }
 
     @After
@@ -87,21 +87,9 @@ public class ZooKeeperObjectTest {
     @Test
     public void testUpdateFromMap() {
 
-        Map map = new HashMap();
-        map.put(key, value);
         zko.updateFromMap(map);
         String rvalue = (String) zko.data.get(key);
         assertEquals(value, rvalue);
-    }
-
-    public void writeToZNode() {
-        try {
-            m.conn.create()
-                    .creatingParentsIfNeeded()
-                    .forPath(path, data.getBytes(m.charset));
-        } catch (Exception ex) {
-            Logger.getLogger(ZooKeeperObjectTest.class.getName()).log(Level.SEVERE, null, ex);
-        }
     }
 
     /**
@@ -109,7 +97,7 @@ public class ZooKeeperObjectTest {
      */
     @Test
     public void testGetFromZK() throws Exception {
-        writeToZNode();
+        m.writeNodeData(path, map);
         Map rdata = zko.getFromZK();
         String rvalue = (String) rdata.get(key);
         assertEquals(value, rvalue);
@@ -120,7 +108,7 @@ public class ZooKeeperObjectTest {
      */
     @Test
     public void testUpdateFromZK() throws Exception {
-        writeToZNode();
+        m.writeNodeData(path, map);
         zko.updateFromZK();
         String rvalue = (String) zko.data.get(key);
         assertEquals(value, rvalue);
@@ -133,8 +121,8 @@ public class ZooKeeperObjectTest {
     public void testGetJson() {
         zko.data.clear();
         zko.data.put(key, value);
-        String rdata = zko.getJson();
-        assertEquals(data, rdata);
+        Map rdata = new Gson().fromJson(zko.getJson(), Map.class);
+        assertEquals(value, rdata.get(key));
     }
 
     /**
@@ -145,9 +133,8 @@ public class ZooKeeperObjectTest {
         zko.data.clear();
         zko.data.put(key, value);
         zko.writeToZK();
-        byte[] rbytes = m.conn.getData().forPath(path);
-        String rdata = new String(rbytes, m.charset);
-        assertEquals(data, rdata);
+        Map rdata = m.getNodeData(path);
+        assertEquals(value, rdata.get(key));
 
     }
 

@@ -78,15 +78,13 @@ public class KazooLockTest {
     @Test
     public void testAcquireRelease() throws Exception {
 
-
         Stat stat = m.conn.checkExists().forPath(path);
-        if (stat == null){
+        if (stat == null) {
             // create node to ensure acquire doesn't fail if node already exists
             m.conn.create()
                     .creatingParentsIfNeeded()
-                .forPath(path);
+                    .forPath(path);
         }
-
 
         // check newly created node has no children
         children = m.conn.getChildren().forPath(path);
@@ -94,7 +92,9 @@ public class KazooLockTest {
 
         // create and acquire lock
         KazooLock kl = new KazooLock(path, m.np);
+        assertEquals(KazooLock.State.UNLOCKED, kl.getState());
         kl.acquire();
+        assertEquals(KazooLock.State.LOCKED, kl.getState());
 
         // ensure a child node now exists
         children = m.conn.getChildren().forPath(path);
@@ -104,6 +104,7 @@ public class KazooLockTest {
 
         // release lock and ensure child has been removed
         kl.release();
+        assertEquals(KazooLock.State.UNLOCKED, kl.getState());
         children = m.conn.getChildren().forPath(path);
         assertEquals(0, children.size());
     }
