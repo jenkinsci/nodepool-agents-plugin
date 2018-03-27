@@ -23,10 +23,14 @@
  */
 package com.rackspace.jenkins_nodepool;
 
+import hudson.model.Queue.Task;
+import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.curator.test.TestingServer;
 import static org.mockito.Mockito.*;
 
@@ -36,26 +40,47 @@ import static org.mockito.Mockito.*;
  */
 public class Mocks {
 
-    public TestingServer zkTestServer;
-    public String connectionString;
-    public CuratorFramework conn;
-    public NodePool np;
+    TestingServer zkTestServer;
+    String connectionString;
+    CuratorFramework conn;
+    NodePool np;
+    Task task;
+    Charset charset;
+    String zkNamespace;
+
 
     public Mocks() {
+        zkNamespace = "unittest";
+        charset = Charset.forName("UTF-8");
         np = mock(NodePool.class);
+        task = mock(Task.class);
+        startTestServer();
         when(np.getConn()).thenReturn(conn);
         when(np.getRequestor()).thenReturn("unittest");
-        when(np.getCharset()).thenReturn(Charset.forName("UTF-8"));
+        when(np.getCharset()).thenReturn(charset);
     }
 
-    public void startTestServer() {
+    private void startTestServer() {
 
         try {
             zkTestServer = new TestingServer();
             zkTestServer.start();
             connectionString = zkTestServer.getConnectString();
-            conn = NodePool.createZKConnection(connectionString, "nodepool");
+            conn = CuratorFrameworkFactory.builder()
+                    .connectString(connectionString)
+                    .namespace(zkNamespace)
+                    .retryPolicy(new ExponentialBackoffRetry(1000, 3))
+                    .build();
+            conn.start();
         } catch (Exception ex) {
+            Logger.getLogger(Mocks.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+
+    public void cleanup() {
+        try {
+            zkTestServer.stop();
+        } catch (IOException ex) {
             Logger.getLogger(Mocks.class.getName()).log(Level.SEVERE, null, ex);
         }
     }

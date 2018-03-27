@@ -51,11 +51,6 @@ public class KazooLockTest {
 
     @BeforeClass
     public static void setUpClass() {
-        // nodepool
-        // getRequestRoot
-        //
-        Mocks m = new Mocks();
-        m.startTestServer();
     }
 
     @AfterClass
@@ -65,11 +60,11 @@ public class KazooLockTest {
     @Before
     public void setUp() throws Exception {
         m = new Mocks();
-        m.startTestServer();
     }
 
     @After
     public void tearDown() {
+        m.cleanup();
     }
 
     @Test

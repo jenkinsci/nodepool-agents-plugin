@@ -27,12 +27,12 @@ import com.google.gson.Gson;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
 import java.util.logging.Logger;
-import org.apache.curator.framework.CuratorFramework;
+import org.junit.After;
 import static org.junit.Assert.*;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.ClassRule;
 import org.junit.Test;
 
 /**
@@ -43,11 +43,8 @@ public class NodeRequestTest {
 
     private static final Logger LOG = Logger.getLogger(NodeRequestTest.class.getName());
     static Gson gson;
-    private String label = "testlabel";
-    private CuratorFramework conn;
-
-    @ClassRule
-    public static NodePoolRule npr = new NodePoolRule();
+    private final String label = "testlabel";
+    Mocks m;
 
     @BeforeClass
     public static void setUpClass() {
@@ -57,38 +54,65 @@ public class NodeRequestTest {
 
     @Before
     public void setUp() throws Exception {
-        conn = npr.getCuratorConnection();
+        m = new Mocks();
+    }
+
+    @After
+    public void tearDown() {
+        m.cleanup();
     }
 
     @Test
     public void TestSerialisation() {
-        NodeRequest nr = new NodeRequest(m.conn, label);
-        String json = nr.toString();
+        try {
+            NodeRequest nr = new NodeRequest(m.np, m.task);
+            String json = nr.toString();
 
-        LOG.fine("TestSerialisation json string: " + json);
+            LOG.fine("TestSerialisation json string: " + json);
 
-        // ensure the json is valid by deserialising it
-        Map data = gson.fromJson(json, HashMap.class);
+            // ensure the json is valid by deserialising it
+            Map data = gson.fromJson(json, HashMap.class);
 
-        // Check a couple of key value pairs are as expected
-        assertEquals((String) data.get("state"), "requested");
-        assertEquals(((List) data.get("node_types")).get(0), label);
+            // Check a couple of key value pairs are as expected
+            assertEquals((String) data.get("state"), "requested");
+            assertEquals(((List) data.get("node_types")).get(0), label);
+        } catch (Exception ex) {
+            Logger.getLogger(NodeRequestTest.class.getName()).log(Level.SEVERE, null, ex);
+        }
     }
 
-    /*@Test
-    public void TestDeserialisation() {
-        String[] keys = {"node_types", "requestor", "state", "state_time"};
-        NodeRequest nr = new NodeRequest(conn, label);
-        String json = nr.toString();
-        NodeRequest nr2 = NodeRequest.fromJson(conn, json);
-        LOG.info("nr: " + nr);
-        LOG.info("nr2: " + nr2);
-        for (String key : keys) {
-            LOG.info("key compare: " + key);
-            assertEquals(nr.get(key), nr2.get(key));
+    @Test
+    public void TestUpdateFromMap() {
+        try {
+            NodeRequest nr = new NodeRequest(m.np, m.task);
+            Map updateData = new HashMap();
+            updateData.put("state_time", 1);
+            updateData.put("state", "pending");
+            nr.updateFromMap(updateData);
+            assertEquals(nr.getState(), RequestState.pending);
+        } catch (Exception ex) {
+            Logger.getLogger(NodeRequestTest.class.getName()).log(Level.SEVERE, null, ex);
         }
-        assertEquals(nr, nr2);
-        assertTrue(nr.equals(nr2));
-    }*/
+
+    }
+//    @Test
+//    public void TestDeserialisation() {
+//        try {
+//            String[] keys = {"node_types", "requestor", "state", "state_time"};
+//            NodeRequest nr = new NodeRequest(m.np, m.task);
+//            String json = nr.toString();
+//            NodeRequest nr2 = NodeRequest.fromJson(m.conn, json);
+//            LOG.info("nr: " + nr);
+//            LOG.info("nr2: " + nr2);
+//            for (String key : keys) {
+//                LOG.info("key compare: " + key);
+//                assertEquals(nr.get(key), nr2.get(key));
+//            }
+//            assertEquals(nr, nr2);
+//            assertTrue(nr.equals(nr2));
+//        } catch (Exception ex) {
+//            Logger.getLogger(NodeRequestTest.class.getName()).log(Level.SEVERE, null, ex);
+//        }
+//    }
 
 }

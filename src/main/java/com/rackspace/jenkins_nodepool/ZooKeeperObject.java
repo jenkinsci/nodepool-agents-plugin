@@ -115,8 +115,20 @@ public abstract class ZooKeeperObject {
         return GSON.toJson(data);
     }
 
+    public void createZNode() throws Exception {
+        nodePool.getConn()
+                .create()
+                .creatingParentsIfNeeded()
+                .forPath(path);
+    }
+
     public void writeToZK() throws Exception {
-        nodePool.getConn().setData().forPath(this.path, getJson().getBytes(nodePool.getCharset()));
+        if (!exists()) {
+            createZNode();
+        }
+        nodePool.getConn()
+                .setData().
+                forPath(this.path, getJson().getBytes(nodePool.getCharset()));
     }
 
     /**

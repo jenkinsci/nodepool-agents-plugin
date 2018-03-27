@@ -88,7 +88,8 @@ public class NodeRequest extends ZooKeeperObject {
      *
      * @throws Exception  on ZooKeeper error
      */
-    private void createZNode() throws Exception {
+    @Override
+    public void createZNode() throws Exception {
         final String createPath = MessageFormat.format("/{0}/{1}-",
                 nodePool.getRequestRoot(), nodePool.getPriority());
         LOGGER.finest(MessageFormat.format("Creating request node: {0}",
