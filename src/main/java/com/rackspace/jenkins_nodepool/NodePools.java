@@ -24,13 +24,10 @@
 package com.rackspace.jenkins_nodepool;
 
 import hudson.Extension;
-import hudson.model.FreeStyleProject;
 import hudson.model.Label;
-import hudson.model.Queue;
 import hudson.model.Queue.Task;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.logging.Level;
@@ -38,7 +35,6 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import jenkins.model.GlobalConfiguration;
-import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.StaplerRequest;
@@ -117,40 +113,6 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
                 LOG.log(Level.SEVERE, null, ex);
             }
         };
-    }
-
-    // scan queue for builds waiting for instance.
-    // TODO: call this on startup
-    public void scanQueue() {
-
-        List<NodeRequest> activeRequests = nodePools.stream()
-                .map(NodePool::getRequests)
-                .flatMap(List::stream)
-                .collect(Collectors.toList());
-
-        Jenkins jenkins = Jenkins.getInstance();
-        List<Queue.Item> queueItems = Arrays.asList(jenkins.getQueue().getItems());
-
-        List<String> queueLabels = queueItems
-                .stream()
-                .map(i -> i.getAssignedLabel().getName())
-                .collect(Collectors.toList());
-
-        List<String> requestLabels = activeRequests
-                .stream()
-                .map(NodeRequest::getJenkinsLabel)
-                .map(Label::toString)
-                .collect(Collectors.toList());
-
-        requestLabels.forEach((label) -> queueLabels.remove(label));
-
-        // queueLabels now contains the labels for queue nodes that don't have a
-        // corresponding request.
-        // If multiple nodepools match the prefix, use the first one we
-        // come across, if that throws an exception the next will be tried.
-        Jenkins j = Jenkins.getInstance();
-        Task t = new FreeStyleProject(j, "Queue Scan"); //TODO: does this actually create a project?
-        queueLabels.forEach((label) -> provisionNode(j.getLabel(label), t));
     }
 
     @DataBoundSetter

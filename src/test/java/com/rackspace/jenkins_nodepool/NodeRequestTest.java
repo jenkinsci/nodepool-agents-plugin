@@ -23,23 +23,21 @@
  */
 package com.rackspace.jenkins_nodepool;
 
-import com.rackspace.jenkins_nodepool.ZooKeeperClient;
-import com.rackspace.jenkins_nodepool.NodeRequest;
 import com.google.gson.Gson;
-import java.net.URL;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.jar.Attributes;
-import java.util.jar.Manifest;
+import java.util.logging.Level;
 import java.util.logging.Logger;
-import org.apache.curator.framework.CuratorFramework;
-import org.junit.Test;
+import java.util.regex.Pattern;
+import org.apache.zookeeper.data.Stat;
+import org.junit.After;
+import org.junit.AfterClass;
 import static org.junit.Assert.*;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.jvnet.tiger_types.Types;
+import org.junit.Test;
 
 /**
  *
@@ -49,12 +47,9 @@ public class NodeRequestTest {
 
     private static final Logger LOG = Logger.getLogger(NodeRequestTest.class.getName());
     static Gson gson;
-    private String label = "testlabel";
-    private CuratorFramework conn;
-    private ZooKeeperClient zkc;
-
-    @ClassRule
-    public static NodePoolRule npr = new NodePoolRule();
+    private final String label = "testlabel";
+    Mocks m;
+    NodeRequest nr;
 
     @BeforeClass
     public static void setUpClass() {
@@ -62,40 +57,130 @@ public class NodeRequestTest {
 
     }
 
+    @AfterClass
+    public static void tearDownClass() throws Exception {
+    }
+
     @Before
     public void setUp() throws Exception {
-        conn = npr.getCuratorConnection();
+        m = new Mocks();
+        nr = new NodeRequest(m.np, m.task);
+    }
+
+    @After
+    public void tearDown() {
+        m.cleanup();
     }
 
     @Test
     public void TestSerialisation() {
-        NodeRequest nr = new NodeRequest(conn, label);
-        String json = nr.toString();
+        try {
+            NodeRequest nr = new NodeRequest(m.np, m.task);
+            String json = nr.toString();
 
-        LOG.fine("TestSerialisation json string: " + json);
+            LOG.fine("TestSerialisation json string: " + json);
 
-        // ensure the json is valid by deserialising it
-        Map data = gson.fromJson(json, HashMap.class);
+            // ensure the json is valid by deserialising it
+            Map data = gson.fromJson(json, HashMap.class);
 
-        // Check a couple of key value pairs are as expected
-        assertEquals((String) data.get("state"), "requested");
-        assertEquals(((List) data.get("node_types")).get(0), label);
+            // Check a couple of key value pairs are as expected
+            assertEquals((String) data.get("state"), "requested");
+            assertEquals(((List) data.get("node_types")).get(0), label);
+        } catch (Exception ex) {
+            Logger.getLogger(NodeRequestTest.class.getName()).log(Level.SEVERE, null, ex);
+        }
     }
 
-    /*@Test
-    public void TestDeserialisation() {
-        String[] keys = {"node_types", "requestor", "state", "state_time"};
-        NodeRequest nr = new NodeRequest(conn, label);
-        String json = nr.toString();
-        NodeRequest nr2 = NodeRequest.fromJson(conn, json);
-        LOG.info("nr: " + nr);
-        LOG.info("nr2: " + nr2);
-        for (String key : keys) {
-            LOG.info("key compare: " + key);
-            assertEquals(nr.get(key), nr2.get(key));
+    @Test
+    public void TestUpdateFromMap() {
+        try {
+            Map updateData = new HashMap();
+            updateData.put("state_time", 1);
+            updateData.put("state", "pending");
+            nr.updateFromMap(updateData);
+            assertEquals(nr.getState(), RequestState.pending);
+        } catch (Exception ex) {
+            Logger.getLogger(NodeRequestTest.class.getName()).log(Level.SEVERE, null, ex);
         }
-        assertEquals(nr, nr2);
-        assertTrue(nr.equals(nr2));
-    }*/
+
+    }
+
+    /**
+     * Test of createZNode method, of class NodeRequest.
+     */
+    @Test
+    public void testCreateZNode() throws Exception {
+
+        // createZNode is called on construction
+        // so remove the created node in order to
+        // fully test this invocation of createZNode
+        String rpath = nr.getPath();
+        m.conn.delete().forPath(rpath);
+        Stat exists = m.conn.checkExists().forPath(rpath);
+        assertNull(exists);
+        assertFalse(nr.exists());
+
+        nr.createZNode();
+        rpath = nr.getPath();
+        exists = m.conn.checkExists().forPath(rpath);
+        assertNotNull(exists);
+        assertTrue(nr.exists());
+    }
+
+    /**
+     * Test of getState method, of class NodeRequest.
+     */
+    @Test
+    public void testGetState() {
+        assertTrue(nr.getState() instanceof RequestState);
+    }
+
+    /**
+     * Test of getAllocatedNodes method, of class NodeRequest.
+     */
+    @Test
+    public void testGetAllocatedNodes() throws Exception {
+        try {
+            nr.getAllocatedNodes();
+            fail("Exception should have been thrown");
+        } catch (IllegalStateException e) {
+            // pass
+        }
+
+        nr.data.put("state", RequestState.fulfilled);
+        List<String> nodeIds = new ArrayList();
+        nodeIds.add(m.npID);
+        nr.data.put("nodes", nodeIds);
+        List<NodePoolNode> nodes = (List) nr.data.get("nodes");
+        assertNotNull(nodes);
+        assertTrue(nodes.size() == 1);
+    }
+
+    /**
+     * Test of getNodePoolLabel method, of class NodeRequest.
+     */
+    @Test
+    public void testGetNodePoolLabel() {
+        String rLabel = nr.getNodePoolLabel();
+        assertEquals(m.npLabel, rLabel);
+    }
+
+    /**
+     * Test of getJenkinsLabel method, of class NodeRequest.
+     */
+    @Test
+    public void testGetJenkinsLabel() {
+        assertEquals(m.label, nr.getJenkinsLabel());
+    }
+
+    /**
+     * Test of getAge method, of class NodeRequest.
+     */
+    @Test
+    public void testGetAge() {
+        String age = nr.getAge();
+        assertTrue(Pattern.matches("[0-9]+[sm]", age));
+    }
+
 
 }

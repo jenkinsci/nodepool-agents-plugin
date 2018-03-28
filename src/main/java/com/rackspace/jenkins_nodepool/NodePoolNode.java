@@ -14,7 +14,7 @@ public class NodePoolNode extends ZooKeeperObject {
     /**
      * The lock on the node ZNode
      */
-    private final KazooLock lock;
+    final KazooLock lock;
 
     /**
      * @param nodePool  NodePool

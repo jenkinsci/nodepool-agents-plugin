@@ -45,7 +45,7 @@ import org.apache.zookeeper.WatchedEvent;
  */
 public class KazooLock {
 
-    private enum State {
+    static enum State {
         UNLOCKED, LOCKING, LOCKED
     }
 
@@ -233,6 +233,10 @@ public class KazooLock {
         nodePool.getConn().delete().forPath(node);
         state = State.UNLOCKED;
         LOG.log(Level.FINE, "Released Lock {0}", path);
+    }
+
+    KazooLock.State getState() {
+        return state;
     }
 
 }

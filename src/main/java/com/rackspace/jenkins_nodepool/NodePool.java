@@ -39,7 +39,6 @@ import hudson.model.Queue.Task;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.security.ACL;
 import hudson.security.AccessControlled;
-import hudson.slaves.SlaveComputer;
 import hudson.util.FormFieldValidator;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
@@ -75,7 +74,6 @@ import org.kohsuke.stapler.StaplerResponse;
  * Charset field which doesn't implement serialisable but does serialise just
  * fine * via xstreame :/
  */
-
 public class NodePool implements Describable<NodePool> {
 
     private static final Logger LOG = Logger.getLogger(NodePool.class.getName());
@@ -83,11 +81,11 @@ public class NodePool implements Describable<NodePool> {
     /**
      * Create a curator managed connection to ZooKeeper
      *
-     * @param connectionString  ZooKeeper connection string
-     * @param zkRoot  root path to prefix onto all Curator (ZK) requests
+     * @param connectionString ZooKeeper connection string
+     * @param zkRoot root path to prefix onto all Curator (ZK) requests
      * @return CuratorFramework connection wrapper instance
      */
-    private static CuratorFramework createZKConnection(String connectionString,
+    public static CuratorFramework createZKConnection(String connectionString,
             String zkRoot) {
         final CuratorFramework conn = CuratorFrameworkFactory.builder()
                 .connectString(connectionString)
@@ -118,7 +116,8 @@ public class NodePool implements Describable<NodePool> {
     private transient final Gson gson = new Gson();
 
     /**
-     * Prefix used to associate select Jenkins labels with this NodePool cluster.
+     * Prefix used to associate select Jenkins labels with this NodePool
+     * cluster.
      */
     private String labelPrefix;
 
@@ -145,7 +144,7 @@ public class NodePool implements Describable<NodePool> {
     /**
      * List of node requests submitted to this NodePool cluster
      */
-    private transient List<NodeRequest> requests;
+    transient List<NodeRequest> requests;
 
     /**
      * Prefix used to prepend to all NodePool related ZNodes
@@ -155,14 +154,14 @@ public class NodePool implements Describable<NodePool> {
     /**
      * Constructor invoked by Jenkins's Stapler library.
      *
-     * @param connectionString  ZooKeeper connection string
-     * @param credentialsId  Credential information identifier
-     * @param labelPrefix  Prefix for labels served by this NodePool cluster
-     * @param requestRoot  Prefix of node requests
-     * @param priority  Priority value of node requests
-     * @param requestor  Name of process making node requests
-     * @param zooKeeperRoot  Prefix of all NodePool-related ZNodes
-     * @param nodeRoot  Prefix of nodes
+     * @param connectionString ZooKeeper connection string
+     * @param credentialsId Credential information identifier
+     * @param labelPrefix Prefix for labels served by this NodePool cluster
+     * @param requestRoot Prefix of node requests
+     * @param priority Priority value of node requests
+     * @param requestor Name of process making node requests
+     * @param zooKeeperRoot Prefix of all NodePool-related ZNodes
+     * @param nodeRoot Prefix of nodes
      */
     @DataBoundConstructor
     public NodePool(String connectionString,
@@ -183,7 +182,7 @@ public class NodePool implements Describable<NodePool> {
     /**
      * Accept the node that was created to satisfy the given request.
      *
-     * @param request  node request
+     * @param request node request
      * @return node name as a String
      * @throws java.lang.Exception on ZooKeeper error
      */
@@ -244,6 +243,7 @@ public class NodePool implements Describable<NodePool> {
     public String getCredentialsId() {
         return credentialsId;
     }
+
     @Override
     public Descriptor<NodePool> getDescriptor() {
         return new NodePoolDescriptor();
@@ -257,6 +257,7 @@ public class NodePool implements Describable<NodePool> {
     public String getLabelPrefix() {
         return labelPrefix;
     }
+
     public String getNodeRoot() {
         return nodeRoot;
     }
@@ -264,6 +265,7 @@ public class NodePool implements Describable<NodePool> {
     public String getPriority() {
         return priority;
     }
+
     public String getRequestRoot() {
         return requestRoot;
     }
@@ -280,25 +282,12 @@ public class NodePool implements Describable<NodePool> {
     public final String getZooKeeperRoot() {
         return zooKeeperRoot;
     }
-    //TODO: figure out how to reuse the form validation functions or dedupe this somehow.
-    public final Boolean isConfigured() {
-        if (connectionString == null || !connectionString.contains(":")) {
-            return false;
-        }
-        if (credentialsId == null || "".equals(credentialsId)) {
-            return false;
-        }
-        if (labelPrefix == null || "".equals(labelPrefix)) {
-            return false;
-        }
-        return true;
-    }
 
     /**
      * Convert the given jenkins label into its NodePool equivalent
      *
-     * @param jenkinsLabel  jenkins label
-     * @return  NodePool label without the prefix
+     * @param jenkinsLabel jenkins label
+     * @return NodePool label without the prefix
      */
     public String nodePoolLabelFromJenkinsLabel(String jenkinsLabel) {
         return jenkinsLabel.substring(getLabelPrefix().length());
@@ -356,7 +345,7 @@ public class NodePool implements Describable<NodePool> {
     /**
      * Extract the request id from the given path
      *
-     * @param path  path to node request
+     * @param path path to node request
      * @return request id
      * @throws NodePoolException if the request id cannot be found
      */
@@ -373,8 +362,8 @@ public class NodePool implements Describable<NodePool> {
     /**
      * Submit request for node(s) required to execute the given task
      *
-     * @param label  Jenkins label
-     * @param task  task/build being executed
+     * @param label Jenkins label
+     * @param task task/build being executed
      * @throws Exception on ZooKeeper error
      */
     void provisionNode(Label label, Task task) throws Exception {
@@ -431,19 +420,23 @@ public class NodePool implements Describable<NodePool> {
             throw new Exception(MessageFormat.format("Failed to provision node for label {0}", task.getAssignedLabel().getName()));
         }
 
-        // *** Get allocated nodes from the request and add to Jenkins
-        final NodePoolNode node = allocatedNodes.get(0);
-        final NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId());
-        final Jenkins jenkins = Jenkins.getInstance();
-        jenkins.addNode(nps);
-        LOG.log(Level.INFO, "Added NodePool slave to Jenkins: {0}", nps);
+        if (allocatedNodes.isEmpty()) {
+            LOG.warning("Nodepool node request fulfilled with empty node list");
+        } else {
+            // *** Get allocated nodes from the request and add to Jenkins
+            final NodePoolNode node = allocatedNodes.get(0);
+            final NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId());
+            final Jenkins jenkins = Jenkins.getInstance();
+            jenkins.addNode(nps);
+            LOG.log(Level.INFO, "Added NodePool slave to Jenkins: {0}", nps);
+        }
     }
 
     /**
-     * Descriptor class to support configuration of a NodePool instance in the Jenkins UI
+     * Descriptor class to support configuration of a NodePool instance in the
+     * Jenkins UI
      *
      */
-
     @Extension
     public static class NodePoolDescriptor extends Descriptor<NodePool> {
 
@@ -498,8 +491,8 @@ public class NodePool implements Describable<NodePool> {
          * Shamelessly stolen from
          * https://github.com/jenkinsci/ssh-slaves-plugin/blob/master/src/main/java/hudson/plugins/sshslaves/SSHConnector.java#L314
          *
-         * @param context  item grouping context
-         * @param credentialsId  Jenkins credential identifier
+         * @param context item grouping context
+         * @param credentialsId Jenkins credential identifier
          * @return a list box model
          */
         public ListBoxModel doFillCredentialsIdItems(@AncestorInPath ItemGroup context, @QueryParameter String credentialsId) {

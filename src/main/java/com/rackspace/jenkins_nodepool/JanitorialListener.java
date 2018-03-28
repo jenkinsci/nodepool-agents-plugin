@@ -149,7 +149,7 @@ class Janitor implements Runnable {
      * @param nodePoolSlave  the node to remove
      * @param reason  the reason why the node is being removed
      */
-    private void cleanNode(NodePoolSlave nodePoolSlave, String reason) {
+    void cleanNode(NodePoolSlave nodePoolSlave, String reason) {
         try {
             NodePoolComputer c = (NodePoolComputer) nodePoolSlave.toComputer();
             NodePoolNode npn = nodePoolSlave.getNodePoolNode();
@@ -176,7 +176,7 @@ class Janitor implements Runnable {
      * @param nodePoolSlave  the node to check
      * @return true if the label is invalid
      */
-    private boolean hasInvalidLabel(NodePoolSlave nodePoolSlave) {
+    boolean hasInvalidLabel(NodePoolSlave nodePoolSlave) {
         final String nodeLabel = nodePoolSlave.getLabelString();
         final List<NodePool> nodePools = NodePools.get().nodePoolsForLabel(new LabelAtom(nodeLabel));
         return (nodePools == null || nodePools.size() == 0);
@@ -188,7 +188,7 @@ class Janitor implements Runnable {
      * @param nodePoolSlave  the node to check
      * @return true if the node has disappeared
      */
-    private boolean isMissing(NodePoolSlave nodePoolSlave) {
+    boolean isMissing(NodePoolSlave nodePoolSlave) {
         NodePoolComputer c = (NodePoolComputer) nodePoolSlave.toComputer();
         if (c == null || c.isOffline()) {
             // agent is offline - confirm that this node still exists in ZK/NP:
@@ -215,7 +215,7 @@ class Janitor implements Runnable {
      * @param nodePoolSlave  the node to check
      * @return true if the node has previously completed a build
      */
-    private boolean isPreviouslyUsed(NodePoolSlave nodePoolSlave) {
+    boolean isPreviouslyUsed(NodePoolSlave nodePoolSlave) {
 
         final NodePoolComputer computer = (NodePoolComputer) nodePoolSlave.toComputer();
         if (computer == null) {
