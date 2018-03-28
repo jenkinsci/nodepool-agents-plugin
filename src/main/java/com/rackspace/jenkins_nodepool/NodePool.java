@@ -435,7 +435,6 @@ public class NodePool implements Describable<NodePool> {
         final NodePoolNode node = allocatedNodes.get(0);
         final NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId());
         final Jenkins jenkins = Jenkins.getInstance();
-        jenkins.checkPermission(SlaveComputer.CREATE);
         jenkins.addNode(nps);
         LOG.log(Level.INFO, "Added NodePool slave to Jenkins: {0}", nps);
     }
