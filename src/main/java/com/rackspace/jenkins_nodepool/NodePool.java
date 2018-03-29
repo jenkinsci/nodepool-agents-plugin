@@ -445,13 +445,11 @@ public class NodePool implements Describable<NodePool> {
             new FormFieldValidator(req, resp, true) {
                 @Override
                 protected void check() throws IOException, ServletException {
-                    try {
-                        CuratorFramework testConn = NodePool.createZKConnection(connectionString, zooKeeperRoot);
+                    try (CuratorFramework testConn = NodePool.createZKConnection(connectionString, zooKeeperRoot)) {
                         testConn.create()
                                 .creatingParentsIfNeeded()
                                 .withMode(CreateMode.EPHEMERAL)
                                 .forPath(MessageFormat.format("/testing/{0}", req.getSession().getId()));
-                        testConn.close();
                         ok(MessageFormat.format("Successfully connected to Zookeeper at {0}", connectionString));
                     } catch (Exception e) {
                         error(MessageFormat.format("Failed to connecto to ZooKeeper :( {0}", e.getMessage()));
