@@ -516,4 +516,14 @@ public class NodePool implements Describable<NodePool> {
         }
     }
 
+    /**
+     * Release resources related to this nodepool
+     */
+    void cleanup() {
+        LOG.log(Level.INFO, "Removing Nodepool Configuration {0}", connectionString);
+        if (conn != null) {
+            conn.close();
+        }
+    }
+
 }
