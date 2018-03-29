@@ -23,6 +23,7 @@
  */
 package com.rackspace.jenkins_nodepool;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.Extension;
 import hudson.model.Label;
 import hudson.model.Queue.Task;
@@ -74,8 +75,13 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
 
 
     @Override
+    @SuppressFBWarnings("UC_USELESS_OBJECT")
     public boolean configure(StaplerRequest req, JSONObject json) throws FormException {
-        super.configure(req, json);
+        List<NodePool> removedNodePools = new ArrayList(nodePools);
+        // req.bindJSON is the only thing the super method does.
+        // We need to store the old list before binding the new
+        // data so we can't use the super() call.
+        req.bindJSON(this, json);
         if (!json.containsKey("nodePools")) {
             // if the last nodepool configuration is removed
             // the nodePools field is not included in the json
@@ -87,6 +93,11 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
             nodePools.clear();
         }
         save();
+        removedNodePools.removeAll(nodePools);
+        // removedNodePools now contains all the nodePools
+        // that have been removed. They should be cleaned up
+        // so connections are closed etc
+        removedNodePools.forEach((np) -> np.cleanup());
         return true;
     }
 
@@ -112,7 +123,7 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
             } catch (Exception ex) {
                 LOG.log(Level.SEVERE, null, ex);
             }
-        };
+        }
     }
 
     @DataBoundSetter
