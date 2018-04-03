@@ -68,7 +68,12 @@ public class NodePoolNode extends ZooKeeperObject {
     }
 
     public Integer getPort() {
-        return ((Double) data.get("connection_port")).intValue();
+        Double port = (Double)data.get("connection_port");
+        if (port == null) {
+            // fall back to the field name used on older NodePool clusters.
+            port = (Double)data.getOrDefault("ssh_port", 22.0);
+        }
+        return port.intValue();
     }
 
     public String getHostKey() {
