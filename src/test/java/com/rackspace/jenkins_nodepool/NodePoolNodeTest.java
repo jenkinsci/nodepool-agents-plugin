@@ -137,6 +137,26 @@ public class NodePoolNodeTest {
     }
 
     /**
+     * Test backward compatibility with older NodePool clusters
+     */
+    @Test
+    public void testGetPortBackwardCompat() {
+        npn.data.remove("connection_port");
+        npn.data.put("ssh_port", 2222.0);
+
+        assertEquals(new Integer(2222), npn.getPort());
+    }
+
+    /**
+     * Test the default to 22 if no port is provided.
+     */
+    @Test
+    public void testDefaultPort() {
+        npn.data.remove("connection_port");
+        assertEquals(new Integer(22), npn.getPort());
+    }
+
+    /**
      * Test of getHostKey method, of class NodePoolNode.
      */
     @Test
