@@ -80,7 +80,7 @@ public class NodePoolQueueListener extends QueueListener {
             try {
                 nodePools.provisionNode(label, wi.task);
             } catch (Exception ex) {
-                LOG.log(Level.SEVERE, null, ex);
+                LOG.log(Level.SEVERE, ex.getLocalizedMessage(), ex);
             }
         });
     }

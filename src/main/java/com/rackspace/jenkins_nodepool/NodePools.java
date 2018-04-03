@@ -31,7 +31,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -47,10 +46,19 @@ import org.kohsuke.stapler.StaplerRequest;
 @Extension
 public class NodePools extends GlobalConfiguration implements Iterable<NodePool> {
 
+    /**
+     * Our class logger.
+     **/
     private static final Logger LOG = Logger.getLogger(NodePools.class.getName());
+
     public static NodePools get() {
         return GlobalConfiguration.all().get(NodePools.class);
     }
+
+    /**
+     * Default timeout is 5 minutes
+     */
+    public static final int DEFAULT_TIMEOUT_SEC = 300;
 
     private List<NodePool> nodePools;
 
@@ -115,14 +123,36 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
                 .collect(Collectors.toList());
     }
 
-    public void provisionNode(Label label, Task task) {
+    /**
+     * Submit request for node(s) required to execute the given task based on the nodes associated with the specified
+     * label. Uses a default timeout of 60 seconds.
+     *
+     * @param label the label attribute to filter the list of available nodes
+     * @param task  the task to execute
+     * @throws IllegalArgumentException    if timeout is less than 1 second
+     * @throws NodeRequestTimeoutException if the node request timed out
+     * @throws Exception                   if an error occurs managing the provision components
+     */
+    public void provisionNode(Label label, Task task) throws IllegalArgumentException, NodeRequestTimeoutException, Exception {
+        provisionNode(label, task, DEFAULT_TIMEOUT_SEC);
+    }
+
+    /**
+     * Submit request for node(s) required to execute the given task based on the nodes associated with the specified
+     * label.
+     *
+     * @param label        the label attribute to filter the list of available nodes
+     * @param task         the task to execute
+     * @param timeoutInSec the timeout in seconds to provision the node(s)
+     * @throws IllegalArgumentException    if timeout is less than 1 second
+     * @throws NodeRequestTimeoutException if the node request timed out
+     * @throws Exception                   if an error occurs managing the provision components
+     */
+    public void provisionNode(Label label, Task task, int timeoutInSec) throws IllegalArgumentException, NodeRequestTimeoutException, Exception {
         for (NodePool np : nodePoolsForLabel(label)) {
-            try {
-                np.provisionNode(label, task);
-                break;
-            } catch (Exception ex) {
-                LOG.log(Level.SEVERE, null, ex);
-            }
+            np.provisionNode(label, task, timeoutInSec);
+            // TODO: DAD -  Why does this code have a break here?
+            break;
         }
     }
 

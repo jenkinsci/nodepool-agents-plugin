@@ -118,6 +118,10 @@ public class NodeRequest extends ZooKeeperObject {
     public List<NodePoolNode> getAllocatedNodes() throws Exception {
         // Example fulfilled request
         // {"nodes": ["0000000000"], "node_types": ["debian"], "state": "fulfilled", "declined_by": [], "state_time": 1520849225.4513698, "reuse": false, "requestor": "NodePool:min-ready"}
+
+        // Refresh our view of the data
+        updateFromZK();
+
         if (data.get("state") != RequestState.fulfilled) {
             throw new IllegalStateException("Attempt to get allocated nodes from a node request before it has been fulfilled");
         }

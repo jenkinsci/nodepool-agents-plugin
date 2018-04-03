@@ -1,0 +1,29 @@
+# Files to ignore
+
+# Mac OS X
+.DS_Store
+.Trashes
+*.swp
+*.lock
+
+# Ignore any build or working folders
+target/
+build/
+.gradle/
+work/
+
+# Ignore any log files
+*.log
+
+# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+hs_err_pid*
+
+# Ignore IntelliJ folder/files
+.idea/
+*.iml
+
+# Ignore Visual Studio Code project files
+.project
+.classpath
+.settings/
+.history/

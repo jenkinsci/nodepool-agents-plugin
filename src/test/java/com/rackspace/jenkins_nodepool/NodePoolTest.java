@@ -175,7 +175,7 @@ public class NodePoolTest {
                 String path = MessageFormat.format("/{0}/{1}", m.requestRoot, child);
                 Map rdata = m.getNodeData(path);
                 List<String> nodes = Arrays.asList(new String[]{});
-                rdata.put("state", "fulfilled");
+                rdata.put("state", RequestState.fulfilled);
                 rdata.put("nodes", nodes);
                 m.writeNodeData(path, rdata);
 
@@ -184,7 +184,7 @@ public class NodePoolTest {
             }
 
         }).start();
-        np.provisionNode(m.label, m.task);
+        np.provisionNode(m.label, m.task, 10);
 
         // this test will timeout on failure
     }

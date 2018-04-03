@@ -49,6 +49,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.servlet.ServletException;
@@ -360,64 +361,66 @@ public class NodePool implements Describable<NodePool> {
     }
 
     /**
-     * Submit request for node(s) required to execute the given task
+     * Submit request for node(s) required to execute the given task based on the nodes associated with the specified
+     * label. Uses a default timeout of 60 seconds.
      *
-     * @param label Jenkins label
-     * @param task task/build being executed
-     * @throws Exception on ZooKeeper error
+     * @param label the label attribute to filter the list of available nodes
+     * @param task  the task to execute
+     * @throws IllegalArgumentException    if timeout is less than 1 second
+     * @throws NodeRequestTimeoutException if the node request timed out
+     * @throws Exception                   if an error occurs managing the provision components
      */
-    void provisionNode(Label label, Task task) throws Exception {
+    public void provisionNode(Label label, Task task) throws NodeRequestTimeoutException, Exception {
+        provisionNode(label, task, NodePools.DEFAULT_TIMEOUT_SEC);
+    }
+
+    /**
+     * Submit request for node(s) required to execute the given task.
+     *
+     * @param label        Jenkins label
+     * @param task         task/build being executed
+     * @param timeoutInSec the timeout in seconds to provision the node(s)
+     * @throws IllegalArgumentException    if timeout is less than 1 second
+     * @throws NodeRequestTimeoutException if the node request timed out
+     * @throws Exception                   if an error occurs managing the provision components
+     */
+    void provisionNode(Label label, Task task, int timeoutInSec) throws NodeRequestTimeoutException, Exception {
+
+        if (timeoutInSec < 1) {
+            throw new IllegalArgumentException("Timeout value is less than 1 second: " + timeoutInSec);
+        }
 
         initTransients();
+
         // *** Request Node ***
         //TODO: store prefix in config and pass in.
         final NodeRequest request = new NodeRequest(this, task);
         requests.add(request);
 
-        // *** Poll request status and wait for fulfillment
-        //TODO: store timeout in config
-        //TODO: Curator async stuff to avoid polling
-        final Integer timeout = 1200 * 1000; //timeout in milliseconds
-        final Long startTime = System.currentTimeMillis();
-        RequestState requestState = RequestState.requested;
         List<NodePoolNode> allocatedNodes = null;
-        while (System.currentTimeMillis() < startTime + timeout) {
 
+        // Let's create a node pool watcher and wait until the request is in the desired state (or until we're timed out
+        final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
+                conn, request.getPath(), RequestState.fulfilled);
+
+        LOG.info("Waiting on node to become available, timeout is " + timeoutInSec + " seconds...");
+        if (watcher.waitUntilDone(timeoutInSec, TimeUnit.SECONDS)) {
             try {
-                request.updateFromZK();
-            } catch (KeeperException e) {
-                // connectivity issue with ZK - it should auto-reconnect and we can re-create the request then
-                LOG.log(Level.WARNING, e.getMessage(), e);
+                // accept here so that if any error conditions occur, the above update logic will automatically re-submit
+                // the node request:
+                allocatedNodes = acceptNodes(request);
+            } catch (Exception ex) {
+                throw new Exception(ex.getClass().getCanonicalName() + " occurred while accepting nodes. Message: " +
+                        ex.getLocalizedMessage());
             }
-
-            // node is updated now, check it's state:
-            requestState = request.getState();
-
-            LOG.log(Level.FINEST, "Current state of request {0} is: {1}", new Object[]{request.getZKID(), requestState});
-
-            if (requestState == RequestState.failed) {
-                // TODO switch this logic to re-submit the NodeRequest?
-                LOG.log(Level.WARNING, "Request {0} failed.", request.getZKID());
-                break;
-            }
-
-            final boolean done = requestState == RequestState.fulfilled;
-            if (done) {
-                try {
-                    // accept here so that if any error conditions occur, the above update logic will automatically re-submit
-                    // the node request:
-                    allocatedNodes = acceptNodes(request);
-                    break;
-                } catch (Exception ex) {
-                    LOG.log(Level.SEVERE, null, ex);
-                }
-            }
-
-            Thread.sleep(5000);
-            //TODO: Configurable poll interval for instance ACTIVE
-        }
-        if (requestState != RequestState.fulfilled || allocatedNodes == null) {
-            throw new Exception(MessageFormat.format("Failed to provision node for label {0}", task.getAssignedLabel().getName()));
+        } else {
+            // TODO: DAD - Should we retry if failed - maybe look at the state again??
+            //if (requestState == RequestState.failed) {
+            throw new NodeRequestTimeoutException("NodePool watcher expired after " + timeoutInSec +
+                    " seconds waiting for request state:" + RequestState.fulfilled +
+                    ", actual:" + watcher.getStateFromPath() +
+                    ". Provisioning failed for task:" + task.getName() +
+                    " with node label:" + task.getAssignedLabel().getName());
         }
 
         if (allocatedNodes.isEmpty()) {

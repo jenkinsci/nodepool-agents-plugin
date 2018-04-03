@@ -35,10 +35,10 @@ public class JanitorialListener extends ComputerListener {
     /**
      * Start the Janitor thread when the master node comes online
      *
-     * @param c Computer thats coming online
-     * @param listener
-     * @throws IOException
-     * @throws InterruptedException
+     * @param c Computer that is coming online
+     * @param listener a task listener
+     * @throws IOException if an error occurs while bringing the janitor online
+     * @throws InterruptedException if an error occurs while bringing the janitor online
      */
     @Override
     public void onOnline(Computer c, TaskListener listener) throws IOException, InterruptedException {
