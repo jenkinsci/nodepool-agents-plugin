@@ -25,7 +25,6 @@ package com.rackspace.jenkins_nodepool;
 
 import com.gargoylesoftware.htmlunit.html.HtmlForm;
 import com.gargoylesoftware.htmlunit.html.HtmlTextInput;
-import java.util.List;
 import jenkins.model.Jenkins;
 import static org.junit.Assert.assertEquals;
 import org.junit.Rule;
@@ -46,19 +45,27 @@ public class NodePoolsPersistenceTest {
     public void testConfigWithRestart() {
         String connectionString = "localhost:2181";
         String labelPrefix = "testprefix";
+        String ipVersion = "public_ipv6";
         rr.then(r -> {
             Jenkins j = r.getInstance();
-            NodePools nps = new NodePools();
-            List<NodePool> npsList = nps.getNodePools();
+            NodePools nps = NodePools.get();
             HtmlForm config = r.createWebClient().goTo("configure").getFormByName("config");
             HtmlTextInput connectionStringBox = config.getInputByName("_.connectionString");
             HtmlTextInput labelPrefixStringBox = config.getInputByName("_.labelPrefix");
             connectionStringBox.setText(connectionString);
             labelPrefixStringBox.setText(labelPrefix);
             r.submit(config);
-
+            NodePool np = nps.getNodePools().get(0);
+            assertEquals("public_ipv4", np.getIpVersion());
+            np.setIpVersion(ipVersion);
+            nps.save();
         });
         rr.then(r -> {
+            Jenkins j = r.getInstance();
+            NodePools nps = NodePools.get();
+            NodePool np = nps.getNodePools().get(0);
+            assertEquals(ipVersion, np.getIpVersion());
+
             HtmlForm config = r.createWebClient().goTo("configure").getFormByName("config");
             HtmlTextInput connectionStringBox = config.getInputByName("_.connectionString");
             HtmlTextInput labelPrefixStringBox = config.getInputByName("_.labelPrefix");

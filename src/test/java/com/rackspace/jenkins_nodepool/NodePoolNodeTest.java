@@ -27,12 +27,11 @@ import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import org.junit.After;
 import org.junit.AfterClass;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -61,28 +60,21 @@ public class NodePoolNodeTest {
     }
 
     @Before
-    public void setUp() {
-        try {
-            m = new Mocks();
-            hostKeys = new ArrayList();
-            hostKey = "hostKey";
-            hostKeys.add(hostKey);
-            nodePath = MessageFormat.format("/{0}/{1}", m.nodeRoot, m.npID);
-            m.conn.create()
-                    .creatingParentsIfNeeded()
-                    .forPath(nodePath, m.jsonString.getBytes(m.charset));
-            npn = new NodePoolNode(m.np, m.npID);
-            npn.data.put("type", m.npLabel);
-            npn.data.put("interface_ip", m.host);
-            npn.data.put("connection_port", m.port);
-            npn.data.put("host_keys", hostKeys);
-        } catch (Exception ex) {
-            Logger.getLogger(NodePoolNodeTest.class.getName()).log(Level.SEVERE, null, ex);
-        }
-    }
-
-    @After
-    public void tearDown() {
+    public void setUp() throws Exception {
+        m = new Mocks();
+        hostKeys = new ArrayList();
+        hostKey = "hostKey";
+        hostKeys.add(hostKey);
+        nodePath = MessageFormat.format("/{0}/{1}", m.nodeRoot, m.npID);
+        m.conn.create()
+                .creatingParentsIfNeeded()
+                .forPath(nodePath, m.jsonString.getBytes(m.charset));
+        npn = new NodePoolNode(m.np, m.npID);
+        assertNotNull(npn);
+        npn.data.put("type", m.npLabel);
+        npn.data.put(m.ipVersion, m.host);
+        npn.data.put("connection_port", m.port);
+        npn.data.put("host_keys", hostKeys);
     }
 
     /**
@@ -117,7 +109,7 @@ public class NodePoolNodeTest {
     public void testGetName() {
         assertEquals(
                 MessageFormat.format("{0}-{1}", m.label.getDisplayName(), m.npID),
-                 npn.getName());
+                npn.getName());
     }
 
     /**
@@ -125,7 +117,22 @@ public class NodePoolNodeTest {
      */
     @Test
     public void testGetHost() {
+        // check normal case
         assertEquals(m.host, npn.getHost());
+
+        // check fallback
+        npn.data.remove(m.ipVersion);
+        npn.data.put("interface_ip", "ip");
+        assertEquals("ip", npn.getHost());
+
+        // check exception
+        npn.data.remove("interface_ip");
+        try {
+            String host = npn.getHost();
+            fail("Exception should have been thrown");
+        } catch (IllegalStateException e) {
+            // pass
+        }
     }
 
     /**
@@ -171,7 +178,6 @@ public class NodePoolNodeTest {
     public void testGetHostKeys() {
         assertTrue(hostKeys.containsAll(npn.getHostKeys()));
     }
-
 
     /**
      * Test of setInUse method, of class NodePoolNode.

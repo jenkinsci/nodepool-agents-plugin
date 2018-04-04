@@ -2,6 +2,8 @@ package com.rackspace.jenkins_nodepool;
 
 import java.text.MessageFormat;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 
 /**
@@ -10,6 +12,8 @@ import java.util.List;
  */
 
 public class NodePoolNode extends ZooKeeperObject {
+
+    private static final Logger LOG = Logger.getLogger(NodePoolNode.class.getName());
 
     /**
      * The lock on the node ZNode
@@ -64,7 +68,19 @@ public class NodePoolNode extends ZooKeeperObject {
     }
 
     public String getHost() {
-        return (String) data.get("interface_ip");
+        String key = nodePool.getIpVersion();
+        String host = (String) data.get(key);
+        if (host == null) {
+            LOG.log(Level.WARNING, "Requested IP family {0} not available for node {1}.", new Object[]{key, this.toString()});
+            if (!key.equals("interface_ip")) {
+                host = (String) data.get("interface_ip");
+                LOG.log(Level.WARNING, "Falling back to interface_ip:{0}", host);
+            }
+        }
+        if (host == null) {
+            throw new IllegalStateException(MessageFormat.format("Failed to find an IP address to connect to NodePool Node {0}", this));
+        }
+        return host;
     }
 
     public Integer getPort() {

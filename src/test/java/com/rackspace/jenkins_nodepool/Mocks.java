@@ -59,6 +59,7 @@ public class Mocks {
     Label label;
     String labelPrefix;
     String nodeRoot;
+    String ipVersion;
     NodePool np;
     String npID;
     String npLabel;
@@ -80,6 +81,7 @@ public class Mocks {
     List<NodePoolNode> allocatedNodes;
 
     public Mocks() {
+        ipVersion = "public_ipv4";
         requestor = "unittests";
         priority = "001";
         labelPrefix = "nodepool-";
@@ -112,6 +114,7 @@ public class Mocks {
         when(nps.getLabelString()).thenReturn(label.getDisplayName());
         when(nps.getNodeName()).thenReturn(npcName);
         when(queueItem.getAssignedLabel()).thenReturn(label);
+        when(np.getIpVersion()).thenReturn(ipVersion);
         when(np.getConn()).thenReturn(conn);
         when(np.getRequestor()).thenReturn(requestor);
         when(np.getCharset()).thenReturn(charset);

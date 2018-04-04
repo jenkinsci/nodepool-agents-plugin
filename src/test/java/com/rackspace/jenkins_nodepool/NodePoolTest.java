@@ -75,6 +75,7 @@ public class NodePoolTest {
                 m.connectionString,
                 m.credentialsID,
                 m.labelPrefix,
+                m.ipVersion,
                 m.requestRoot,
                 m.priority,
                 m.requestor,
