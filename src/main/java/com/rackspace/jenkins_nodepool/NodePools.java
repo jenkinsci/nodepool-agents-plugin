@@ -151,7 +151,7 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
     public void provisionNode(Label label, Task task, int timeoutInSec) throws IllegalArgumentException, NodeRequestTimeoutException, Exception {
         for (NodePool np : nodePoolsForLabel(label)) {
             np.provisionNode(label, task, timeoutInSec);
-            // TODO: DAD -  Why does this code have a break here?
+            // Prevent multiple nodes being provisioned if label prefixes were to overlap.
             break;
         }
     }
