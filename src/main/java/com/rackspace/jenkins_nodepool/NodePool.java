@@ -96,7 +96,9 @@ public class NodePool implements Describable<NodePool> {
         return conn;
     }
 
-    private final Charset charset = Charset.forName("UTF-8");
+    // Apparently Charset isn't serialisable.
+    private static final String charset = "UTF-8";
+
 
     private transient CuratorFramework conn;
 
@@ -228,7 +230,7 @@ public class NodePool implements Describable<NodePool> {
     }
 
     public Charset getCharset() {
-        return charset;
+        return Charset.forName(charset);
     }
 
     public CuratorFramework getConn() {

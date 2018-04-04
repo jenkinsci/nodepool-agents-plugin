@@ -49,7 +49,7 @@ public class NodePoolsTest {
     @Rule
     public JenkinsRule j = new JenkinsRule();
 
-    Mocks m;
+    public Mocks m;
     NodePools nps;
 
     public NodePoolsTest() {
@@ -65,8 +65,8 @@ public class NodePoolsTest {
 
     @Before
     public void setUp() {
-        nps = new NodePools();
         m = new Mocks();
+        nps = new NodePools();
     }
 
     @After
@@ -84,7 +84,6 @@ public class NodePoolsTest {
 
 // disabled due to problems with serialisation as configure
 // calls save();
-
     /**
      * Test of configure method, of class NodePools.
      */
@@ -109,8 +108,6 @@ public class NodePoolsTest {
 //        nps.configure(req, jo);
 //        assertTrue(nps.getNodePools().isEmpty());
 //    }
-
-
     /**
      * Test of iterator method, of class NodePools.
      */
@@ -136,7 +133,6 @@ public class NodePoolsTest {
         assertFalse(results.isEmpty());
         NodePool rnp = results.get(0);
         assertEquals(rnp, m.np);
-
     }
 
     /**
@@ -157,4 +153,5 @@ public class NodePoolsTest {
         Stream s = nps.stream();
         assertTrue(s instanceof Stream);
     }
+
 }
