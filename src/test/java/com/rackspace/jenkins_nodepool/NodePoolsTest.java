@@ -142,12 +142,11 @@ public class NodePoolsTest {
     /**
      * Test of provisionNode method, of class NodePools.
      */
-    //@Test
+    @Test
     public void testProvisionNode() throws Exception {
         nps.getNodePools().add(m.np);
-        // TODO: DAD - Need to check - is this covered under NodePoolRequestStateWatcherTest?
-        //nps.provisionNode(m.label, m.task, 5);
-        //verify(m.np).provisionNode(m.label, m.task, 5);
+        nps.provisionNode(m.label, m.task, 5);
+        verify(m.np).provisionNode(m.label, m.task, 5);
     }
 
     /**
