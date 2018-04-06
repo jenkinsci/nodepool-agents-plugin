@@ -154,6 +154,12 @@ public class NodePool implements Describable<NodePool> {
     private String zooKeeperRoot;
 
     /**
+     * IP Version used when SSHing to instances This value is used as a key to
+     * retrieve an instance's ip from the JSON data for an allocated node.
+     */
+    private String ipVersion;
+
+    /**
      * Constructor invoked by Jenkins's Stapler library.
      *
      * @param connectionString ZooKeeper connection string
@@ -167,11 +173,12 @@ public class NodePool implements Describable<NodePool> {
      */
     @DataBoundConstructor
     public NodePool(String connectionString,
-            String credentialsId, String labelPrefix, String requestRoot,
+            String credentialsId, String labelPrefix, String ipVersion, String requestRoot,
             String priority, String requestor, String zooKeeperRoot,
             String nodeRoot) {
         this.connectionString = connectionString;
         this.credentialsId = credentialsId;
+        this.ipVersion = ipVersion;
         this.requestRoot = requestRoot;
         this.priority = priority;
         this.requestor = requestor;
@@ -281,8 +288,12 @@ public class NodePool implements Describable<NodePool> {
         return requests;
     }
 
-    public final String getZooKeeperRoot() {
+    public String getZooKeeperRoot() {
         return zooKeeperRoot;
+    }
+
+    public String getIpVersion() {
+        return ipVersion;
     }
 
     /**
@@ -333,6 +344,10 @@ public class NodePool implements Describable<NodePool> {
 
     public void setZooKeeperRoot(String zooKeeperRoot) {
         this.zooKeeperRoot = zooKeeperRoot;
+    }
+
+    public void setIpVersion(String ipVersion) {
+        this.ipVersion = ipVersion;
     }
 
     private void initTransients() {
@@ -510,6 +525,21 @@ public class NodePool implements Describable<NodePool> {
                             SSHAuthenticator.matcher(Connection.class)
                     )
                     .includeCurrentValue(credentialsId);
+        }
+
+        public ListBoxModel doFillIpVersionItems(@QueryParameter String ipVersion) {
+            ListBoxModel items = new ListBoxModel();
+            if (ipVersion == null || ipVersion.equals("")) {
+                ipVersion = "public_ipv4";
+            }
+            final String currentIpVersion = ipVersion;
+            items.add("IPv4", "public_ipv4");
+            items.add("IPv6", "public_ipv6");
+            items.add("Use cloud provider's preferred interface", "interface_ip");
+            items.forEach((item) -> {
+                item.selected = item.value.equals(currentIpVersion);
+            });
+            return items;
         }
 
         @Override

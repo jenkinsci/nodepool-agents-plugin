@@ -12,6 +12,9 @@
         <f:entry title="Instance Credentials" field="credentialsId">
             <c:select/>
         </f:entry>
+        <f:entry name="ipVersion" title="SSH IP version" field="ipVersion">
+            <f:select />
+        </f:entry>
         <f:entry title="Label Prefix" field="labelPrefix">
             <f:textbox default="nodepool-"></f:textbox>
         </f:entry>
