@@ -130,10 +130,9 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
      * @param label the label attribute to filter the list of available nodes
      * @param task  the task to execute
      * @throws IllegalArgumentException    if timeout is less than 1 second
-     * @throws NodeRequestTimeoutException if the node request timed out
      * @throws Exception                   if an error occurs managing the provision components
      */
-    public void provisionNode(Label label, Task task) throws IllegalArgumentException, NodeRequestTimeoutException, Exception {
+    public void provisionNode(Label label, Task task) throws IllegalArgumentException, Exception {
         provisionNode(label, task, DEFAULT_TIMEOUT_SEC);
     }
 
@@ -145,10 +144,9 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
      * @param task         the task to execute
      * @param timeoutInSec the timeout in seconds to provision the node(s)
      * @throws IllegalArgumentException    if timeout is less than 1 second
-     * @throws NodeRequestTimeoutException if the node request timed out
      * @throws Exception                   if an error occurs managing the provision components
      */
-    public void provisionNode(Label label, Task task, int timeoutInSec) throws IllegalArgumentException, NodeRequestTimeoutException, Exception {
+    public void provisionNode(Label label, Task task, int timeoutInSec) throws IllegalArgumentException, Exception {
         for (NodePool np : nodePoolsForLabel(label)) {
             np.provisionNode(label, task, timeoutInSec);
             // Prevent multiple nodes being provisioned if label prefixes were to overlap.

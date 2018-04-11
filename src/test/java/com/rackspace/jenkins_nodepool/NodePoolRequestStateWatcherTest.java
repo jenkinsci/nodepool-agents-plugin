@@ -29,11 +29,11 @@ public class NodePoolRequestStateWatcherTest {
      **/
     private static final Logger log = Logger.getLogger(NodePoolRequestStateWatcherTest.class.getName());
 
-    final static int zookeeperPort = 2181;
-    static TestingServer zkTestServer;
-    static CuratorFramework zkCli;
-    final static Gson gson = new Gson();
-    static final int DEFAULT_TEST_TIMEOUT_SEC = 30;
+    private final static int zookeeperPort = 2181;
+    private static TestingServer zkTestServer;
+    private static CuratorFramework zkCli;
+    private final static Gson gson = new Gson();
+    private static final int DEFAULT_TEST_TIMEOUT_SEC = 30;
 
     public NodePoolRequestStateWatcherTest() {
     }
@@ -96,10 +96,11 @@ public class NodePoolRequestStateWatcherTest {
                     zkCli, zpath, RequestState.fulfilled);
 
             log.fine("Waiting for " + DEFAULT_TEST_TIMEOUT_SEC + " seconds max for the watcher...");
-            final boolean success = watcher.waitUntilDone(DEFAULT_TEST_TIMEOUT_SEC, TimeUnit.SECONDS);
+            watcher.waitUntilDone(DEFAULT_TEST_TIMEOUT_SEC, TimeUnit.SECONDS);
 
-            assertTrue("NodePoolRequestStateWatcher discovered request state was fulfilled before timeout of " +
-                    DEFAULT_TEST_TIMEOUT_SEC + " seconds", success);
+            assertSame("NodePoolRequestStateWatcher discovered request state was " +
+                            watcher.getStateFromPath() + " before timeout of " + DEFAULT_TEST_TIMEOUT_SEC + " seconds",
+                    watcher.getStateFromPath(), RequestState.fulfilled);
         } catch (Exception e) {
             fail(e.getClass().getSimpleName() + " occurred while creating a NodePool. Message: " +
                     e.getLocalizedMessage());
@@ -126,11 +127,12 @@ public class NodePoolRequestStateWatcherTest {
                     zkCli, zpath, RequestState.fulfilled);
 
             log.fine("Waiting for " + DEFAULT_TEST_TIMEOUT_SEC + " seconds max for the watcher...");
-            final boolean success = watcher.waitUntilDone(DEFAULT_TEST_TIMEOUT_SEC, TimeUnit.SECONDS);
+            watcher.waitUntilDone(DEFAULT_TEST_TIMEOUT_SEC, TimeUnit.SECONDS);
 
             // Should timeout with non-success since we only changed value to pending (not fulfulled)
-            assertFalse("NodePoolRequestStateWatcher discovered request state was fulfilled before timeout of " +
-                    DEFAULT_TEST_TIMEOUT_SEC + " seconds", success);
+            assertNotSame("NodePoolRequestStateWatcher discovered request state was NOT fulfilled before timeout of " +
+                            DEFAULT_TEST_TIMEOUT_SEC + " seconds",
+                    watcher.getStateFromPath(), RequestState.fulfilled);
         } catch (Exception e) {
             fail(e.getClass().getSimpleName() + " occurred while creating a NodePool. Message: " +
                     e.getLocalizedMessage());
@@ -159,10 +161,11 @@ public class NodePoolRequestStateWatcherTest {
 
             final int timeoutInSeconds = 5;
             log.fine("Waiting for " + timeoutInSeconds + " seconds max for the watcher...");
-            final boolean success = watcher.waitUntilDone(timeoutInSeconds, TimeUnit.SECONDS);
+            watcher.waitUntilDone(timeoutInSeconds, TimeUnit.SECONDS);
 
-            assertFalse("NodePoolRequestStateWatcher discovered request state was fulfilled before timeout of " +
-                    timeoutInSeconds + " seconds", success);
+            assertNotSame("NodePoolRequestStateWatcher discovered request state was NOT fulfilled before timeout of " +
+                            DEFAULT_TEST_TIMEOUT_SEC + " seconds",
+                    watcher.getStateFromPath(), RequestState.fulfilled);
         } catch (Exception e) {
             fail(e.getClass().getSimpleName() + " occurred while creating a NodePool. Message: " +
                     e.getLocalizedMessage());
@@ -197,10 +200,11 @@ public class NodePoolRequestStateWatcherTest {
                     zkCli, zpath, RequestState.fulfilled);
 
             log.fine("Waiting for " + DEFAULT_TEST_TIMEOUT_SEC + " seconds max for the watcher...");
-            final boolean success = watcher.waitUntilDone(DEFAULT_TEST_TIMEOUT_SEC, TimeUnit.SECONDS);
+            watcher.waitUntilDone(DEFAULT_TEST_TIMEOUT_SEC, TimeUnit.SECONDS);
 
-            assertTrue("NodePoolRequestStateWatcher discovered request state was fulfilled before timeout of " +
-                    DEFAULT_TEST_TIMEOUT_SEC + " seconds", success);
+            assertSame("NodePoolRequestStateWatcher discovered request state was " +
+                            watcher.getStateFromPath() + " before timeout of " + DEFAULT_TEST_TIMEOUT_SEC + " seconds",
+                    watcher.getStateFromPath(), RequestState.fulfilled);
         } catch (Exception e) {
             fail(e.getClass().getSimpleName() + " occurred while creating a NodePool. Message: " +
                     e.getLocalizedMessage());

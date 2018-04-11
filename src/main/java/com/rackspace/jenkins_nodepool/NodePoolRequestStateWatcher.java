@@ -94,27 +94,17 @@ public class NodePoolRequestStateWatcher implements CuratorWatcher {
 
             // Only interested in the node data changed event
             if (event.getType() == Watcher.Event.EventType.NodeDataChanged) {
-                log.fine("Watch event received event type:" + event.getType());
 
                 // Let's fetch the data from ZK directly so we can read the state value
                 final RequestState state = getStateFromPath();
+                log.fine("Watch event received event type:" + event.getType() + ". State is:" + state);
 
-                // Are we in the desired state yet?
-                if (state == desiredState) {
-                    log.fine("Watch event received event type:" + event.getType() + ". State is:" + state);
+                // Are we in the desired state yet? No reason to continue if the request failed.
+                if (state == desiredState || state == RequestState.failed) {
                     latch.countDown();
                 } else {
-                    // Let's check one more time (via getStateFromPath()) - just in case we quickly transitioned from
-                    // pending -> fulfilled and perhaps missed the Zookeeper Watch event (this has happened during
-                    // testing)
-                    if (state == RequestState.pending && getStateFromPath() == RequestState.fulfilled) {
-                        log.fine("Watch event received event type:" + event.getType() +
-                                ". Fetched state is:" + RequestState.fulfilled);
-                        latch.countDown();
-                    } else {
-                        log.fine("Watch event ignoring event type:" + event.getType() +
-                                ". Fetched state is: " + state);
-                    }
+                    log.fine("Watch event ignoring event type:" + event.getType() +
+                            ". Fetched state is: " + state + "/" + getStateFromPath());
                 }
             } else {
                 log.fine("Watch event ignoring event type:" + event.getType());
@@ -131,12 +121,10 @@ public class NodePoolRequestStateWatcher implements CuratorWatcher {
      *
      * @param timeout the timeout value
      * @param unit    the unit of the timeout value, typically TimeUnit.SECONDS
-     * @return {@code true} if the wait returned before the timeout and {@code false}
-     * if the waiting time elapsed before the count reached zero
      * @throws InterruptedException if the current thread is interrupted while waiting
      */
-    public boolean waitUntilDone(long timeout, TimeUnit unit) throws InterruptedException {
-        return latch.await(timeout, unit);
+    public void waitUntilDone(long timeout, TimeUnit unit) throws InterruptedException {
+        latch.await(timeout, unit);
     }
 
     /**
