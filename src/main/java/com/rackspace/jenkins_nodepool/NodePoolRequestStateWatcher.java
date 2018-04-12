@@ -3,6 +3,7 @@ package com.rackspace.jenkins_nodepool;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.api.CuratorWatcher;
 import org.apache.zookeeper.KeeperException;
@@ -123,6 +124,7 @@ public class NodePoolRequestStateWatcher implements CuratorWatcher {
      * @param unit    the unit of the timeout value, typically TimeUnit.SECONDS
      * @throws InterruptedException if the current thread is interrupted while waiting
      */
+    @SuppressFBWarnings("RV_RETURN_VALUE_IGNORED")
     public void waitUntilDone(long timeout, TimeUnit unit) throws InterruptedException {
         latch.await(timeout, unit);
     }

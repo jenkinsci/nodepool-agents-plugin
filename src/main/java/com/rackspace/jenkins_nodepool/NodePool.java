@@ -402,7 +402,8 @@ public class NodePool implements Describable<NodePool> {
         final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
                 conn, request.getPath(), RequestState.fulfilled);
 
-        LOG.info("Waiting on node to become available, timeout is " + timeoutInSec + " seconds...");
+        LOG.info("Waiting on node to become available for task:" + task.getName() +
+                " with label:" + label + ", timeout is " + timeoutInSec + " seconds...");
         watcher.waitUntilDone(timeoutInSec, TimeUnit.SECONDS);
 
         // Update request to refresh our view
