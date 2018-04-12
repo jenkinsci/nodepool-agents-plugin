@@ -1,14 +1,9 @@
 package com.rackspace.jenkins_nodepool;
 
 import hudson.Extension;
-import hudson.model.Computer;
-import hudson.model.Executor;
-import hudson.model.Node;
-import hudson.model.Run;
-import hudson.model.TaskListener;
+import hudson.model.*;
 import hudson.model.labels.LabelAtom;
 import hudson.slaves.ComputerListener;
-import hudson.util.RunList;
 import java.io.IOException;
 import java.util.List;
 import java.util.logging.Level;
@@ -24,6 +19,7 @@ import jenkins.model.Jenkins;
 public class JanitorialListener extends ComputerListener {
 
     private static final Logger LOGGER = Logger.getLogger(JanitorialListener.class.getName());
+    private static final String ENABLED = "nodepool.janitor.enabled";
 
     private static Thread janitorThread;
 
@@ -42,7 +38,7 @@ public class JanitorialListener extends ComputerListener {
      */
     @Override
     public void onOnline(Computer c, TaskListener listener) throws IOException, InterruptedException {
-        if (c.getNode() == Jenkins.getInstance().getNode("master")) {
+        if (c instanceof Jenkins.MasterComputer) {
             startJanitor();
         }
 
@@ -56,8 +52,22 @@ public class JanitorialListener extends ComputerListener {
         synchronized (lock) {
             if (janitorThread == null) {
                 janitorThread = new Thread(new Janitor(), "Nodepool Janitor Thread");
-                janitorThread.start();
+
+                if (enabled()) {
+                    janitorThread.start();
+                } else {
+                    LOGGER.log(Level.INFO, "Janitor thread is disabled by configuration and will *not* start");
+                }
             }
+        }
+    }
+
+    private boolean enabled() {
+        final String enabledStr = System.getProperty(ENABLED);
+        if (enabledStr == null) {
+            return true;
+        } else {
+            return Boolean.valueOf(enabledStr);
         }
     }
 }
@@ -118,19 +128,23 @@ class Janitor implements Runnable {
 
             // there are several scenarios where we want to scrub this node:
             if (isMissing(nodePoolSlave)) {
-                // 1) The node has disappeared/failed to launch and is offline
+                // The node has disappeared/failed to launch and is offline
                 LOGGER.log(Level.INFO, "Removing node " + nodePoolSlave + " because it is offline or has been "
                         + "deleted/re-assigned in NodePool");
                 cleanNode(nodePoolSlave, "Offline/deleted/re-assigned");
 
             } else if (hasInvalidLabel(nodePoolSlave)) {
-                // 1) The node is for a label that we no longer have configured as a "NodePool" in Jenkins:
+                // The node is for a label that we no longer have configured as a "NodePool" in Jenkins:
                 LOGGER.log(Level.INFO, "Removing node " + nodePoolSlave + " because its label doesn't match any "
                         + "configured NodePool.");
                 cleanNode(nodePoolSlave, "Invalid label");
 
+            } else if (nodePoolSlave.isHeld()) {
+                // do not reap a slave being "held" -- it shall be inspected by a human and then manually deleted.
+                LOGGER.log(Level.FINE, "Skipping held node " + nodePoolSlave);
+
             } else if (isPreviouslyUsed(nodePoolSlave)) {
-                // 2) The node has previously done work and failed to have been scrubbed
+                // The node has previously done work and failed to have been scrubbed
                 LOGGER.log(Level.INFO, "Removing node " + nodePoolSlave + " because it has already been used to "
                         + "run jobs.");
                 cleanNode(nodePoolSlave, "Already used");
@@ -188,7 +202,7 @@ class Janitor implements Runnable {
      * @param nodePoolSlave  the node to check
      * @return true if the node has disappeared
      */
-    boolean isMissing(NodePoolSlave nodePoolSlave) {
+    private boolean isMissing(NodePoolSlave nodePoolSlave) {
         NodePoolComputer c = (NodePoolComputer) nodePoolSlave.toComputer();
         if (c == null || c.isOffline()) {
             // agent is offline - confirm that this node still exists in ZK/NP:
@@ -204,7 +218,6 @@ class Janitor implements Runnable {
                 LOGGER.log(Level.WARNING, "Failed to check if node " + nodePoolNode + " exists.", e);
                 return false;
             }
-
         }
         return false;
     }
@@ -215,36 +228,7 @@ class Janitor implements Runnable {
      * @param nodePoolSlave  the node to check
      * @return true if the node has previously completed a build
      */
-    boolean isPreviouslyUsed(NodePoolSlave nodePoolSlave) {
-
-        final NodePoolComputer computer = (NodePoolComputer) nodePoolSlave.toComputer();
-        if (computer == null) {
-            return false;
-        }
-        final RunList builds = computer.getBuilds();
-        if (builds == null || builds.iterator().hasNext() == false) {
-            // unused
-            return false;
-        }
-        final Run build = (Run)builds.iterator().next();
-        if (build.isBuilding()) {
-            // a build is still in-progress
-            return false;
-        }
-
-        // a build has completed, if any executor is idle, we can safely assume it's done and the slave should be
-        // reaped
-        for (final Executor executor : computer.getAllExecutors()) {
-
-            if (executor.isIdle()) {
-                LOGGER.log(Level.FINE, "Executor " + executor + " of slave " + nodePoolSlave
-                        + " has been used before.");
-                return true;
-            }
-        }
-
-        // if we reach this point, no executor has returned to idle status (yet).
-        LOGGER.log(Level.FINE, "Slave " + nodePoolSlave + " does not yet have an idle executor.");
-        return false;
+    private boolean isPreviouslyUsed(NodePoolSlave nodePoolSlave) {
+        return nodePoolSlave.isBuildComplete();
     }
 }

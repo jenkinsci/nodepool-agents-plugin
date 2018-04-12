@@ -122,7 +122,7 @@ public class NodePoolComputer extends SlaveComputer {
         super.taskCompleted(executor, task, durationMS);
 
         LOG.log(Level.FINE, "Task " + task.getFullDisplayName() + " completed normally");
-        deleteNodePoolComputer(executor, task);
+        postBuildCleanup(executor, task);
     }
 
     @Override
@@ -130,22 +130,62 @@ public class NodePoolComputer extends SlaveComputer {
         super.taskCompletedWithProblems(executor, task, durationMS, problems);
 
         LOG.log(Level.FINE, "Task " + task.getFullDisplayName() + " completed with problems", problems);
-
-        deleteNodePoolComputer(executor, task);
+        postBuildCleanup(executor, task);
     }
 
-    private void deleteNodePoolComputer(Executor executor, Queue.Task task) {
+
+    private void postBuildCleanup(Executor executor, Queue.Task task) {
+        final NodePoolComputer c = (NodePoolComputer) executor.getOwner();
+        final NodePoolSlave slave = (NodePoolSlave)c.getNode();
+        if (slave == null) {
+            LOG.log(Level.WARNING, "The computer : " + c + " has a null slave associated with it.");
+            return;
+        }
 
         // indicate that the agent has been programmatically suspended.  this will safely mark the computer as
         // unavailable for tasks before the executor is freed up and Jenkins attempts to send it another task.
-        final NodePoolComputer c = (NodePoolComputer) executor.getOwner();
         c.setAcceptingTasks(false);
 
-        LOG.log(Level.INFO, "Deleting NodePoolNode {0} after task {1}", new Object[]{c, task.getFullDisplayName()});
+        if (slave.isHeld()) {
+            // instead of deleting the slave node, put it into a "hold" state for human examination
+            // it will need to be manually deleted later
+
+            final Queue.Executable executable = executor.getCurrentExecutable();
+            String jobIdentifier;
+
+            if (executable == null) {
+                LOG.log(Level.WARNING, "No executable associated with executor: " + executor
+                        + " on computer " + c);
+                jobIdentifier = "no executable?";
+            } else {
+                jobIdentifier = executable.toString();
+            }
+
+            try {
+                if (nodePoolNode != null) {
+                    // this can be null because stale computers are cleaned up asynchronously on jenkins restart and
+                    // the node object is not serialized.
+                    LOG.log(Level.INFO, "Holding node " + slave.getDisplayName() + " (" + jobIdentifier + ")");
+                    nodePoolNode.hold(jobIdentifier);
+                }
+            } catch (Exception e) {
+                LOG.log(Level.WARNING, "Failed to hold node: " + slave.getDisplayName()
+                        + ".  NodePool may delete it.", e);
+            }
+        } else {
+            deleteNodePoolComputer(c, task);
+        }
+
+    }
+
+    void deleteNodePoolComputer(NodePoolComputer computer, Queue.Task task) {
+
+        LOG.log(Level.INFO, "Deleting NodePoolNode {0} after task {1}", new Object[]{computer,
+                task.getFullDisplayName()});
 
         Computer.threadPoolForRemoting.submit(() -> {
             try {
-                c.doDoDelete();
+                computer.doDoDelete();
             } catch (IOException ex) {
                 LOG.log(Level.SEVERE, null, ex);
             }

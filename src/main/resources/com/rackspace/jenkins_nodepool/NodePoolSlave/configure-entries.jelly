@@ -1,0 +1,40 @@
+<!--
+  Config page
+-->
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout"
+         xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+
+    NodePool agents/slaves are ephemeral and last for the duration of a single build.
+
+    <f:entry title="${%Hold Node?}" field="held">
+        <f:checkbox readonly="${descriptor.holdReadOnly}"/>
+    </f:entry>
+
+    <f:section title="Connectivity">
+
+        <f:block>
+            <p><b>IP address:</b> ${it.nodePoolNode.host}</p>
+            <p><b>Port:</b> ${it.nodePoolNode.port}</p>
+        </f:block>
+    </f:section>
+
+    <f:section title="Labels">
+
+        <f:block>
+            <p><b>Jenkins label:</b> ${it.nodePoolNode.jenkinsLabel}</p>
+            <p><b>NodePool label:</b> ${it.nodePoolNode.nPType}</p>
+        </f:block>
+
+    </f:section>
+
+    <f:section title="ZooKeeper">
+        <f:block>
+            <p><b>NodePool connection string: </b> ${it.nodePoolNode.nodePool.connectionString}</p>
+            <p><b>ZooKeeper Path:</b> /nodepool${it.nodePoolNode.path}</p>
+            <p><b>ZooKeeper ID:</b> ${it.nodePoolNode.zKID}</p>
+        </f:block>
+    </f:section>
+
+
+</j:jelly>

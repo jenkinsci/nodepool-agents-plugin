@@ -63,6 +63,15 @@ public class NodePoolNode extends ZooKeeperObject {
         return MessageFormat.format("{0}-{1}", getJenkinsLabel(), getZKID());
     }
 
+    /**
+     * Used to render node editing page in the UI
+     *
+     * @return node pool object
+     */
+    public NodePool getNodePool() {
+        return nodePool;
+    }
+
     public String getHost() {
         return (String) data.get("interface_ip");
     }
@@ -97,11 +106,40 @@ public class NodePoolNode extends ZooKeeperObject {
      * @throws Exception on ZooKeeper error
      */
     private void setState(String state) throws Exception {
+        setState(state, true);
+    }
+
+    /**
+     * Update the state of the node according to  NodePool
+     *
+     * @param state  NodePool node state
+     * @param write if true, save updates back to ZooKeeper
+     * @throws Exception on ZooKeeper error
+     */
+    private void setState(String state, boolean write) throws Exception {
         // get up to date info, so we are less likely to lose data
         // when writing back.
         updateFromZK();
         data.put("state", state);
+        if (write) {
+            writeToZK();
+        }
+    }
+
+    /**
+     * Mark the node as being held.  A held node must be manually deleted from NodePool.
+     *
+     * @param jobIdentifier identifier of build/job that this node was running.
+     * @throws Exception on ZK error
+     */
+    public void hold(String jobIdentifier) throws Exception {
+        // Lock should already be held, we only hold nodes that have already been assigned to Jenkins.
+        setState("hold", false);
+        data.put("comment", "Jenkins hold");
+        data.put("hold_job", jobIdentifier);
         writeToZK();
+
+        unlock(); // imitate zuul and unlock here.
     }
 
     public void setInUse() throws Exception {
@@ -116,6 +154,16 @@ public class NodePoolNode extends ZooKeeperObject {
      */
     public void release() throws Exception {
         setState("used");
+
+        if (lock.getState() == KazooLock.State.LOCKED) {
+            unlock();
+        }
+    }
+
+    /**
+     * Release the client's lock on the node.
+     */
+    private void unlock() throws Exception {
         lock.release();
     }
 
