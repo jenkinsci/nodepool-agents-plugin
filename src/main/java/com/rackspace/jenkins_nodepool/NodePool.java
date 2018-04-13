@@ -42,6 +42,7 @@ import hudson.security.AccessControlled;
 import hudson.util.FormFieldValidator;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
+
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.text.MessageFormat;
@@ -49,15 +50,16 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.servlet.ServletException;
+
 import jenkins.model.Jenkins;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.zookeeper.CreateMode;
-import org.apache.zookeeper.KeeperException;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
@@ -82,11 +84,11 @@ public class NodePool implements Describable<NodePool> {
      * Create a curator managed connection to ZooKeeper
      *
      * @param connectionString ZooKeeper connection string
-     * @param zkRoot root path to prefix onto all Curator (ZK) requests
+     * @param zkRoot           root path to prefix onto all Curator (ZK) requests
      * @return CuratorFramework connection wrapper instance
      */
     public static CuratorFramework createZKConnection(String connectionString,
-            String zkRoot) {
+                                                      String zkRoot) {
         final CuratorFramework conn = CuratorFrameworkFactory.builder()
                 .connectString(connectionString)
                 .namespace(zkRoot)
@@ -157,19 +159,19 @@ public class NodePool implements Describable<NodePool> {
      * Constructor invoked by Jenkins's Stapler library.
      *
      * @param connectionString ZooKeeper connection string
-     * @param credentialsId Credential information identifier
-     * @param labelPrefix Prefix for labels served by this NodePool cluster
-     * @param requestRoot Prefix of node requests
-     * @param priority Priority value of node requests
-     * @param requestor Name of process making node requests
-     * @param zooKeeperRoot Prefix of all NodePool-related ZNodes
-     * @param nodeRoot Prefix of nodes
+     * @param credentialsId    Credential information identifier
+     * @param labelPrefix      Prefix for labels served by this NodePool cluster
+     * @param requestRoot      Prefix of node requests
+     * @param priority         Priority value of node requests
+     * @param requestor        Name of process making node requests
+     * @param zooKeeperRoot    Prefix of all NodePool-related ZNodes
+     * @param nodeRoot         Prefix of nodes
      */
     @DataBoundConstructor
     public NodePool(String connectionString,
-            String credentialsId, String labelPrefix, String requestRoot,
-            String priority, String requestor, String zooKeeperRoot,
-            String nodeRoot) {
+                    String credentialsId, String labelPrefix, String requestRoot,
+                    String priority, String requestor, String zooKeeperRoot,
+                    String nodeRoot) {
         this.connectionString = connectionString;
         this.credentialsId = credentialsId;
         this.requestRoot = requestRoot;
@@ -362,88 +364,98 @@ public class NodePool implements Describable<NodePool> {
     }
 
     /**
-     * Submit request for node(s) required to execute the given task
+     * Submit request for node(s) required to execute the given task based on the nodes associated with the specified
+     * label. Uses a default timeout of 60 seconds.
      *
-     * @param label Jenkins label
-     * @param task task/build being executed
-     * @throws Exception on ZooKeeper error
+     * @param label the label attribute to filter the list of available nodes
+     * @param task  the task to execute
+     * @throws IllegalArgumentException if timeout is less than 1 second
+     * @throws Exception                if an error occurs managing the provision components
      */
-    void provisionNode(Label label, Task task) throws Exception {
+    public void provisionNode(Label label, Task task) throws Exception {
+        provisionNode(label, task, NodePools.DEFAULT_TIMEOUT_SEC);
+    }
+
+    /**
+     * Submit request for node(s) required to execute the given task.
+     *
+     * @param label        Jenkins label
+     * @param task         task/build being executed
+     * @param timeoutInSec the timeout in seconds to provision the node(s)
+     * @throws IllegalArgumentException if timeout is less than 1 second
+     * @throws Exception                if an error occurs managing the provision components
+     */
+    void provisionNode(Label label, Task task, int timeoutInSec) throws Exception {
+
+        if (timeoutInSec < 1) {
+            throw new IllegalArgumentException("Timeout value is less than 1 second: " + timeoutInSec);
+        }
 
         initTransients();
+
         // *** Request Node ***
         //TODO: store prefix in config and pass in.
         final NodeRequest request = new NodeRequest(this, task);
         requests.add(request);
 
-        // *** Poll request status and wait for fulfillment
-        //TODO: store timeout in config
-        //TODO: Curator async stuff to avoid polling
-        final Integer timeout = 1200 * 1000; //timeout in milliseconds
-        final Long startTime = System.currentTimeMillis();
-        RequestState requestState = RequestState.requested;
         List<NodePoolNode> allocatedNodes = null;
-        while (System.currentTimeMillis() < startTime + timeout) {
 
+        // Let's create a node pool watcher and wait until the request is in the desired state (or until we're timed out
+        final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
+                conn, request.getPath(), RequestState.fulfilled);
+
+        LOG.info("Waiting on node to become available for task:" + task.getName() +
+                " with label:" + label + ", timeout is " + timeoutInSec + " seconds...");
+        watcher.waitUntilDone(timeoutInSec, TimeUnit.SECONDS);
+
+        // Update request to refresh our view
+        request.updateFromZK();
+
+        // Success represents is request fulfilled - everything else is a problem.
+        if (request.getState() == RequestState.fulfilled) {
             try {
-                request.updateFromZK();
-            } catch (KeeperException e) {
-                // connectivity issue with ZK - it should auto-reconnect and we can re-create the request then
-                LOG.log(Level.WARNING, e.getMessage(), e);
+                allocatedNodes = acceptNodes(request);
+
+                // Get allocated nodes from the request and add to Jenkins
+                final NodePoolNode node = allocatedNodes.get(0);
+                final NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId());
+                final Jenkins jenkins = Jenkins.getInstance();
+                jenkins.addNode(nps);
+                LOG.log(Level.INFO, "Added NodePool slave to Jenkins: {0}", nps);
+            } catch (Exception ex) {
+                LOG.log(Level.WARNING, ex.getClass().getCanonicalName() +
+                        " occurred while accepting nodes. Message: " + ex.getLocalizedMessage() + ". Cleaning up.");
+
+                // Remove the failed request
+                requests.remove(request);
+
+                // Cancel the job as well
+                Jenkins.getInstance().getQueue().cancel(task);
             }
-
-            // node is updated now, check it's state:
-            requestState = request.getState();
-
-            LOG.log(Level.FINEST, "Current state of request {0} is: {1}", new Object[]{request.getZKID(), requestState});
-
-            if (requestState == RequestState.failed) {
-                // TODO switch this logic to re-submit the NodeRequest?
-                LOG.log(Level.WARNING, "Request {0} failed.", request.getZKID());
-                break;
-            }
-
-            final boolean done = requestState == RequestState.fulfilled;
-            if (done) {
-                try {
-                    // accept here so that if any error conditions occur, the above update logic will automatically re-submit
-                    // the node request:
-                    allocatedNodes = acceptNodes(request);
-                    break;
-                } catch (Exception ex) {
-                    LOG.log(Level.SEVERE, null, ex);
-                }
-            }
-
-            Thread.sleep(5000);
-            //TODO: Configurable poll interval for instance ACTIVE
-        }
-        if (requestState != RequestState.fulfilled || allocatedNodes == null) {
-            throw new Exception(MessageFormat.format("Failed to provision node for label {0}", task.getAssignedLabel().getName()));
-        }
-
-        if (allocatedNodes.isEmpty()) {
-            LOG.warning("Nodepool node request fulfilled with empty node list");
         } else {
-            // *** Get allocated nodes from the request and add to Jenkins
-            final NodePoolNode node = allocatedNodes.get(0);
-            final NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId());
-            final Jenkins jenkins = Jenkins.getInstance();
-            jenkins.addNode(nps);
-            LOG.log(Level.INFO, "Added NodePool slave to Jenkins: {0}", nps);
+            LOG.log(Level.WARNING, "Request failed waiting for request state:" + RequestState.fulfilled +
+                    ", actual state:" + request.getState() +
+                    ". Provisioning failed for task:" + task.getName() +
+                    " with node label:" + task.getAssignedLabel().getName() +
+                    ". Cleaning up.");
+
+            // Remove the failed request
+            requests.remove(request);
+
+            // Cancel the job as well
+            Jenkins.getInstance().getQueue().cancel(task);
         }
     }
 
     /**
      * Descriptor class to support configuration of a NodePool instance in the
      * Jenkins UI
-     *
      */
     @Extension
     public static class NodePoolDescriptor extends Descriptor<NodePool> {
 
         public void doTestZooKeeperConnection(StaplerRequest req,
-                StaplerResponse resp, @QueryParameter final String connectionString, @QueryParameter final String zooKeeperRoot) throws IOException, ServletException {
+                                              StaplerResponse resp, @QueryParameter final String connectionString, @QueryParameter final String zooKeeperRoot) throws IOException, ServletException {
             new FormFieldValidator(req, resp, true) {
                 @Override
                 protected void check() throws IOException, ServletException {
@@ -491,7 +503,7 @@ public class NodePool implements Describable<NodePool> {
          * Shamelessly stolen from
          * https://github.com/jenkinsci/ssh-slaves-plugin/blob/master/src/main/java/hudson/plugins/sshslaves/SSHConnector.java#L314
          *
-         * @param context item grouping context
+         * @param context       item grouping context
          * @param credentialsId Jenkins credential identifier
          * @return a list box model
          */
