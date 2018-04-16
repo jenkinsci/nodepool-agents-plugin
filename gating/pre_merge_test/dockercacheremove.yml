@@ -1,7 +1,0 @@
----
-  - hosts: long-running*
-    remote_user: root
-
-    tasks:
-      - shell: |
-          docker image rm {{DOCKER_REPO}}
