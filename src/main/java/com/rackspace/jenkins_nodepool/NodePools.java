@@ -55,11 +55,6 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
         return GlobalConfiguration.all().get(NodePools.class);
     }
 
-    /**
-     * Default timeout is 5 minutes
-     */
-    public static final int DEFAULT_TIMEOUT_SEC = 300;
-
     private List<NodePool> nodePools;
 
     public NodePools() {
@@ -125,30 +120,16 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
 
     /**
      * Submit request for node(s) required to execute the given task based on the nodes associated with the specified
-     * label. Uses a default timeout of 60 seconds.
-     *
-     * @param label the label attribute to filter the list of available nodes
-     * @param task  the task to execute
-     * @throws IllegalArgumentException    if timeout is less than 1 second
-     * @throws Exception                   if an error occurs managing the provision components
-     */
-    public void provisionNode(Label label, Task task) throws IllegalArgumentException, Exception {
-        provisionNode(label, task, DEFAULT_TIMEOUT_SEC);
-    }
-
-    /**
-     * Submit request for node(s) required to execute the given task based on the nodes associated with the specified
      * label.
      *
      * @param label        the label attribute to filter the list of available nodes
      * @param task         the task to execute
-     * @param timeoutInSec the timeout in seconds to provision the node(s)
-     * @throws IllegalArgumentException    if timeout is less than 1 second
+     * @throws IllegalArgumentException if timeout is less than 1 second
      * @throws Exception                   if an error occurs managing the provision components
      */
-    public void provisionNode(Label label, Task task, int timeoutInSec) throws IllegalArgumentException, Exception {
+    public void provisionNode(Label label, Task task) throws IllegalArgumentException, Exception {
         for (NodePool np : nodePoolsForLabel(label)) {
-            np.provisionNode(label, task, timeoutInSec);
+            np.provisionNode(label, task);
             // Prevent multiple nodes being provisioned if label prefixes were to overlap.
             break;
         }

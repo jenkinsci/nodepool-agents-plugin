@@ -24,9 +24,8 @@
 package com.rackspace.jenkins_nodepool;
 
 import com.gargoylesoftware.htmlunit.html.HtmlForm;
+import com.gargoylesoftware.htmlunit.html.HtmlNumberInput;
 import com.gargoylesoftware.htmlunit.html.HtmlTextInput;
-import java.util.List;
-import jenkins.model.Jenkins;
 import static org.junit.Assert.assertEquals;
 import org.junit.Rule;
 import org.junit.Test;
@@ -46,13 +45,14 @@ public class NodePoolsPersistenceTest {
     public void testConfigWithRestart() {
         String connectionString = "localhost:2181";
         String labelPrefix = "testprefix";
+        String requestTimeout = "20";
         rr.then(r -> {
-            Jenkins j = r.getInstance();
-            NodePools nps = new NodePools();
-            List<NodePool> npsList = nps.getNodePools();
             HtmlForm config = r.createWebClient().goTo("configure").getFormByName("config");
+
             HtmlTextInput connectionStringBox = config.getInputByName("_.connectionString");
             HtmlTextInput labelPrefixStringBox = config.getInputByName("_.labelPrefix");
+            HtmlNumberInput requestTimeoutStringBox = config.getInputByName("_.requestTimeout");
+            requestTimeoutStringBox.setText(requestTimeout);
             connectionStringBox.setText(connectionString);
             labelPrefixStringBox.setText(labelPrefix);
             r.submit(config);
@@ -62,8 +62,10 @@ public class NodePoolsPersistenceTest {
             HtmlForm config = r.createWebClient().goTo("configure").getFormByName("config");
             HtmlTextInput connectionStringBox = config.getInputByName("_.connectionString");
             HtmlTextInput labelPrefixStringBox = config.getInputByName("_.labelPrefix");
+            HtmlNumberInput requestTimeoutStringBox = config.getInputByName("_.requestTimeout");
             assertEquals(connectionStringBox.getText(), connectionString);
             assertEquals(labelPrefixStringBox.getText(), labelPrefix);
+            assertEquals(requestTimeoutStringBox.getText(), requestTimeout);
         });
     }
 }

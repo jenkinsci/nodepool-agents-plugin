@@ -78,8 +78,10 @@ public class Mocks {
     TestingServer zkTestServer;
     NodeRequest nr;
     List<NodePoolNode> allocatedNodes;
+    Integer requestTimeout;
 
     public Mocks() {
+        requestTimeout = 30;
         requestor = "unittests";
         priority = "001";
         labelPrefix = "nodepool-";
