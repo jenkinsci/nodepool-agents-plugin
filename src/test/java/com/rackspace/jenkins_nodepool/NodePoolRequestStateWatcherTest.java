@@ -3,19 +3,17 @@ package com.rackspace.jenkins_nodepool;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.RetryOneTime;
 import org.apache.curator.test.InstanceSpec;
 import org.apache.curator.test.TestingServer;
 import org.junit.*;
-
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.util.*;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
-
 import static org.junit.Assert.*;
 
 /**
@@ -127,7 +125,12 @@ public class NodePoolRequestStateWatcherTest {
                     zkCli, zpath, RequestState.fulfilled);
 
             log.fine("Waiting for " + DEFAULT_TEST_TIMEOUT_SEC + " seconds max for the watcher...");
-            watcher.waitUntilDone(DEFAULT_TEST_TIMEOUT_SEC, TimeUnit.SECONDS);
+            try {
+                watcher.waitUntilDone(DEFAULT_TEST_TIMEOUT_SEC, TimeUnit.SECONDS);
+                fail("Expected exception, but not thrown.");
+            } catch (InterruptedException ex) {
+                // pass
+            }
 
             // Should timeout with non-success since we only changed value to pending (not fulfulled)
             assertNotSame("NodePoolRequestStateWatcher discovered request state was NOT fulfilled before timeout of " +
@@ -161,7 +164,12 @@ public class NodePoolRequestStateWatcherTest {
 
             final int timeoutInSeconds = 5;
             log.fine("Waiting for " + timeoutInSeconds + " seconds max for the watcher...");
-            watcher.waitUntilDone(timeoutInSeconds, TimeUnit.SECONDS);
+            try {
+                watcher.waitUntilDone(timeoutInSeconds, TimeUnit.SECONDS);
+                fail("Expected exception, but not thrown.");
+            } catch (InterruptedException ex) {
+                // pass
+            }
 
             assertNotSame("NodePoolRequestStateWatcher discovered request state was NOT fulfilled before timeout of " +
                             DEFAULT_TEST_TIMEOUT_SEC + " seconds",

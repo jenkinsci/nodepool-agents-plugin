@@ -2,22 +2,20 @@ package com.rackspace.jenkins_nodepool;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import java.nio.charset.Charset;
+import java.text.MessageFormat;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
+import static java.util.logging.Logger.getLogger;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.api.CuratorWatcher;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.data.Stat;
-
-import java.nio.charset.Charset;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
-
-import static java.util.logging.Logger.getLogger;
 
 /**
  * A zookeeper watcher for node pool activity.
@@ -126,7 +124,11 @@ public class NodePoolRequestStateWatcher implements CuratorWatcher {
      */
     @SuppressFBWarnings("RV_RETURN_VALUE_IGNORED")
     public void waitUntilDone(long timeout, TimeUnit unit) throws InterruptedException {
-        latch.await(timeout, unit);
+        Boolean result = latch.await(timeout, unit);
+        if (!result) {
+            // timeout
+            throw new InterruptedException(MessageFormat.format("Timeout waiting for NodePool ZNode {0} to reach state {1}", zpath, desiredState.toString()));
+        }
     }
 
     /**

@@ -42,7 +42,6 @@ import hudson.security.AccessControlled;
 import hudson.util.FormFieldValidator;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
-
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.text.MessageFormat;
@@ -54,7 +53,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.servlet.ServletException;
-
 import jenkins.model.Jenkins;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
@@ -146,6 +144,11 @@ public class NodePool implements Describable<NodePool> {
     private String requestor;
 
     /**
+     * Timeout for a node request
+     */
+    private Integer requestTimeout;
+
+    /**
      * List of node requests submitted to this NodePool cluster
      */
     transient List<NodeRequest> requests;
@@ -166,12 +169,14 @@ public class NodePool implements Describable<NodePool> {
      * @param requestor        Name of process making node requests
      * @param zooKeeperRoot    Prefix of all NodePool-related ZNodes
      * @param nodeRoot         Prefix of nodes
+     * @param requestTimeout   Length of time to wait for node requests to be
+     * fulfilled
      */
     @DataBoundConstructor
     public NodePool(String connectionString,
                     String credentialsId, String labelPrefix, String requestRoot,
                     String priority, String requestor, String zooKeeperRoot,
-                    String nodeRoot) {
+            String nodeRoot, Integer requestTimeout) {
         this.connectionString = connectionString;
         this.credentialsId = credentialsId;
         this.requestRoot = requestRoot;
@@ -180,6 +185,7 @@ public class NodePool implements Describable<NodePool> {
         this.labelPrefix = labelPrefix;
         this.zooKeeperRoot = zooKeeperRoot;
         this.nodeRoot = nodeRoot;
+        setRequestTimeout(requestTimeout);
         initTransients();
     }
 
@@ -229,6 +235,18 @@ public class NodePool implements Describable<NodePool> {
         }
 
         return acceptedNodes;
+    }
+
+    public Integer getRequestTimeout() {
+        return requestTimeout;
+    }
+
+    public final void setRequestTimeout(Integer requestTimeout) {
+        // ensure value can be parsed as an integer
+        if (requestTimeout <= 1) {
+            throw new IllegalArgumentException("Request timeout must be >=1");
+        }
+        this.requestTimeout = requestTimeout;
     }
 
     public Charset getCharset() {
@@ -373,7 +391,7 @@ public class NodePool implements Describable<NodePool> {
      * @throws Exception                if an error occurs managing the provision components
      */
     public void provisionNode(Label label, Task task) throws Exception {
-        provisionNode(label, task, NodePools.DEFAULT_TIMEOUT_SEC);
+        provisionNode(label, task, requestTimeout);
     }
 
     /**
@@ -406,7 +424,16 @@ public class NodePool implements Describable<NodePool> {
 
         LOG.info("Waiting on node to become available for task:" + task.getName() +
                 " with label:" + label + ", timeout is " + timeoutInSec + " seconds...");
-        watcher.waitUntilDone(timeoutInSec, TimeUnit.SECONDS);
+        try {
+            watcher.waitUntilDone(timeoutInSec, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            cleanup(request, task);
+            throw new InterruptedException("Request failed waiting for request state:" + RequestState.fulfilled
+                    + ", actual state:" + request.getState()
+                    + ". Provisioning failed for task:" + task.getName()
+                    + " with node label:" + task.getAssignedLabel().getName()
+                    + ". Exception: " + ex.getMessage() + " Cleaning up.");
+        }
 
         // Update request to refresh our view
         request.updateFromZK();
@@ -426,11 +453,7 @@ public class NodePool implements Describable<NodePool> {
                 LOG.log(Level.WARNING, ex.getClass().getCanonicalName() +
                         " occurred while accepting nodes. Message: " + ex.getLocalizedMessage() + ". Cleaning up.");
 
-                // Remove the failed request
-                requests.remove(request);
-
-                // Cancel the job as well
-                Jenkins.getInstance().getQueue().cancel(task);
+                cleanup(request, task);
             }
         } else {
             LOG.log(Level.WARNING, "Request failed waiting for request state:" + RequestState.fulfilled +
@@ -439,12 +462,20 @@ public class NodePool implements Describable<NodePool> {
                     " with node label:" + task.getAssignedLabel().getName() +
                     ". Cleaning up.");
 
-            // Remove the failed request
-            requests.remove(request);
-
-            // Cancel the job as well
-            Jenkins.getInstance().getQueue().cancel(task);
+            cleanup(request, task);
         }
+    }
+
+    /**
+     * Cleanup a failed NodeRequest and associated Queue item.
+     *
+     * @param request
+     * @param task
+     */
+    void cleanup(NodeRequest request, Task task) {
+        requests.remove(request);
+        LOG.log(Level.WARNING, "Cancelling task {0} as NodePool request for label {1} failed.", new String[]{task.toString(), request.getJenkinsLabel().toString()});
+        Jenkins.getInstance().getQueue().cancel(task);
     }
 
     /**
@@ -473,7 +504,6 @@ public class NodePool implements Describable<NodePool> {
         }
 
         public FormValidation doCheckConnectionString(@QueryParameter String connectionString) {
-            LOG.log(Level.INFO, "DoCheckConnectionString: {0}", connectionString);
             if (connectionString.contains(":")) {
                 return FormValidation.ok();
             } else {
@@ -491,11 +521,23 @@ public class NodePool implements Describable<NodePool> {
         }
 
         public FormValidation doCheckLabelPrefix(@QueryParameter String labelPrefix) {
-            LOG.log(Level.INFO, "doCheckLabelPrefix: {0}", labelPrefix);
             if ("".equals(labelPrefix)) {
                 return FormValidation.error("label prefix must not be blank, that would cause this plugin to request a node for every label.");
             } else {
                 return FormValidation.ok();
+            }
+        }
+
+        public FormValidation doCheckRequestTimeout(@QueryParameter String requestTimeout) {
+            String error = "Request Timeout must be a whole number greater than zero.";
+            try {
+                Integer rt = Integer.parseInt(requestTimeout);
+                if (rt <= 0) {
+                    return FormValidation.error(error);
+                }
+                return FormValidation.ok();
+            } catch (NumberFormatException ex) {
+                return FormValidation.error(error);
             }
         }
 

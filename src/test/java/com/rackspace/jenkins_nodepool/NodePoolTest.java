@@ -38,6 +38,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -79,7 +80,8 @@ public class NodePoolTest {
                 m.priority,
                 m.requestor,
                 m.zkNamespace,
-                m.nodeRoot
+                m.nodeRoot,
+                m.requestTimeout
         );
     }
 
@@ -184,9 +186,47 @@ public class NodePoolTest {
             }
 
         }).start();
-        np.provisionNode(m.label, m.task, 10);
+        np.provisionNode(m.label, m.task, 60);
 
         // this test will timeout on failure
+    }
+
+    @Test
+    public void testProvisionNodeTimeout() throws Exception {
+        // this test should timeout, because there is no nodepool instance
+        // to fulfil requests.
+        Long start = System.currentTimeMillis();
+        Integer requestTimeout = 2;
+        try {
+            np.provisionNode(m.label, m.task, requestTimeout);
+            fail("Exception Expected, but not thrown");
+        } catch (InterruptedException ex) {
+            Long end = System.currentTimeMillis();
+            long elapsed = ((end - start)) / 1000;
+            if (elapsed > requestTimeout + 3 || elapsed < requestTimeout) {
+                fail(MessageFormat.format("Timeout set to {}, but took {} seconds to fail", requestTimeout.toString(), String.valueOf(elapsed)));
+            }
+        }
+    }
+
+    @Test
+    public void testSetRequestTimeout() {
+        np.setRequestTimeout(2);
+        assertEquals((int) 2, (int) np.getRequestTimeout());
+
+        try {
+            np.setRequestTimeout(0);
+            fail("Expected exception");
+        } catch (IllegalArgumentException ex) {
+            //pass
+        }
+
+        try {
+            np.setRequestTimeout(-1);
+            fail("Expected exception");
+        } catch (IllegalArgumentException ex) {
+            //pass
+        }
     }
 
 }
