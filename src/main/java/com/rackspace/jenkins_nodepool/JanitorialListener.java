@@ -3,6 +3,8 @@ package com.rackspace.jenkins_nodepool;
 import hudson.Extension;
 import hudson.model.*;
 import hudson.model.labels.LabelAtom;
+import hudson.security.ACL;
+import hudson.security.ACLContext;
 import hudson.slaves.ComputerListener;
 import java.io.IOException;
 import java.util.List;
@@ -94,6 +96,15 @@ class Janitor implements Runnable {
 
         LOGGER.log(Level.INFO, "Janitor thread running...");
 
+        try (ACLContext ignored = ACL.as(ACL.SYSTEM)) {
+            runAsSystem();
+        }
+    }
+
+    /**
+     * Run with system permissions already set.
+     */
+    private void runAsSystem() {
         while (true) {
             try {
                 clean();
@@ -209,6 +220,11 @@ class Janitor implements Runnable {
             final NodePoolNode nodePoolNode = nodePoolSlave.getNodePoolNode();
 
             try {
+                if (nodePoolNode == null) {
+                    // node is unknown
+                    LOGGER.log(Level.FINE, "Slave " + nodePoolSlave + " has no associated Node record.");
+                    return true;
+                }
                 if (!nodePoolNode.exists()) {
                     // Corresponding ZNode is gone, this is definitely an orphan record in Jenkins
                     LOGGER.log(Level.FINE, "Slave " + nodePoolSlave + " no longer exists in ZK.");
