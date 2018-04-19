@@ -105,7 +105,7 @@ public class KazooLock {
      * @param nodePool  node pool object containing ZooKeeper connection information
      */
     public KazooLock(String path, NodePool nodePool) {
-        this(path, 5, TimeUnit.SECONDS, nodePool);
+        this(path, 600, TimeUnit.SECONDS, nodePool);
     }
 
     /**
