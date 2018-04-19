@@ -25,6 +25,7 @@ package com.rackspace.jenkins_nodepool;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 import org.apache.zookeeper.data.Stat;
 import org.junit.After;
@@ -112,7 +113,7 @@ public class KazooLockTest {
     @Test(expected = KazooLockException.class)
     public void testBlockingAcquireTimesOut() throws Exception {
         // create and acquire lock
-        KazooLock kl = new KazooLock(path, m.np);
+        final KazooLock kl = new KazooLock(path, 1, TimeUnit.SECONDS, m.np);
         kl.acquire();
 
         // lock is not reentrant, so second acquire should timeout
