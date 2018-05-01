@@ -33,6 +33,8 @@ public class NodePoolException extends Exception {
     public NodePoolException(String message) {
         super(message);
     }
-    
-    
+
+    public NodePoolException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

@@ -34,7 +34,6 @@ import hudson.model.Computer;
 import hudson.model.Describable;
 import hudson.model.Descriptor;
 import hudson.model.ItemGroup;
-import hudson.model.Label;
 import hudson.model.Queue.Task;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.security.ACL;
@@ -77,6 +76,9 @@ import org.kohsuke.stapler.StaplerResponse;
 public class NodePool implements Describable<NodePool> {
 
     private static final Logger LOG = Logger.getLogger(NodePool.class.getName());
+
+    // maximum number of times provisioning a node will be tried for a given task
+    private static final int MAX_ATTEMPTS = 3;
 
     /**
      * Create a curator managed connection to ZooKeeper
@@ -385,25 +387,24 @@ public class NodePool implements Describable<NodePool> {
      * Submit request for node(s) required to execute the given task based on the nodes associated with the specified
      * label. Uses a default timeout of 60 seconds.
      *
-     * @param label the label attribute to filter the list of available nodes
-     * @param task  the task to execute
+     * @param job  the job to execute
      * @throws IllegalArgumentException if timeout is less than 1 second
      * @throws Exception                if an error occurs managing the provision components
      */
-    public void provisionNode(Label label, Task task) throws Exception {
-        provisionNode(label, task, requestTimeout);
+    public void provisionNode(NodePoolJob job) throws Exception {
+        provisionNode(job, requestTimeout, MAX_ATTEMPTS);
     }
 
     /**
      * Submit request for node(s) required to execute the given task.
      *
-     * @param label        Jenkins label
-     * @param task         task/build being executed
+     * @param job         job/task/build being executed
      * @param timeoutInSec the timeout in seconds to provision the node(s)
+     * @param maxAttempts maximum number of times to try to provision the node
      * @throws IllegalArgumentException if timeout is less than 1 second
-     * @throws Exception                if an error occurs managing the provision components
+     * @throws NodePoolException                if an error occurs managing the provision components
      */
-    void provisionNode(Label label, Task task, int timeoutInSec) throws Exception {
+    void provisionNode(NodePoolJob job, int timeoutInSec, int maxAttempts) throws NodePoolException {
 
         if (timeoutInSec < 1) {
             throw new IllegalArgumentException("Timeout value is less than 1 second: " + timeoutInSec);
@@ -411,28 +412,80 @@ public class NodePool implements Describable<NodePool> {
 
         initTransients();
 
-        // *** Request Node ***
-        //TODO: store prefix in config and pass in.
-        final NodeRequest request = new NodeRequest(this, task);
+        for (int i = 0; i < maxAttempts; i++) {
+            try {
+                attemptProvision(job, timeoutInSec);
+                break;
+
+            } catch (Exception e) {
+                LOG.log(Level.WARNING, "Node provisioning attempt for task :" + job.getTask().getName()
+                        + " failed.", e);
+
+                if (i == maxAttempts - 1) {
+                    throw new NodePoolException("Maximum attempts (" + maxAttempts + ") exceeded.  (Final error in "
+                            + "stack trace)", e);
+                }
+            }
+        }
+    }
+
+    /**
+     * Make a single node provisioning attempt.  Update the progress state of the `job`.
+     *
+     * @param job  object for tracking overall progress of the task/job
+     * @param timeoutInSec  watcher timeout
+     * @throws Exception  if the provisioning attempt fails
+     */
+    void attemptProvision(NodePoolJob job, int timeoutInSec) throws Exception {
+
+        final Task task = job.getTask();
+
+        LOG.info("Waiting on node to become available for task:" + task.getName() +
+                " with label:" + job.getLabel() + ", timeout is " + timeoutInSec + " seconds...");
+
+        final NodeRequest request = createNodeRequest(task);
         requests.add(request);
+        try {
+            job.addAttempt(request);
+            attemptProvisionNode2(request, timeoutInSec);
 
-        List<NodePoolNode> allocatedNodes = null;
+        } catch (Exception e) {
+            // provisioning attempt failed
+            job.failAttempt(e);
+            throw e;
 
-        // Let's create a node pool watcher and wait until the request is in the desired state (or until we're timed out
+        } finally {
+            requests.remove(request);
+        }
+
+        job.succeed();
+    }
+
+    NodeRequest createNodeRequest(final Task task) throws Exception {
+        return new NodeRequest(this, task);
+    }
+
+    /**
+     * Make a single provisioning attempt.
+     *
+     * @param request  node request object
+     * @param timeoutInSec  watcher timeout
+     * @throws Exception  if provisioning fails
+     */
+    void attemptProvisionNode2(final NodeRequest request, final int timeoutInSec) throws Exception {
+
+        List<NodePoolNode> allocatedNodes;
+
+        // Let's create a node pool watcher and wait until the request is in the desired state
+        // (or until we're timed out)
         final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
                 conn, request.getPath(), RequestState.fulfilled);
 
-        LOG.info("Waiting on node to become available for task:" + task.getName() +
-                " with label:" + label + ", timeout is " + timeoutInSec + " seconds...");
         try {
             watcher.waitUntilDone(timeoutInSec, TimeUnit.SECONDS);
-        } catch (InterruptedException ex) {
-            cleanup(request, task);
-            throw new InterruptedException("Request failed waiting for request state:" + RequestState.fulfilled
-                    + ", actual state:" + request.getState()
-                    + ". Provisioning failed for task:" + task.getName()
-                    + " with node label:" + task.getAssignedLabel().getName()
-                    + ". Exception: " + ex.getMessage() + " Cleaning up.");
+        } catch (InterruptedException e) {
+            throw new InterruptedException("Timeout waiting for request to get fulfilled: "
+                    + e.getMessage());
         }
 
         // Update request to refresh our view
@@ -444,38 +497,21 @@ public class NodePool implements Describable<NodePool> {
                 allocatedNodes = acceptNodes(request);
 
                 // Get allocated nodes from the request and add to Jenkins
-                final NodePoolNode node = allocatedNodes.get(0);
-                final NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId());
-                final Jenkins jenkins = Jenkins.getInstance();
-                jenkins.addNode(nps);
-                LOG.log(Level.INFO, "Added NodePool slave to Jenkins: {0}", nps);
-            } catch (Exception ex) {
-                LOG.log(Level.WARNING, ex.getClass().getCanonicalName() +
-                        " occurred while accepting nodes. Message: " + ex.getLocalizedMessage() + ". Cleaning up.");
+                for (NodePoolNode node : allocatedNodes) {
+                    final NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId());
+                    Jenkins.getInstance().addNode(nps);
+                    LOG.log(Level.INFO, "Added NodePool slave to Jenkins: {0}", nps);
+                }
 
-                cleanup(request, task);
+            } catch (Exception e) {
+                throw new Exception("An error occurred while accepting nodes: "
+                    + e.getLocalizedMessage(), e);
             }
+
         } else {
-            LOG.log(Level.WARNING, "Request failed waiting for request state:" + RequestState.fulfilled +
-                    ", actual state:" + request.getState() +
-                    ". Provisioning failed for task:" + task.getName() +
-                    " with node label:" + task.getAssignedLabel().getName() +
-                    ". Cleaning up.");
-
-            cleanup(request, task);
+            throw new Exception("Request failed waiting for request state:" + RequestState.fulfilled
+                    + ", actual state:" + request.getState());
         }
-    }
-
-    /**
-     * Cleanup a failed NodeRequest and associated Queue item.
-     *
-     * @param request
-     * @param task
-     */
-    void cleanup(NodeRequest request, Task task) {
-        requests.remove(request);
-        LOG.log(Level.WARNING, "Cancelling task {0} as NodePool request for label {1} failed.", new String[]{task.toString(), request.getJenkinsLabel().toString()});
-        Jenkins.getInstance().getQueue().cancel(task);
     }
 
     /**

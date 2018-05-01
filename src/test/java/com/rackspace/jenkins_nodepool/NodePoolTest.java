@@ -39,12 +39,13 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.*;
+
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.jvnet.hudson.test.JenkinsRule;
-import static org.mockito.Mockito.verify;
 
 /**
  *
@@ -186,7 +187,9 @@ public class NodePoolTest {
             }
 
         }).start();
-        np.provisionNode(m.label, m.task, 60);
+
+        final NodePoolJob job = new NodePoolJob(m.label, m.task, 0);
+        np.provisionNode(job, 30, 3);
 
         // this test will timeout on failure
     }
@@ -197,8 +200,10 @@ public class NodePoolTest {
         // to fulfil requests.
         Long start = System.currentTimeMillis();
         Integer requestTimeout = 2;
+        final NodeRequest request = new NodeRequest(m.np, m.task);
+
         try {
-            np.provisionNode(m.label, m.task, requestTimeout);
+            np.attemptProvisionNode2(request, requestTimeout);
             fail("Exception Expected, but not thrown");
         } catch (InterruptedException ex) {
             Long end = System.currentTimeMillis();
@@ -207,6 +212,120 @@ public class NodePoolTest {
                 fail(MessageFormat.format("Timeout set to {}, but took {} seconds to fail", requestTimeout.toString(), String.valueOf(elapsed)));
             }
         }
+    }
+
+    /**
+     * Simulate the first node request failing and the second one succeeding.
+     */
+    @Test
+    public void testRetries() throws Exception {
+        final int timeoutInSec = 30;
+
+        final NodePool np = spy(new NodePool(
+                null,
+                "credentialsId",
+                "nodepool-",
+                "requests",
+                "priority",
+                "requestor",
+                "nodepool",
+                "nodes",
+                timeoutInSec
+        ));
+
+        final NodePoolJob job = new NodePoolJob(m.label, m.task, 1);
+
+        doThrow(new NodePoolException("request fail"))
+                .doNothing()
+                .when(np)
+                .attemptProvision(job, timeoutInSec);
+        np.provisionNode(job);  // lack of exception indicates provisioning success
+
+        verify(np, times(2)).attemptProvision(job, timeoutInSec);
+    }
+
+    /**
+     * Test the tracking of attempts for a job (success case)
+     */
+    @Test
+    public void testJobTrackingAttemptSuccessful() throws Exception {
+        final int timeoutInSec = 30;
+
+        final NodePool np = spy(new NodePool(
+                null,
+                "credentialsId",
+                "nodepool-",
+                "requests",
+                "priority",
+                "requestor",
+                "nodepool",
+                "nodes",
+                timeoutInSec
+        ));
+
+
+        final NodeRequest request = mock(NodeRequest.class);
+        doReturn(request).when(np).createNodeRequest(m.task);
+
+        doNothing().when(np).attemptProvisionNode2(request, 30);
+
+        final NodePoolJob job = new NodePoolJob(m.label, m.task, 1);
+        np.attemptProvision(job, timeoutInSec);
+
+        final List<NodePoolJob.Attempt> attempts = job.getAttempts();
+        assertEquals(1, attempts.size());
+
+        final NodePoolJob.Attempt attempt = attempts.get(0);
+        assertTrue(attempt.isSuccess());
+
+        assertTrue(attempt.getDurationSeconds() >= 0);
+    }
+
+    /**
+     * Test the tracking of attempts for a job (error case)
+     */
+    @Test
+    public void testJobTrackingAttemptFailure() throws Exception {
+        final int timeoutInSec = 30;
+
+        final NodePool np = spy(new NodePool(
+                null,
+                "credentialsId",
+                "nodepool-",
+                "requests",
+                "priority",
+                "requestor",
+                "nodepool",
+                "nodes",
+                timeoutInSec
+        ));
+
+
+        final NodeRequest request = mock(NodeRequest.class);
+        doReturn(request).when(np).createNodeRequest(m.task);
+
+        doThrow(new NodePoolException("request error")).when(np).attemptProvisionNode2(request, 30);
+
+        final NodePoolJob job = new NodePoolJob(m.label, m.task, 1);
+
+        boolean success = true;
+
+        try {
+            np.attemptProvision(job, timeoutInSec);
+        } catch (NodePoolException e) {
+            // expected
+            success = false;
+        }
+
+        if (success) {
+            fail("attemptProvision should have failed.");
+        }
+
+        final List<NodePoolJob.Attempt> attempts = job.getAttempts();
+        assertEquals(1, attempts.size());
+
+        final NodePoolJob.Attempt attempt = attempts.get(0);
+        assertTrue(!attempt.isSuccess());
     }
 
     @Test
