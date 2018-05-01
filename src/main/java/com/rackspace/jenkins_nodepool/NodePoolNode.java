@@ -143,8 +143,8 @@ public class NodePoolNode extends ZooKeeperObject {
     }
 
     public void setInUse() throws Exception {
-        setState("in-use");
         lock.acquire();
+        setState("in-use");
     }
 
     /**
