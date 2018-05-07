@@ -1,9 +1,12 @@
 package com.rackspace.jenkins_nodepool;
 
-import hudson.model.Label;
-import hudson.model.Queue;
+import hudson.model.*;
+import hudson.util.RunList;
+import jenkins.model.Jenkins;
+import org.apache.commons.lang.exception.ExceptionUtils;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -14,23 +17,35 @@ public class NodePoolJob {
     private Label label; // jenkins label
     private final Queue.Task task;
     private long taskId;
+    private Integer buildNumber;
 
     private List<Attempt> attempts = new ArrayList<Attempt>();  // attempts to provision
 
     NodePoolJob(Label label, Queue.Task task, long taskId) {
         this.label = label;
         this.task = task;
+        this.taskId = taskId;
+        this.buildNumber = null;
     }
 
-    Label getLabel() {
+    @Override
+    public String toString() {
+        return "NodePoolJob[taskId=" + taskId + ", task=" + task.getFullDisplayName() +
+                ", label=" + label +"]";
+
+    }
+
+    public Label getLabel() {
         return this.label;
     }
 
-    Queue.Task getTask() {
+    public Queue.Task getTask() {
         return this.task;
     }
 
-    long getTaskId() { return this.taskId; }
+    public long getTaskId() {
+        return this.taskId;
+    }
 
     void addAttempt(NodeRequest request) {
         attempts.add(new Attempt(request));
@@ -68,8 +83,72 @@ public class NodePoolJob {
         return Long.hashCode(taskId);
     }
 
+    public boolean isDone() {
+        return getCurrentAttempt().isDone();
+    }
 
-    static class Attempt {
+    public boolean isSuccess() {
+        return getCurrentAttempt().isSuccess();
+    }
+
+    public String getDurationSeconds() {
+        try {
+            final long start = attempts.get(0).startTime;
+
+            long end;
+            if (isDone()) {
+                end = getCurrentAttempt().finishTime;
+            } else {
+                end = System.currentTimeMillis();
+            }
+
+            return Long.toString((end - start)/ 1000L);
+
+        } catch (IndexOutOfBoundsException e) {
+            // no attempts made yet
+            return null;
+        }
+
+    }
+
+    public NodePool getNodePool() {
+        try {
+            return getCurrentAttempt().request.nodePool;
+        } catch (IndexOutOfBoundsException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Get the jenkins build number for the project, if it's known.
+     *
+     * Builds that are not yet "running" do not have a build number.
+     *
+     * @return build number of Jenkins project
+     */
+    public String getBuildNumber() {
+        if (buildNumber == null) {
+            return "";
+        } else {
+            return "#" + String.valueOf(buildNumber);
+        }
+    }
+
+    public Status getResult() {
+        return getCurrentAttempt().getResult();
+    }
+
+    public void setBuildNumber(int buildNumber) {
+        this.buildNumber = buildNumber;
+    }
+
+    public enum Status {
+        INPROGRESS,
+        SUCCESS,
+        FAILURE
+    }
+
+    public static class Attempt {
         final NodeRequest request;
         Exception e;
 
@@ -96,15 +175,57 @@ public class NodePoolJob {
         }
 
         long getDurationSeconds() {
-            return finishTime - startTime;
+            long end = finishTime;
+            if (end == 0) {
+                end = System.currentTimeMillis();
+            }
+
+            final long millis = end - startTime;
+            return millis / 1000L;
+        }
+
+        public String getError() {
+            if (e == null) {
+                return null;
+            } else {
+                return ExceptionUtils.getStackTrace(e);
+            }
         }
 
         public boolean isDone() {
             return finishTime != 0L;
         }
 
+        public boolean isFailure() {
+            return e != null;
+        }
+
         public boolean isSuccess() {
             return isDone() && e == null;
+        }
+
+        public Status getResult() {
+            if (!isDone()) {
+                return Status.INPROGRESS;
+            } else if (isSuccess()){
+                return Status.SUCCESS;
+            } else {
+                return Status.FAILURE;
+            }
+        }
+
+        /**
+         * Get nodes allocated from a node request
+         * @return list of node names
+         */
+        public List<String> getNodes() {
+            return request.getAllocatedNodeNames();
+        }
+
+        @Override
+        public String toString() {
+            return "[result="+getResult() + ", duration=" + getDurationSeconds() + " secs, nodes="
+                    + getNodes() + "]";
         }
     }
 }

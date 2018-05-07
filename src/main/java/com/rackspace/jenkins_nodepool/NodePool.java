@@ -618,4 +618,8 @@ public class NodePool implements Describable<NodePool> {
         }
     }
 
+    @Override
+    public String toString() {
+        return connectionString;
+    }
 }

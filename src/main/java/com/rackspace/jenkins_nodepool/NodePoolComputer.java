@@ -23,14 +23,14 @@
  */
 package com.rackspace.jenkins_nodepool;
 
-import hudson.model.Computer;
-import hudson.model.Executor;
-import hudson.model.Queue;
-import hudson.model.Slave;
+import hudson.model.*;
 import hudson.slaves.SlaveComputer;
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import hudson.util.RunList;
 import org.kohsuke.stapler.HttpResponse;
 
 /**
@@ -122,6 +122,7 @@ public class NodePoolComputer extends SlaveComputer {
         super.taskCompleted(executor, task, durationMS);
 
         LOG.log(Level.FINE, "Task " + task.getFullDisplayName() + " completed normally");
+        saveTaskHistory(executor, task);
         postBuildCleanup(executor, task);
     }
 
@@ -130,9 +131,36 @@ public class NodePoolComputer extends SlaveComputer {
         super.taskCompletedWithProblems(executor, task, durationMS, problems);
 
         LOG.log(Level.FINE, "Task " + task.getFullDisplayName() + " completed with problems", problems);
+        saveTaskHistory(executor, task);
         postBuildCleanup(executor, task);
     }
 
+    /**
+     * Associate job run/build information with a task that was previously queued.
+     *
+     * @param executor executor that will run the task
+     * @param task task getting run
+     */
+    public void saveTaskHistory(Executor executor, Queue.Task task) {
+        final NodePoolJobHistory jobHistory = NodePools.get().getJobHistory();
+
+        final NodePoolComputer c = (NodePoolComputer) executor.getOwner();
+        final RunList runList = c.getBuilds();
+        if (runList == null) {
+            return;
+        }
+
+        final Iterator<Run> runIterator = runList.iterator();
+        while (runIterator.hasNext()) {
+            final Run run = runIterator.next();
+            final long taskId = run.getQueueId();
+            final NodePoolJob job = jobHistory.getJob(taskId);
+            if (job != null) {
+                // save build number of the task:
+                job.setBuildNumber(run.getNumber());
+            }
+        }
+    }
 
     private void postBuildCleanup(Executor executor, Queue.Task task) {
         final NodePoolComputer c = (NodePoolComputer) executor.getOwner();

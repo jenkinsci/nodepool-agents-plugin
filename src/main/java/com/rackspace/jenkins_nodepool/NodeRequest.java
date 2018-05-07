@@ -29,6 +29,7 @@ import hudson.model.Queue.Task;
 import java.text.MessageFormat;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
@@ -110,6 +111,19 @@ public class NodeRequest extends ZooKeeperObject {
     }
 
     /**
+     * Get node names only from the local cache of the ZNode
+     *
+     * @return list of node names
+     */
+    public List<String> getAllocatedNodeNames() {
+        List<String> nodes = (List<String>)data.get("nodes");
+        if (nodes == null) {
+            nodes = Collections.emptyList();
+        }
+        return nodes;
+    }
+
+    /**
      * Get list of NodePool nodes that have been allocated to fulfill this request
      *
      * @return  list of nodes
@@ -125,7 +139,7 @@ public class NodeRequest extends ZooKeeperObject {
         if (data.get("state") != RequestState.fulfilled) {
             throw new IllegalStateException("Attempt to get allocated nodes from a node request before it has been fulfilled");
         }
-        final List<NodePoolNode> nodeObjects = new ArrayList();
+        final List<NodePoolNode> nodeObjects = new ArrayList<>();
         for (Object id : (List) data.get("nodes")) {
             nodeObjects.add(new NodePoolNode(nodePool, (String) id));
         }
