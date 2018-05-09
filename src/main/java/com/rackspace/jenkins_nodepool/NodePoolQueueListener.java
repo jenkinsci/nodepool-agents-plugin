@@ -78,7 +78,7 @@ public class NodePoolQueueListener extends QueueListener {
 
         Computer.threadPoolForRemoting.submit(() -> {
             try {
-                nodePools.provisionNode(label, wi.task);
+                nodePools.provisionNode(label, wi.task, wi.getId());
             } catch (Exception ex) {
                 LOG.log(Level.SEVERE, ex.getLocalizedMessage(), ex);
             }

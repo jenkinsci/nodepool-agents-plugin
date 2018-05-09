@@ -31,10 +31,12 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import jenkins.model.GlobalConfiguration;
+import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.StaplerRequest;
@@ -124,14 +126,25 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
      *
      * @param label        the label attribute to filter the list of available nodes
      * @param task         the task to execute
+     * @param taskId       unique integer identifying the task
      * @throws IllegalArgumentException if timeout is less than 1 second
      * @throws Exception                   if an error occurs managing the provision components
      */
-    public void provisionNode(Label label, Task task) throws IllegalArgumentException, Exception {
-        for (NodePool np : nodePoolsForLabel(label)) {
-            np.provisionNode(label, task);
-            // Prevent multiple nodes being provisioned if label prefixes were to overlap.
-            break;
+    public void provisionNode(Label label, Task task, long taskId) throws IllegalArgumentException, Exception {
+
+        final NodePoolJob job = new NodePoolJob(label, task, taskId);
+
+        try {
+            for (NodePool np : nodePoolsForLabel(label)) {
+                np.provisionNode(job);
+                // Prevent multiple nodes being provisioned if label prefixes were to overlap.
+                break;
+            }
+        } catch (NodePoolException e) {
+            // we failed to provision the node(s), cancel the job
+            LOG.log(Level.SEVERE, "Provisioning failed for task: " + task.getName()
+                    + " with node label:" + task.getAssignedLabel().getName() + ".  Task will be cancelled");
+            Jenkins.getInstance().getQueue().cancel(task);
         }
     }
 
@@ -143,4 +156,5 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
     public Stream<NodePool> stream() {
         return nodePools.stream();
     }
+
 }
