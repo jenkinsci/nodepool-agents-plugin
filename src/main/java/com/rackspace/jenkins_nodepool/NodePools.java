@@ -25,7 +25,9 @@ package com.rackspace.jenkins_nodepool;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.Extension;
+import hudson.model.FreeStyleProject;
 import hudson.model.Label;
+import hudson.model.Queue;
 import hudson.model.Queue.Task;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -35,6 +37,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import hudson.model.labels.LabelAtom;
 import jenkins.model.GlobalConfiguration;
 import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
@@ -59,10 +63,12 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
 
     private List<NodePool> nodePools;
 
+    // track job history - do not persist across restarts
+    private transient NodePoolJobHistory nodePoolJobHistory = new NodePoolJobHistory();
+
     public NodePools() {
         load();
         initTransients();
-
     }
 
     // Called for deserialisation
@@ -133,6 +139,7 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
     public void provisionNode(Label label, Task task, long taskId) throws IllegalArgumentException, Exception {
 
         final NodePoolJob job = new NodePoolJob(label, task, taskId);
+        nodePoolJobHistory.add(job);
 
         try {
             for (NodePool np : nodePoolsForLabel(label)) {
@@ -157,4 +164,7 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
         return nodePools.stream();
     }
 
+    public NodePoolJobHistory getJobHistory() {
+        return nodePoolJobHistory;
+    }
 }

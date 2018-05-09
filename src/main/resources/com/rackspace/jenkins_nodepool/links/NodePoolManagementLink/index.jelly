@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:l="/lib/layout">
+
+    <l:layout norefresh="true" permission="${app.READ}" title="NodePool View">
+        <st:include page="sidepanel.jelly" it="${app}"/>
+
+        <l:main-panel>
+
+            <h1>
+                <l:icon class="icon-terminal icon-xlg"/>
+                NodePool debug view
+            </h1>
+            <p>Use the following table to see how runs of Jenkins projects resulted in the
+            creation of new Jenkins nodes from NodePool.</p>
+            <p>(Note: <i>SUCCESS</i> means that for a given build of a job, it was able to successfully obtain node(s)
+                from NodePool, not necessarily that the job itself ran to a successful completion.)
+            </p>
+
+            <h2>
+                Build history
+            </h2>
+
+            <p>
+                <j:set var="jobHistory" value="${it.jobHistory}"/>
+
+                <table class="bigtable">
+                    <tr>
+                        <th>Task Name</th>
+                        <th>Queue Id</th>
+                        <th>Build #</th>
+                        <th>Label</th>
+                        <th>NodePool cluster</th>
+                        <th>Complete?</th>
+                        <th>Result</th>
+                        <th>Duration</th>
+                        <th>Attempts</th>
+                    </tr>
+
+                <j:forEach var="job" items="${jobHistory}">
+                    <j:set var="task" value="${job.task}"/>
+
+                    <tr>
+                        <td>${task.fullDisplayName}</td>
+                        <td>${job.taskId}</td>
+                        <td>${job.buildNumber}</td>
+                        <td>${job.label}</td>
+                        <th>${job.nodePool}</th>
+                        <td><j:choose>
+                                <j:when test="${job.done}">yes</j:when>
+                                <j:otherwise>no</j:otherwise>
+                            </j:choose></td>
+                        <td><j:choose>
+                            <j:when test="${job.success}">success</j:when>
+                            <j:otherwise>failure</j:otherwise>
+                        </j:choose></td>
+
+                        <td>${job.durationSeconds} secs</td>
+                        <td>
+                            <ul>
+                                <j:set var="attempts" value="${job.attempts}"/>
+                                <j:forEach var="attempt" items="${attempts}">
+                                    <li>${attempt}
+                                        <j:if test="${attempt.failure}">
+                                            <ul>
+                                                <li><pre>${attempt.error}</pre></li>
+                                            </ul>
+                                        </j:if>
+                                    </li>
+                                </j:forEach>
+                            </ul>
+
+                        </td>
+                    </tr>
+                </j:forEach>
+
+                </table>
+            </p>
+
+        </l:main-panel>
+    </l:layout>
+</j:jelly>
+
+
