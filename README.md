@@ -32,7 +32,9 @@ Steps:
 3. Run the maven release plugin: `mvn [-B] mvn release:prepare release:perform`
   * The `-B` flag is optional to accept all default choices.
  
-The maven release plugin will do the following:
+4. After this completes, edit the wiki to add a new version to the history [here](https://wiki.jenkins.io/display/JENKINS/NodePool+Agents+Plugin).
+
+### The maven release plugin will do the following:
 
 * Run unit tests
 * Build a new plugin version
