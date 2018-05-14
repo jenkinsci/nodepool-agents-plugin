@@ -70,7 +70,7 @@ public class NodePoolQueueListener extends QueueListener {
         // job that caused them.
         // Note that this won't kill builds for non NodePool labels as we check
         // for a prefix match.
-        if (!nps.isEmpty() && Pattern.matches(".*-[0-9]+$", label.getName())) {
+        if (!nps.isEmpty() && Pattern.matches(".*-[0-9]{10}$", label.getName())) {
             LOG.log(Level.WARNING, "Killing queued task {0} as it refers to specific NodePool node {1}", new Object[]{wi.task, label});
             Jenkins.getInstance().getQueue().cancel(wi.task);
             return;
