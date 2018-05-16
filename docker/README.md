@@ -45,7 +45,9 @@ There is also a `sh` script in this directory for convenience access to the cont
 How to configure and run jobs via the NodePool plugin:
 
 1. First complete the above steps.  Ensure the local containers are up and running without any errors.
-1. Run `mvn hpi:run` from the project root directory.
+1. Run `mvn hpi:run` from the project root directory. Use `-Djetty.port=8080` to specify the port explicitly.  Use 
+   `mvn hpi:run -Dhpi.prefix=/jenkins` to specify the prefix path. `MAVEN_OPTS` can be used to specify all sorts of 
+   other JVM parameters, like `-Xmx`.
 1. Open Jenkins in a browser window at http://localhost:8080/jenkins
 1. Create a "Nodepool Cloud" configuration entry
     * Click "Manage Jenkins" => "Configure System"
