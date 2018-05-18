@@ -33,6 +33,7 @@ import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import hudson.util.FormValidation;
 import hudson.util.RunList;
 import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
@@ -143,6 +144,9 @@ public class NodePoolSlave extends Slave {
         final boolean held = form.getBoolean("held");
         setHeld(held);
 
+        // Set the number of executors from the form value
+        setNumExecutors(form.getInt("numExecutors"));
+
         return this;
     }
 
@@ -249,6 +253,4 @@ public class NodePoolSlave extends Slave {
             return nodePoolSlave.isBuildComplete();
         }
     }
-
-
 }

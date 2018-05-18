@@ -27,3 +27,6 @@ hs_err_pid*
 .classpath
 .settings/
 .history/
+
+# Ignore Virtual Env in docker folder
+docker/.venv/

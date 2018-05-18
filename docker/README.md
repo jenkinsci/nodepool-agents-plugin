@@ -29,6 +29,11 @@ Steps to do plugin development work:
    Debian Stretch or Ubuntu Xenial (as indicated in the `labels` and `providers` section).
 1. docker-compose build - builds the docker image in the current folder
 1. docker-compose up - brings up the collection of docker images in the foreground (use `-d` to run in the background)
+   Optional: run `docker-compose -f docker-compose-jenkins.yml up` to run Jenkins within a container (review the version
+   defined within the YML file to match your desired Jenkins release).  If using this option, you'll need to manually 
+   install the nodepood plugin by running `mvn hpi:hpi` from the project root folder to generate the 
+   `target/nodepool-agents.hpi` file, log into the Jenkins instance, and upload the plugin.  Configuration is the same
+   as below, except use `zookeeper` instead of the loopback address.
 
 Once everything starts, there should be 4-5 containers running:
 
@@ -45,7 +50,9 @@ There is also a `sh` script in this directory for convenience access to the cont
 How to configure and run jobs via the NodePool plugin:
 
 1. First complete the above steps.  Ensure the local containers are up and running without any errors.
-1. Run `mvn hpi:run` from the project root directory.
+1. Run `mvn hpi:run` from the project root directory. Use `-Djetty.port=8080` to specify the port explicitly.  Use 
+   `mvn hpi:run -Dhpi.prefix=/jenkins` to specify the prefix path. `MAVEN_OPTS` can be used to specify all sorts of 
+   other JVM parameters, like `-Xmx`.
 1. Open Jenkins in a browser window at http://localhost:8080/jenkins
 1. Create a "Nodepool Cloud" configuration entry
     * Click "Manage Jenkins" => "Configure System"
