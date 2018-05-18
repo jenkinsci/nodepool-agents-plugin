@@ -29,6 +29,11 @@ Steps to do plugin development work:
    Debian Stretch or Ubuntu Xenial (as indicated in the `labels` and `providers` section).
 1. docker-compose build - builds the docker image in the current folder
 1. docker-compose up - brings up the collection of docker images in the foreground (use `-d` to run in the background)
+   Optional: run `docker-compose -f docker-compose-jenkins.yml up` to run Jenkins within a container (review the version
+   defined within the YML file to match your desired Jenkins release).  If using this option, you'll need to manually 
+   install the nodepood plugin by running `mvn hpi:hpi` from the project root folder to generate the 
+   `target/nodepool-agents.hpi` file, log into the Jenkins instance, and upload the plugin.  Configuration is the same
+   as below, except use `zookeeper` instead of the loopback address.
 
 Once everything starts, there should be 4-5 containers running:
 
