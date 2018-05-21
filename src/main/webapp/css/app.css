@@ -1,0 +1,14 @@
+/*
+ * Application or page specific style overrides.
+ */
+
+/**
+ Close up the unordered lists in the table cells
+ */
+#nodepool-table tbody ul {
+    padding-left: 1em;
+}
+
+#nodepool-table tbody li {
+    padding: 0em;
+}

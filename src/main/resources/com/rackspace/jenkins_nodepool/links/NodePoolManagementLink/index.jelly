@@ -5,78 +5,100 @@
     <l:layout norefresh="true" permission="${app.READ}" title="NodePool View">
         <st:include page="sidepanel.jelly" it="${app}"/>
 
+        <l:header>
+            <link rel="stylesheet" href="${rootURL}/plugin/nodepool-agents/css/dataTables.min.css"
+                  type="text/css" media="screen"/>
+            <link rel="stylesheet" href="${rootURL}/plugin/nodepool-agents/css/app.css"
+                  type="text/css" media="screen"/>
+
+            <script type="text/javascript"
+                    src="${rootURL}/plugin/nodepool-agents/javascript/jquery/jquery-3.3.1.min.js"/>
+            <script type="text/javascript"
+                    src="${rootURL}/plugin/nodepool-agents/javascript/dataTables.bootstrap.min.js"/>
+            <script type="text/javascript"
+                    src="${rootURL}/plugin/nodepool-agents/javascript/jquery/jquery.dataTables.min.js"/>
+            <script type="text/javascript"
+                    src="${rootURL}/plugin/nodepool-agents/javascript/init.js"/>
+        </l:header>
+
         <l:main-panel>
 
             <h1>
-                <l:icon class="icon-terminal icon-xlg"/>
-                NodePool debug view
+                <l:icon class="icon-terminal icon-xlg"/>NodePool View
             </h1>
-            <p>Use the following table to see how runs of Jenkins projects resulted in the
-            creation of new Jenkins nodes from NodePool.</p>
-            <p>(Note: <i>SUCCESS</i> means that for a given build of a job, it was able to successfully obtain node(s)
+
+            <p>
+                Use the following table to see how runs of Jenkins projects resulted in the creation of new Jenkins
+                nodes from NodePool.
+            </p>
+
+            <p>
+                (Note: <i>SUCCESS</i> means that for a given build of a job, it was able to successfully obtain node(s)
                 from NodePool, not necessarily that the job itself ran to a successful completion.)
             </p>
 
-            <h2>
-                Build history
-            </h2>
+            <h2>Build History</h2>
+            <j:set var="jobHistory" value="${it.jobHistory}"/>
 
-            <p>
-                <j:set var="jobHistory" value="${it.jobHistory}"/>
+            <div style="overflow:auto">
+                <table id="nodepool-table" class="display compact" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>Task Name</th>
+                            <th>Queue Id</th>
+                            <th>Build #</th>
+                            <th>Label</th>
+                            <th>NodePool Cluster</th>
+                            <th>Provision Status</th>
+                            <th>Duration</th>
+                            <th>Attempt Status</th>
+                        </tr>
+                    </thead>
 
-                <table class="bigtable">
-                    <tr>
-                        <th>Task Name</th>
-                        <th>Queue Id</th>
-                        <th>Build #</th>
-                        <th>Label</th>
-                        <th>NodePool cluster</th>
-                        <th>Complete?</th>
-                        <th>Result</th>
-                        <th>Duration</th>
-                        <th>Attempts</th>
-                    </tr>
+                    <tbody>
+                        <j:forEach var="job" items="${jobHistory}">
+                            <j:set var="task" value="${job.task}"/>
 
-                <j:forEach var="job" items="${jobHistory}">
-                    <j:set var="task" value="${job.task}"/>
+                            <tr>
+                                <td>${task.fullDisplayName}</td>
+                                <td class="dt-body-center">${job.taskId}</td>
+                                <td class="dt-body-center">${job.buildNumber}</td>
+                                <td>${job.label}</td>
+                                <td>${job.nodePool}</td>
+                                <td class="dt-body-center">
+                                    <j:choose>
+                                        <j:when test="${!job.done}">In Progress</j:when>
+                                        <j:when test="${job.success}">Success</j:when>
+                                        <j:when test="${job.failure}">Failure</j:when>
+                                        <j:otherwise>In Progress</j:otherwise>
+                                    </j:choose>
+                                </td>
 
-                    <tr>
-                        <td>${task.fullDisplayName}</td>
-                        <td>${job.taskId}</td>
-                        <td>${job.buildNumber}</td>
-                        <td>${job.label}</td>
-                        <th>${job.nodePool}</th>
-                        <td><j:choose>
-                                <j:when test="${job.done}">yes</j:when>
-                                <j:otherwise>no</j:otherwise>
-                            </j:choose></td>
-                        <td><j:choose>
-                            <j:when test="${job.success}">success</j:when>
-                            <j:otherwise>failure</j:otherwise>
-                        </j:choose></td>
-
-                        <td>${job.durationSeconds} secs</td>
-                        <td>
-                            <ul>
-                                <j:set var="attempts" value="${job.attempts}"/>
-                                <j:forEach var="attempt" items="${attempts}">
-                                    <li>${attempt}
-                                        <j:if test="${attempt.failure}">
-                                            <ul>
-                                                <li><pre>${attempt.error}</pre></li>
-                                            </ul>
-                                        </j:if>
-                                    </li>
-                                </j:forEach>
-                            </ul>
-
-                        </td>
-                    </tr>
-                </j:forEach>
-
+                                <td class="dt-body-center">${job.getDurationFormatted()}</td>
+                                <td>
+                                    <ul>
+                                        <j:set var="attempts" value="${job.attempts}"/>
+                                        <j:forEach var="attempt" items="${attempts}">
+                                            <li>
+                                                ${attempt.getResult()},
+                                                ${attempt.getDurationFormatted()},
+                                                nodes:${attempt.getNodesAsFormattedString()}
+                                                <j:if test="${attempt.failure}">
+                                                    <ul>
+                                                        <li>
+                                                            <pre>${attempt.error}</pre>
+                                                        </li>
+                                                    </ul>
+                                                </j:if>
+                                            </li>
+                                        </j:forEach>
+                                    </ul>
+                                </td>
+                            </tr>
+                        </j:forEach>
+                    </tbody>
                 </table>
-            </p>
-
+            </div>
         </l:main-panel>
     </l:layout>
 </j:jelly>
