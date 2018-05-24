@@ -9,14 +9,14 @@ import java.util.List;
  */
 public class NodePoolJobHistory implements Iterable<NodePoolJob> {
 
-    private static final int MAX_HISTORY_LENTH = 100;
+    private static final int MAX_HISTORY_LENGTH = 100;
     private final Object lock = new Object();
 
     private final List<NodePoolJob> jobs;
     private final int maxHistoryLength;
 
     public NodePoolJobHistory() {
-        this(MAX_HISTORY_LENTH);
+        this(MAX_HISTORY_LENGTH);
     }
 
     public NodePoolJobHistory(final int maxHistoryLenth) {

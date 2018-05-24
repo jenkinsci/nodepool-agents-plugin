@@ -1,13 +1,10 @@
 package com.rackspace.jenkins_nodepool;
 
 import hudson.model.*;
-import hudson.util.RunList;
-import jenkins.model.Jenkins;
-import org.apache.commons.lang.exception.ExceptionUtils;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Wrap a Jenkins task so we can track some information over the NodePool processing cycle.
@@ -19,20 +16,16 @@ public class NodePoolJob {
     private long taskId;
     private Integer buildNumber;
 
-    private List<Attempt> attempts = new ArrayList<Attempt>();  // attempts to provision
+    /**
+     * A list of Attempt objects to hold the metadata associated with each provision attempt.
+     */
+    private List<Attempt> attempts = new ArrayList<>();
 
     NodePoolJob(Label label, Queue.Task task, long taskId) {
         this.label = label;
         this.task = task;
         this.taskId = taskId;
         this.buildNumber = null;
-    }
-
-    @Override
-    public String toString() {
-        return "NodePoolJob[taskId=" + taskId + ", task=" + task.getFullDisplayName() +
-                ", label=" + label +"]";
-
     }
 
     public Label getLabel() {
@@ -62,26 +55,13 @@ public class NodePoolJob {
 
     private Attempt getCurrentAttempt() {
         final int sz = attempts.size();
-        return attempts.get(sz-1);
+        return attempts.get(sz - 1);
     }
 
-    public List<Attempt> getAttempts() { return attempts; }
-
-    @Override
-    public boolean equals(Object obj) {
-
-        if (!(obj instanceof NodePoolJob)) {
-            return false;
-        }
-
-        final NodePoolJob job = (NodePoolJob) obj;
-        return job.getTaskId() == taskId;
+    public List<Attempt> getAttempts() {
+        return attempts;
     }
 
-    @Override
-    public int hashCode() {
-        return Long.hashCode(taskId);
-    }
 
     public boolean isDone() {
         return getCurrentAttempt().isDone();
@@ -91,37 +71,45 @@ public class NodePoolJob {
         return getCurrentAttempt().isSuccess();
     }
 
-    public String getDurationSeconds() {
-        try {
-            final long start = attempts.get(0).startTime;
-
-            long end;
-            if (isDone()) {
-                end = getCurrentAttempt().finishTime;
-            } else {
-                end = System.currentTimeMillis();
-            }
-
-            return Long.toString((end - start)/ 1000L);
-
-        } catch (IndexOutOfBoundsException e) {
-            // no attempts made yet
-            return null;
-        }
-
+    public boolean isFailure() {
+        return getCurrentAttempt().isFailure();
     }
 
+    /**
+     * Returns the total duration in seconds from all the attempts.
+     *
+     * @return the total duration in seconds from all the attempts.
+     */
+    public long getDurationSeconds() {
+        // Sum up all the attempt durations
+        return attempts.stream().map(Attempt::getDurationSeconds).reduce(0L, (x, y) -> x + y);
+    }
+
+    /**
+     * Returns the duration as a formatted string as: hh:mm:ss.
+     *
+     * @return the duration as a formatted string as: hh:mm:ss
+     */
+    public String getDurationFormatted() {
+        final long seconds = getDurationSeconds();
+        return String.format("%02d:%02d:%02d",
+                seconds / 3600,
+                (seconds % 3600) / 60,
+                seconds % 60);
+    }
+
+    /**
+     * Returns the underlying NodePool object assisted with the current request attempt.
+     *
+     * @return the underlying NodePool object assisted with the current request attempt.
+     */
     public NodePool getNodePool() {
-        try {
-            return getCurrentAttempt().request.nodePool;
-        } catch (IndexOutOfBoundsException e) {
-            return null;
-        }
+        return getCurrentAttempt().getRequest().nodePool;
     }
 
     /**
      * Get the jenkins build number for the project, if it's known.
-     *
+     * <p>
      * Builds that are not yet "running" do not have a build number.
      *
      * @return build number of Jenkins project
@@ -134,98 +122,73 @@ public class NodePoolJob {
         }
     }
 
+    /**
+     * Returns the result associated with the current attempt.
+     *
+     * @return the result associated with the current attempt.
+     */
     public Status getResult() {
         return getCurrentAttempt().getResult();
     }
 
+    /**
+     * Sets the build number value.
+     *
+     * @param buildNumber the build number value
+     * @throws IllegalArgumentException if the buildNumber is negative.
+     */
     public void setBuildNumber(int buildNumber) {
+        if (buildNumber < 0) {
+            throw new IllegalArgumentException("Build number was negative: " + buildNumber);
+        }
+
         this.buildNumber = buildNumber;
     }
 
+    /**
+     * A status enumeration to hold the attempt status.
+     */
     public enum Status {
         INPROGRESS,
         SUCCESS,
         FAILURE
     }
 
-    public static class Attempt {
-        final NodeRequest request;
-        Exception e;
-
-        long startTime;
-        long finishTime;
-
-        Attempt(NodeRequest request) {
-            this.request = request;
-
-            this.startTime = System.currentTimeMillis();
-        }
-
-        void fail(Exception e) {
-            this.e = e;
-            setFinishTime();
-        }
-
-        void succeed() {
-            setFinishTime();
-        }
-
-        void setFinishTime() {
-            this.finishTime = System.currentTimeMillis();
-        }
-
-        long getDurationSeconds() {
-            long end = finishTime;
-            if (end == 0) {
-                end = System.currentTimeMillis();
-            }
-
-            final long millis = end - startTime;
-            return millis / 1000L;
-        }
-
-        public String getError() {
-            if (e == null) {
-                return null;
-            } else {
-                return ExceptionUtils.getStackTrace(e);
-            }
-        }
-
-        public boolean isDone() {
-            return finishTime != 0L;
-        }
-
-        public boolean isFailure() {
-            return e != null;
-        }
-
-        public boolean isSuccess() {
-            return isDone() && e == null;
-        }
-
-        public Status getResult() {
-            if (!isDone()) {
-                return Status.INPROGRESS;
-            } else if (isSuccess()){
-                return Status.SUCCESS;
-            } else {
-                return Status.FAILURE;
-            }
-        }
-
-        /**
-         * Get nodes allocated from a node request
-         * @return list of node names
-         */
-        public List<String> getNodes() {
-            return request.getAllocatedNodeNames();
-        }
-
-        @Override
-        public String toString() {
-            return "[result="+getResult() + ", duration=" + getDurationSeconds() + " secs, nodes="
-                    + getNodes() + "]";
-        }
+    /**
+     * Returns true if the specified object is equal to this object, false otherwise.
+     *
+     * @param o the object to test for equality.
+     * @return true if the specified object is equal to this object, false otherwise.
+     */
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        final NodePoolJob that = (NodePoolJob) o;
+        return taskId == that.taskId &&
+                Objects.equals(label, that.label) &&
+                Objects.equals(task, that.task) &&
+                Objects.equals(buildNumber, that.buildNumber);
     }
+
+    /**
+     * Returns the hash code associated with this object.
+     *
+     * @return the hash code associated with this object.
+     */
+    @Override
+    public int hashCode() {
+        return Objects.hash(label, task, taskId, buildNumber);
+    }
+
+    /**
+     * Returns the string representation of this object.
+     *
+     * @return the string representation of this object.
+     */
+    @Override
+    public String toString() {
+        return "NodePoolJob[taskId=" + taskId + ", task=" + task.getFullDisplayName() + ", label=" + label + "]";
+    }
+
 }

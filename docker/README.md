@@ -82,6 +82,8 @@ How to configure and run jobs via the NodePool plugin:
 1. Run the Job
     * Select the Job that was just created (e.g. Test) - then select "Build Now"
     * If Jenkins can't find the label it will be in pending state.  Double check your settings and configuration.
+    * Optionally check the NodePool View: http://localhost:8080/jenkins/nodepool-view/ for a summary of the NodePool
+      slave instances.
 
 ## Create Base Image
 

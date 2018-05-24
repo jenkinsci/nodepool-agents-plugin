@@ -41,6 +41,7 @@ import hudson.security.AccessControlled;
 import hudson.util.FormFieldValidator;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
+
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.text.MessageFormat;
@@ -52,6 +53,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.servlet.ServletException;
+
 import jenkins.model.Jenkins;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
@@ -172,13 +174,13 @@ public class NodePool implements Describable<NodePool> {
      * @param zooKeeperRoot    Prefix of all NodePool-related ZNodes
      * @param nodeRoot         Prefix of nodes
      * @param requestTimeout   Length of time to wait for node requests to be
-     * fulfilled
+     *                         fulfilled
      */
     @DataBoundConstructor
     public NodePool(String connectionString,
                     String credentialsId, String labelPrefix, String requestRoot,
                     String priority, String requestor, String zooKeeperRoot,
-            String nodeRoot, Integer requestTimeout) {
+                    String nodeRoot, Integer requestTimeout) {
         this.connectionString = connectionString;
         this.credentialsId = credentialsId;
         this.requestRoot = requestRoot;
@@ -387,7 +389,7 @@ public class NodePool implements Describable<NodePool> {
      * Submit request for node(s) required to execute the given task based on the nodes associated with the specified
      * label. Uses a default timeout of 60 seconds.
      *
-     * @param job  the job to execute
+     * @param job the job to execute
      * @throws IllegalArgumentException if timeout is less than 1 second
      * @throws Exception                if an error occurs managing the provision components
      */
@@ -398,11 +400,11 @@ public class NodePool implements Describable<NodePool> {
     /**
      * Submit request for node(s) required to execute the given task.
      *
-     * @param job         job/task/build being executed
+     * @param job          job/task/build being executed
      * @param timeoutInSec the timeout in seconds to provision the node(s)
-     * @param maxAttempts maximum number of times to try to provision the node
+     * @param maxAttempts  maximum number of times to try to provision the node
      * @throws IllegalArgumentException if timeout is less than 1 second
-     * @throws NodePoolException                if an error occurs managing the provision components
+     * @throws NodePoolException        if an error occurs managing the provision components
      */
     void provisionNode(NodePoolJob job, int timeoutInSec, int maxAttempts) throws NodePoolException {
 
@@ -432,9 +434,9 @@ public class NodePool implements Describable<NodePool> {
     /**
      * Make a single node provisioning attempt.  Update the progress state of the `job`.
      *
-     * @param job  object for tracking overall progress of the task/job
-     * @param timeoutInSec  watcher timeout
-     * @throws Exception  if the provisioning attempt fails
+     * @param job          object for tracking overall progress of the task/job
+     * @param timeoutInSec watcher timeout
+     * @throws Exception if the provisioning attempt fails
      */
     void attemptProvision(NodePoolJob job, int timeoutInSec) throws Exception {
 
@@ -468,9 +470,9 @@ public class NodePool implements Describable<NodePool> {
     /**
      * Make a single provisioning attempt.
      *
-     * @param request  node request object
-     * @param timeoutInSec  watcher timeout
-     * @throws Exception  if provisioning fails
+     * @param request      node request object
+     * @param timeoutInSec watcher timeout
+     * @throws Exception if provisioning fails
      */
     void attemptProvisionNode2(final NodeRequest request, final int timeoutInSec) throws Exception {
 
@@ -505,7 +507,7 @@ public class NodePool implements Describable<NodePool> {
 
             } catch (Exception e) {
                 throw new Exception("An error occurred while accepting nodes: "
-                    + e.getLocalizedMessage(), e);
+                        + e.getLocalizedMessage(), e);
             }
 
         } else {

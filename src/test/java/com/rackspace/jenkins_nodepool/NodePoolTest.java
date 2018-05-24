@@ -56,8 +56,8 @@ public class NodePoolTest {
     @Rule
     public JenkinsRule j = new JenkinsRule();
 
-    Mocks m;
-    NodePool np;
+    private Mocks m;
+    private NodePool np;
 
     public NodePoolTest() {
     }
@@ -272,10 +272,10 @@ public class NodePoolTest {
         final NodePoolJob job = new NodePoolJob(m.label, m.task, 1);
         np.attemptProvision(job, timeoutInSec);
 
-        final List<NodePoolJob.Attempt> attempts = job.getAttempts();
+        final List<Attempt> attempts = job.getAttempts();
         assertEquals(1, attempts.size());
 
-        final NodePoolJob.Attempt attempt = attempts.get(0);
+        final Attempt attempt = attempts.get(0);
         assertTrue(attempt.isSuccess());
 
         assertTrue(attempt.getDurationSeconds() >= 0);
@@ -321,17 +321,17 @@ public class NodePoolTest {
             fail("attemptProvision should have failed.");
         }
 
-        final List<NodePoolJob.Attempt> attempts = job.getAttempts();
+        final List<Attempt> attempts = job.getAttempts();
         assertEquals(1, attempts.size());
 
-        final NodePoolJob.Attempt attempt = attempts.get(0);
+        final Attempt attempt = attempts.get(0);
         assertTrue(!attempt.isSuccess());
     }
 
     @Test
     public void testSetRequestTimeout() {
         np.setRequestTimeout(2);
-        assertEquals((int) 2, (int) np.getRequestTimeout());
+        assertEquals(2, (int) np.getRequestTimeout());
 
         try {
             np.setRequestTimeout(0);
