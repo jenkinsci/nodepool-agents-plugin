@@ -94,7 +94,7 @@ class Janitor implements Runnable {
     @Override
     public void run() {
 
-        LOGGER.log(Level.INFO, "Janitor thread running...");
+        LOGGER.log(Level.INFO, "Janitor thread running with an interval of {0} seconds...", (sleepMilliseconds / 1000L));
 
         try (ACLContext ignored = ACL.as(ACL.SYSTEM)) {
             runAsSystem();
@@ -134,8 +134,9 @@ class Janitor implements Runnable {
             if (!(node instanceof NodePoolSlave))
                 continue;
 
-            final NodePoolSlave nodePoolSlave = (NodePoolSlave)node;
-            LOGGER.log(Level.INFO, "NodePool Node: " + nodePoolSlave);
+            final NodePoolSlave nodePoolSlave = (NodePoolSlave) node;
+            LOGGER.log(Level.INFO, "Reviewing status of NodePool Node: " + nodePoolSlave.getDisplayName() +
+                    " with " + nodePoolSlave.getNumExecutors() + " executors.");
 
             // there are several scenarios where we want to scrub this node:
             if (isMissing(nodePoolSlave)) {
@@ -152,18 +153,16 @@ class Janitor implements Runnable {
 
             } else if (nodePoolSlave.isHeld()) {
                 // do not reap a slave being "held" -- it shall be inspected by a human and then manually deleted.
-                LOGGER.log(Level.FINE, "Skipping held node " + nodePoolSlave);
+                LOGGER.log(Level.INFO, "Skipping held node " + nodePoolSlave);
 
-            } else if (isPreviouslyUsed(nodePoolSlave)) {
+            } else if (nodePoolSlave.isBuildComplete()) {
                 // The node has previously done work and failed to have been scrubbed
                 LOGGER.log(Level.INFO, "Removing node " + nodePoolSlave + " because it has already been used to "
                         + "run jobs.");
                 cleanNode(nodePoolSlave, "Already used");
 
             }
-
         }
-
     }
 
     /**
@@ -238,13 +237,4 @@ class Janitor implements Runnable {
         return false;
     }
 
-    /**
-     * We only want to use each node once, so check if the given node has ever *completed* any build.
-     *
-     * @param nodePoolSlave  the node to check
-     * @return true if the node has previously completed a build
-     */
-    private boolean isPreviouslyUsed(NodePoolSlave nodePoolSlave) {
-        return nodePoolSlave.isBuildComplete();
-    }
 }

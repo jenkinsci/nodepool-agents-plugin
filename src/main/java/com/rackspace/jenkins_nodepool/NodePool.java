@@ -502,7 +502,11 @@ public class NodePool implements Describable<NodePool> {
                 for (NodePoolNode node : allocatedNodes) {
                     final NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId());
                     Jenkins.getInstance().addNode(nps);
-                    LOG.log(Level.INFO, "Added NodePool slave to Jenkins: {0}", nps);
+                    LOG.log(Level.INFO, "NodePoolSlave instance " + nps.getNodePoolNode().getName() +
+                            " with host: " + nps.getNodePoolNode().getHost() +
+                            " with label: " + request.getJenkinsLabel().getDisplayName() +
+                            " from task: " + request.getTask().getName() +
+                            " is ready...adding slave to Jenkins");
                 }
 
             } catch (Exception e) {

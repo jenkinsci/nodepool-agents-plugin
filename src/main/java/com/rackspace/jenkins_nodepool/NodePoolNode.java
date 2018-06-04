@@ -6,7 +6,6 @@ import java.util.List;
 
 /**
  * Representation of a node from NodePool (not necessarily a Jenkins slave)
- *
  */
 
 public class NodePoolNode extends ZooKeeperObject {
@@ -17,8 +16,10 @@ public class NodePoolNode extends ZooKeeperObject {
     final KazooLock lock;
 
     /**
-     * @param nodePool  NodePool
-     * @param id  id of node as represented in ZooKeeper
+     * Creates a new Zookeeper node for the node pool.
+     *
+     * @param nodePool NodePool
+     * @param id       id of node as represented in ZooKeeper
      * @throws Exception on ZooKeeper error
      */
     public NodePoolNode(NodePool nodePool, String id) throws Exception {
@@ -45,8 +46,7 @@ public class NodePoolNode extends ZooKeeperObject {
      * @return lock path
      */
     final String getLockPath() {
-        return MessageFormat.format("/{0}/{1}/lock",
-                new Object[]{nodePool.getNodeRoot(), zKID});
+        return MessageFormat.format("/{0}/{1}/lock", nodePool.getNodeRoot(), zKID);
     }
 
     /**
@@ -77,10 +77,10 @@ public class NodePoolNode extends ZooKeeperObject {
     }
 
     public Integer getPort() {
-        Double port = (Double)data.get("connection_port");
+        Double port = (Double) data.get("connection_port");
         if (port == null) {
             // fall back to the field name used on older NodePool clusters.
-            port = (Double)data.getOrDefault("ssh_port", 22.0);
+            port = (Double) data.getOrDefault("ssh_port", 22.0);
         }
         return port.intValue();
     }
@@ -102,7 +102,7 @@ public class NodePoolNode extends ZooKeeperObject {
     /**
      * Update the state of the node according to  NodePool
      *
-     * @param state  NodePool node state
+     * @param state NodePool node state
      * @throws Exception on ZooKeeper error
      */
     private void setState(String state) throws Exception {
@@ -112,7 +112,7 @@ public class NodePoolNode extends ZooKeeperObject {
     /**
      * Update the state of the node according to  NodePool
      *
-     * @param state  NodePool node state
+     * @param state NodePool node state
      * @param write if true, save updates back to ZooKeeper
      * @throws Exception on ZooKeeper error
      */
