@@ -43,11 +43,11 @@ import org.junit.Test;
  */
 public class NodePoolNodeTest {
 
-    NodePoolNode npn;
-    Mocks m;
-    String nodePath;
-    String hostKey;
-    List<String> hostKeys;
+    private NodePoolNode npn;
+    private Mocks m;
+    private String nodePath;
+    private String hostKey;
+    private List<String> hostKeys;
 
     public NodePoolNodeTest() {
     }
