@@ -25,14 +25,13 @@ package com.rackspace.jenkins_nodepool;
 
 import hudson.model.*;
 import hudson.slaves.SlaveComputer;
+import hudson.util.RunList;
+import org.kohsuke.stapler.HttpResponse;
 
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import hudson.util.RunList;
-import org.kohsuke.stapler.HttpResponse;
 
 /**
  * @author hughsaunders
@@ -227,8 +226,9 @@ public class NodePoolComputer extends SlaveComputer {
                     computer.doDoDelete();
                 }
             } catch (IOException ex) {
-                LOG.log(Level.WARNING, ex.getClass().getSimpleName() +
-                        " while attempting to delete NodePool node. Message:" + ex.getLocalizedMessage());
+                LOG.log(Level.WARNING,
+                        String.format("%s error while deleting node. Message: %s. Was it already deleted?",
+                                ex.getClass().getSimpleName(), ex.getLocalizedMessage()));
             }
         });
     }

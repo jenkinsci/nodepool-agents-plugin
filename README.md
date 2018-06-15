@@ -9,6 +9,49 @@ The implementation consists of a listener class that creates agents (slaves) whe
 matching label enters the Jenkins build queue.  There is also another listener that releases each
 node after it is used once.
 
+## Building Prerequisites
+
+To build the NodePool plugin from the source, the following tools are needed:
+
+* Java JDK 8
+* Apache Maven 3.x
+
+## Building
+
+To build the project from source, run the following command:
+
+```bash
+mvn clean compile test findbugs:findbugs
+```
+
+It's highly recommended to run the `findbugs` target to discover any issues prior to submitting a pull request.  The 
+Jenkins CI system will run the `findbugs` target anyway, but it's convenient to catch the issues early. The
+`findbugs:gui` target will launch a tool to display any errors - otherwise the results will be in the `target` folder. 
+The CI system uses a more elaborate command line (which may change in the future). Here's an example:
+
+```bash
+mvn --batch-mode \
+  --errors \
+  -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn \
+  --update-snapshots \
+  -Dmaven.test.failure.ignore \
+  clean install
+```
+
+To generate the `hpi` installation file for Jenkins, run:
+
+```bash
+mvn hpi:hpi
+```
+ 
+## Running
+
+To launch Jenkins with the NodePool plugin from the command line, run:
+
+```bash
+mvn hpi:run
+```
+
 ## Releasing
 
 The following are instructions to release a new version of the plugin so it will appear as an available plugins under `Manage Plugins` in the Jenkins UI.  For more information, see [here](https://wiki.jenkins.io/display/JENKINS/Hosting+Plugins#HostingPlugins-Releasingtojenkins-ci.org).
