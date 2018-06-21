@@ -26,9 +26,13 @@ package com.rackspace.jenkins_nodepool;
 import com.google.common.collect.Iterators;
 import hudson.Extension;
 import hudson.model.*;
-import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.plugins.sshslaves.verifiers.ManuallyProvidedKeyVerificationStrategy;
 import hudson.slaves.RetentionStrategy;
+import hudson.util.RunList;
+import jenkins.model.Jenkins;
+import net.sf.json.JSONObject;
+import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.StaplerRequest;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -36,11 +40,7 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import hudson.util.RunList;
-import jenkins.model.Jenkins;
-import net.sf.json.JSONObject;
-import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.StaplerRequest;
+import static java.util.logging.Level.*;
 
 /**
  * Representation of a Jenkins slave sourced from NodePool.
@@ -91,7 +91,6 @@ public class NodePoolSlave extends Slave {
      */
     @DataBoundConstructor  // not used, but it makes stapler happy if you click "Save" while editing a Node.
     public NodePoolSlave(NodePoolNode nodePoolNode, String credentialsId) throws Descriptor.FormException, IOException {
-
         super(
                 nodePoolNode.getName(), // name
                 "Nodepool Node", // description
@@ -99,26 +98,45 @@ public class NodePoolSlave extends Slave {
                 "1", // num executors
                 Mode.EXCLUSIVE,
                 nodePoolNode.getJenkinsLabel(),
-                new SSHLauncher(
+                new NodePoolSSHLauncher(
                         nodePoolNode.getHost(),
                         nodePoolNode.getPort(),
                         credentialsId,
                         "", //jvmoptions
-                        null, // javapath
-                        null, //jdkInstaller
+                        determineJDKInstaller(nodePoolNode.getNodePool()), //jdkInstaller
                         "", //prefixStartSlaveCmd
                         "", //suffixStartSlaveCmd
                         300, //launchTimeoutSeconds
                         30, //maxNumRetries
                         10, //retryWaitTime
                         new ManuallyProvidedKeyVerificationStrategy(nodePoolNode.getHostKey())
-                        //new NonVerifyingKeyVerificationStrategy()
-                        //TODO: go back to verifying host key strategy
                 ),
                 new RetentionStrategy.Always(), //retentionStrategy
                 new ArrayList() //nodeProperties
         );
+
         this.nodePoolNode = nodePoolNode;
+    }
+
+    /**
+     * A quick function to determine which JDK installer we have based on the NodePool configuration.
+     *
+     * @param np a nodepool object reference
+     * @return a NodePool JDK installer instance
+     */
+    private static NodePoolJDKInstaller determineJDKInstaller(final NodePool np) {
+        final String jdkInstallationScript = np.getJdkInstallationScript();
+
+        // If we are not provided a script or if the value is empty, use a default - otherwise use the script installer
+        NodePoolJDKInstaller installer;
+        if (jdkInstallationScript == null || jdkInstallationScript.trim().isEmpty()) {
+            installer = new NodePoolDebianOpenJDKInstaller();
+        } else {
+            installer = new NodePoolJDKScriptInstaller(np.getJdkInstallationScript().trim(), np.getJdkHome());
+        }
+
+        LOG.log(FINE, String.format("Using JDK Installer:  %s", installer.getClass().getSimpleName()));
+        return installer;
     }
 
     public NodePoolNode getNodePoolNode() {
@@ -126,17 +144,20 @@ public class NodePoolSlave extends Slave {
     }
 
     // Called for deserialisation
-    private void readObject(java.io.ObjectInputStream in)
-            throws IOException, ClassNotFoundException {
+    private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
         in.defaultReadObject(); // call default deserializer
-        LOG.log(Level.WARNING, "Removing NodePool Slave {0} on startup as its a nodepool node that will have been destroyed", this.toString());
+        LOG.log(WARNING, "Removing NodePool Slave {0} on startup as its a nodepool node that will have been destroyed", this.toString());
         Jenkins.getInstance().removeNode(this);
     }
 
+    /**
+     * Returns a new computer based on the nodepool node object associated with this class instance.
+     *
+     * @return a new computer based on the nodepool node object associated with this class instance.
+     */
     @Override
     public Computer createComputer() {
-        NodePoolComputer npc = new NodePoolComputer(this, nodePoolNode);
-        return npc;
+        return new NodePoolComputer(this, nodePoolNode);
     }
 
     /**
@@ -157,7 +178,7 @@ public class NodePoolSlave extends Slave {
 
         final boolean held = form.getBoolean("held");
         setHeld(held);
-        LOG.log(Level.INFO, "Set node hold to: " + isHeld());
+        LOG.log(FINE, "Set node hold to: " + isHeld());
 
         // Set the number of executors from the form value
         setNumExecutors(form.getInt("numExecutors"));
@@ -167,19 +188,19 @@ public class NodePoolSlave extends Slave {
         if (holdReason != null) {
             final String trimmedHoldReason = holdReason.substring(0, Math.min(holdReason.length(), MAX_HOLD_REASON_LEN));
             setHoldReason(trimmedHoldReason);
-            LOG.log(Level.FINE, "Set hold reason: " + getHoldReason());
+            LOG.log(FINE, "Set hold reason: " + getHoldReason());
         }
 
         if (isHeld()) {
             if (getHoldUser() == null) {
                 setHoldUser(form.getString("holdUser"));
-                LOG.log(Level.FINE, "Node held: " + isHeld() + " with user: " + getHoldUser() + " which was previously null.");
+                LOG.log(FINE, "Node held: " + isHeld() + " with user: " + getHoldUser() + " which was previously null.");
             } else {
-                LOG.log(Level.FINE, "Node held: " + isHeld() + " with previous user: " + getHoldUser());
+                LOG.log(FINE, "Node held: " + isHeld() + " with previous user: " + getHoldUser());
             }
         } else {
             setHoldUser(null);
-            LOG.log(Level.FINE, "Node not held: " + isHeld() + ", setting user: " + getHoldUser());
+            LOG.log(FINE, "Node not held: " + isHeld() + ", setting user: " + getHoldUser());
         }
 
         return this;
@@ -279,7 +300,7 @@ public class NodePoolSlave extends Slave {
 
         // If we've executed at least one build and all the executors are idle and we actually ran something...
         // ...then we must be done, otherwise we are not done
-        if (Iterators.size(builds.iterator()) > 0 && isAllExecutorsIdle(computer.getAllExecutors())) {
+        if (Iterators.size(builds.iterator()) > 0 && isAllExecutorsIdle(computer.getAllExecutors()) && isAllBuildsFinished(builds)) {
             LOG.log(Level.FINE, "Slave " + this + " started and now idle." +
                     "Builds: " + Iterators.size(builds.iterator()) +
                     ", Started: " + isExecutorStarted(computer.getAllExecutors()) +
@@ -298,6 +319,35 @@ public class NodePoolSlave extends Slave {
     }
 
     /**
+     * A convenience routine to help determine if the builds are finished.
+     *
+     * @param builds a list of builds for this slave
+     * @return true if all the builds are finished, false otherwise
+     */
+    private boolean isAllBuildsFinished(RunList builds) {
+        LOG.log(INFO, "Testing if all builds are finished...");
+        for (Object obj : builds) {
+            final Run build = (Run) obj;
+
+            final Result buildResult = build.getResult();
+
+
+            // We should have some sort of result if we're finished
+            if (buildResult == null) {
+                LOG.log(FINE, "Build Result is null");
+
+                // We're done - at least one build without a result indicates that we're not finished
+                return false;
+            } else {
+                LOG.log(FINE, String.format("Build Result: %s, result.isCompleteBuild(): %s",
+                        buildResult, buildResult.isCompleteBuild()));
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Debug routine to print the build details.
      *
      * @param builds a run list with all the builds
@@ -305,7 +355,7 @@ public class NodePoolSlave extends Slave {
     private void printBuildDetails(RunList builds) {
         for (Object obj : builds) {
             final Run build = (Run) obj;
-            LOG.log(Level.FINE, "Build: " + build.getDisplayName() +
+            LOG.log(FINE, "Build: " + build.getDisplayName() +
                     ", id: " + build.getId() +
                     ", number: " + build.number +
                     ", queueId: " + build.getQueueId() +
@@ -328,7 +378,7 @@ public class NodePoolSlave extends Slave {
      */
     private void printExecutorDetails(final List<Executor> executorList) {
         for (final Executor executor : executorList) {
-            LOG.log(Level.FINE, "Executor: " + executor.getDisplayName() +
+            LOG.log(FINE, "Executor: " + executor.getDisplayName() +
                     ", workUnit: " + executor.getCurrentWorkUnit() +
                     ", isIdle: " + executor.isIdle() +
                     ", isThreadAlive: " + executor.isAlive() +
@@ -377,19 +427,19 @@ public class NodePoolSlave extends Slave {
     private boolean isExecutorStarted(final List<Executor> executorList) {
 
         // Flag to indicate if all of the executor work units are empty
-        boolean isExecutorStarted = false;
+        boolean executorStarted = false;
 
         for (final Executor executor : executorList) {
-
+            LOG.log(FINE, String.format("Testing Executor Thread State: %s", executor.getState()));
             // If one of the executors is NOT in a new state, then it's transition from NEW to something else
             // NEW == Thread state for a thread which has not yet started.
             if (executor.getState() != Thread.State.NEW) {
-                isExecutorStarted = true;
+                executorStarted = true;
                 break;
             }
         }
 
-        return isExecutorStarted;
+        return executorStarted;
     }
 
     /**

@@ -24,8 +24,7 @@ public class NodePoolNode extends ZooKeeperObject {
      */
     public NodePoolNode(NodePool nodePool, String id) throws Exception {
         super(nodePool);
-        super.setPath(MessageFormat.format("/{0}/{1}",
-                new Object[]{nodePool.getNodeRoot(), id}));
+        super.setPath(String.format("/%s/%s", nodePool.getNodeRoot(), id));
         super.setZKID(id);
         super.updateFromZK();
         this.lock = new KazooLock(getLockPath(), nodePool);

@@ -1,0 +1,28 @@
+zookeeper-servers:
+  - host: zookeeper
+
+labels:
+  - name: ubuntu-onmetal-bionic
+    min-ready: 1
+    console-log: True
+
+providers:
+  - name: rackspace
+    cloud: %NODEPOOL_CLOUD_NAME%
+    driver: openstack
+    region-name: %NODEPOOL_REGION_NAME%
+
+    cloud-images:
+      - name: ubuntu-xenial-onmetal-lts
+        image-name: 'OnMetal - Ubuntu 18.04 LTS (Bionic Beaver)'
+
+    pools:
+      - name: main
+        max-servers: 10
+        labels:
+          - name: ubuntu-onmetal-bionic
+            cloud-image: ubuntu-xenial-onmetal-lts
+            flavor-name: onmetal-general2-small
+            key-name: %NODEPOOL_KEYPAIR_NAME%
+
+    boot-timeout: 600

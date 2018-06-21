@@ -35,5 +35,11 @@
             <f:entry title="Priority" field="priority">
                 <f:textbox default="100"></f:textbox>
             </f:entry>
+            <f:entry title="JDK/JRE Installation Script" field="jdkInstallationScript">
+                <f:textarea name="jdkInstallationScript" value="${jdkInstallationScript}" class="fixed-width" />
+            </f:entry>
+            <f:entry title="JDK/JRE Home" field="jdkHome">
+                <f:textbox name="jdkHome" value="${jdkHome}"/>
+            </f:entry>
         </f:advanced>
 </j:jelly>  

@@ -1,0 +1,28 @@
+zookeeper-servers:
+  - host: zookeeper
+
+labels:
+  - name: ubuntu-xenial
+    min-ready: 3
+    console-log: True
+
+providers:
+  - name: rackspace
+    cloud: %NODEPOOL_CLOUD_NAME%
+    driver: openstack
+    region-name: %NODEPOOL_REGION_NAME%
+
+    cloud-images:
+      - name: ubuntu-xenial-lts
+        image-name: 'Ubuntu 16.04 LTS (Xenial Xerus) (PVHVM)'
+
+    pools:
+      - name: main
+        max-servers: 10
+        labels:
+          - name: ubuntu-xenial
+            cloud-image: ubuntu-xenial-lts
+            flavor-name: performance1-4
+            key-name: %NODEPOOL_KEYPAIR_NAME%
+
+    boot-timeout: 600
