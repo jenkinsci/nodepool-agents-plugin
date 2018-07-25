@@ -24,6 +24,9 @@
 package com.rackspace.jenkins_nodepool;
 
 import com.google.gson.Gson;
+import org.apache.zookeeper.data.Stat;
+import org.junit.*;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -31,13 +34,8 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
-import org.apache.zookeeper.data.Stat;
-import org.junit.After;
-import org.junit.AfterClass;
+
 import static org.junit.Assert.*;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
 
 /**
  *
@@ -84,7 +82,7 @@ public class NodeRequestTest {
             Map data = gson.fromJson(json, HashMap.class);
 
             // Check a couple of key value pairs are as expected
-            assertEquals((String) data.get("state"), "requested");
+            assertEquals("Request State is REQUESTED", NodePoolState.REQUESTED, NodePoolState.fromString((String)data.get("state")));
             assertEquals(((List) data.get("node_types")).get(0), label);
         } catch (Exception ex) {
             Logger.getLogger(NodeRequestTest.class.getName()).log(Level.SEVERE, null, ex);
@@ -96,9 +94,9 @@ public class NodeRequestTest {
         try {
             Map updateData = new HashMap();
             updateData.put("state_time", 1);
-            updateData.put("state", "pending");
+            updateData.put("state", NodePoolState.PENDING.getStateString());
             nr.updateFromMap(updateData);
-            assertEquals(nr.getState(), RequestState.pending);
+            assertEquals("Request State is PENDING", NodePoolState.PENDING, nr.getState());
         } catch (Exception ex) {
             Logger.getLogger(NodeRequestTest.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -132,7 +130,7 @@ public class NodeRequestTest {
      */
     @Test
     public void testGetState() {
-        assertTrue(nr.getState() instanceof RequestState);
+        assertTrue(nr.getState() instanceof NodePoolState);
     }
 
     /**
@@ -147,7 +145,7 @@ public class NodeRequestTest {
             // pass
         }
 
-        nr.data.put("state", RequestState.fulfilled);
+        nr.data.put("state", NodePoolState.FULFILLED.getStateString());
         List<String> nodeIds = new ArrayList();
         nodeIds.add(m.npID);
         nr.data.put("nodes", nodeIds);

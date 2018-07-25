@@ -64,9 +64,9 @@ public class NodeRequest extends ZooKeeperObject {
     /**
      * Create new request
      *
-     * @param nodePool  NodePool cluster to use
-     * @param task  Associated Jenkins task/build
-     * @throws Exception  on ZooKeeper error
+     * @param nodePool NodePool cluster to use
+     * @param task     Associated Jenkins task/build
+     * @throws Exception on ZooKeeper error
      */
     @SuppressFBWarnings
     public NodeRequest(NodePool nodePool, Task task) throws Exception {
@@ -76,7 +76,7 @@ public class NodeRequest extends ZooKeeperObject {
         node_types.add(nodePool.nodePoolLabelFromJenkinsLabel(jenkinsLabel));
         data.put("node_types", node_types);
         data.put("requestor", nodePool.getRequestor());
-        data.put("state", RequestState.requested);
+        data.put("state", NodePoolState.REQUESTED.getStateString());
         data.put("state_time", new Double(System.currentTimeMillis() / 1000));
         data.put("jenkins_label", jenkinsLabel);
         // sets path and zkid
@@ -88,7 +88,7 @@ public class NodeRequest extends ZooKeeperObject {
     /**
      * Create the ZNode associated with this node request
      *
-     * @throws Exception  on ZooKeeper error
+     * @throws Exception if an error occurs while creating the znode
      */
     @Override
     public void createZNode() throws Exception {
@@ -107,8 +107,15 @@ public class NodeRequest extends ZooKeeperObject {
         setPath(requestPath);
     }
 
-    public RequestState getState() {
-        return (RequestState) data.get("state");
+    /**
+     * Returns the requested state value from the data model.
+     *
+     * @return the requested state value from the data model.
+     */
+    public NodePoolState getState() {
+        // Grab the specific state value - we use the fromString() method since it can handle strings with hyphens (such
+        // as the case of the "in-use" state).
+        return NodePoolState.fromString((String) data.get("state"));
     }
 
     /**
@@ -117,7 +124,7 @@ public class NodeRequest extends ZooKeeperObject {
      * @return list of node names
      */
     public List<String> getAllocatedNodeNames() {
-        List<String> nodes = (List<String>)data.get("nodes");
+        List<String> nodes = (List<String>) data.get("nodes");
         if (nodes == null) {
             nodes = Collections.emptyList();
         }
@@ -127,7 +134,7 @@ public class NodeRequest extends ZooKeeperObject {
     /**
      * Get list of NodePool nodes that have been allocated to fulfill this request
      *
-     * @return  list of nodes
+     * @return list of nodes
      * @throws Exception on ZooKeeper error
      */
     public List<NodePoolNode> getAllocatedNodes() throws Exception {
@@ -137,7 +144,8 @@ public class NodeRequest extends ZooKeeperObject {
         // Refresh our view of the data
         updateFromZK();
 
-        if (data.get("state") != RequestState.fulfilled) {
+        // We use fromString() to handle the "in-use" state which contains a hyphen (Java doesn't allow hyphen in enum symbol names).
+        if (NodePoolState.fromString((String) data.get("state")) != NodePoolState.FULFILLED) {
             throw new IllegalStateException("Attempt to get allocated nodes from a node request before it has been fulfilled");
         }
         final List<NodePoolNode> nodeObjects = new ArrayList<>();
@@ -150,7 +158,7 @@ public class NodeRequest extends ZooKeeperObject {
     /**
      * Update the local copy of the request data from values source from ZooKeeper
      *
-     * @param newData  map of data values from ZooKeeper
+     * @param newData map of data values from ZooKeeper
      */
     @Override
     public void updateFromMap(Map newData) {
@@ -159,9 +167,13 @@ public class NodeRequest extends ZooKeeperObject {
         final Double stateTime = (Double) newData.get("state_time");
         data.put("state_time", stateTime);
 
-        // convert 'state' back into its corresponding enum value
-        final String stateString = (String) newData.get("state");
-        data.put("state", RequestState.valueOf(stateString));
+        // Convert 'state' back into its corresponding enum value then write it out - this ensures were are dealing
+        // with proper NodePoolState enum values and not just random strings that could break the NodePoolState enum
+        // contract.
+        // Use the NodePoolState.fromString method since we need to handle the special case of "in-use" that contains
+        // a hyphen
+        final NodePoolState nodePoolState = NodePoolState.fromString((String) newData.get("state"));
+        data.put("state", nodePoolState.getStateString());
     }
 
     /**

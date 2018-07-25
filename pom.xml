@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
         <version>2.36</version>
-        <relativePath />
+        <relativePath/>
     </parent>
     <artifactId>nodepool-agents</artifactId>
     <version>0.0.13-SNAPSHOT</version>
@@ -53,19 +54,20 @@
     <repositories>
         <repository>
             <id>repo.jenkins-ci.org</id>
+            <name>Jenkins Repository</name>
             <url>https://repo.jenkins-ci.org/public/</url>
         </repository>
         <repository>
-            <snapshots>
-                <enabled>false</enabled>
-            </snapshots>
             <id>central</id>
             <name>bintray</name>
             <url>http://jcenter.bintray.com</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
         </repository>
         <repository>
-            <name>bintray</name>
             <id>bintray-palantir-maven</id>
+            <name>bintray</name>
             <url>https://dl.bintray.com/palantir/maven</url>
             <snapshots>
                 <enabled>false</enabled>
@@ -112,6 +114,11 @@
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>2.22.0</version>
             </plugin>
         </plugins>
     </build>

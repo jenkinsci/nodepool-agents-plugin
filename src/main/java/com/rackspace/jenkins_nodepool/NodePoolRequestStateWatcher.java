@@ -3,19 +3,22 @@ package com.rackspace.jenkins_nodepool;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import java.nio.charset.Charset;
-import java.text.MessageFormat;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
-import static java.util.logging.Logger.getLogger;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.api.CuratorWatcher;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.data.Stat;
+
+import java.nio.charset.Charset;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import static java.lang.String.format;
+import static java.util.logging.Logger.getLogger;
 
 /**
  * A zookeeper watcher for node pool activity.
@@ -33,16 +36,16 @@ public class NodePoolRequestStateWatcher implements CuratorWatcher {
     private final Gson gson = new Gson();
     private final CuratorFramework curatorFramework;
     private final String zpath;
-    private final RequestState desiredState;
+    private final NodePoolState desiredState;
 
     /**
-     * Creates a new node pool request state watcher for the specified path and request state value.
+     * Creates a new node pool state watcher for the specified path and NodePool state value.
      *
      * @param curatorFramework a reference to the Curator Framework
      * @param zpath            the zookeeper node path
      * @param desiredState     the desired state to watch for
      */
-    NodePoolRequestStateWatcher(CuratorFramework curatorFramework, String zpath, RequestState desiredState) {
+    NodePoolRequestStateWatcher(CuratorFramework curatorFramework, String zpath, NodePoolState desiredState) {
         this.curatorFramework = curatorFramework;
         this.zpath = zpath;
         this.desiredState = desiredState;
@@ -64,11 +67,14 @@ public class NodePoolRequestStateWatcher implements CuratorWatcher {
      */
     private void registerWatch(String zpath) throws Exception {
 
-        log.fine("Creating watch for state:" + desiredState + " on path:" + zpath);
+        if (log.isLoggable(Level.FINE)) {
+            log.fine(format("Creating watch for state: %s on path: %s", desiredState, zpath));
+        }
+
         // The watch will be triggered by a successful operation that creates/delete the node or sets the data on the node.
         final Stat stat = curatorFramework.checkExists().usingWatcher(this).forPath(zpath);
         if (stat == null) {
-            log.warning("Created watch on non-existent path: " + zpath);
+            log.warning(format("Created watch on non-existent path: %s", zpath));
         }
     }
 
@@ -80,7 +86,9 @@ public class NodePoolRequestStateWatcher implements CuratorWatcher {
      */
     @Override
     public void process(WatchedEvent event) {
-        log.fine("Watch event received:" + event.toString());
+        if (log.isLoggable(Level.FINE)) {
+            log.fine(format("Watch event received: %s", event.toString()));
+        }
 
         try {
             // Re-register if not a NodeDeleted and not a None event type
@@ -95,23 +103,24 @@ public class NodePoolRequestStateWatcher implements CuratorWatcher {
             if (event.getType() == Watcher.Event.EventType.NodeDataChanged) {
 
                 // Let's fetch the data from ZK directly so we can read the state value
-                final RequestState state = getStateFromPath();
-                log.fine("Watch event received event type:" + event.getType() + ". State is:" + state);
+                final NodePoolState state = getStateFromPath();
+                log.fine(format("Watch event received event type: %s. State is: %s", event.getType(), state));
 
                 // Are we in the desired state yet? No reason to continue if the request failed.
-                if (state == desiredState || state == RequestState.failed) {
+                if (state == desiredState || state == NodePoolState.FAILED || state == NodePoolState.ABORTED) {
                     latch.countDown();
                 } else {
-                    log.fine("Watch event ignoring event type:" + event.getType() +
-                            ". Fetched state is: " + state + "/" + getStateFromPath());
+                    log.fine(format("Watch event ignoring event type: %s. Fetched state is: %s/%s",
+                            event.getType(), state, getStateFromPath()));
                 }
             } else {
-                log.fine("Watch event ignoring event type:" + event.getType());
+                if (log.isLoggable(Level.FINE)) {
+                    log.fine(format("Watch event ignoring event type: %s", event.getType()));
+                }
             }
         } catch (Exception e) {
-            log.warning(e.getClass().getSimpleName() +
-                    " occurred while updating state from Zookeeper. Message: " + e.getLocalizedMessage() +
-                    ". Ignoring the event.");
+            log.warning(format("%s occurred while updating state from Zookeeper. Message: %s. Ignoring the event.",
+                    e.getClass().getSimpleName(), e.getLocalizedMessage()));
         }
     }
 
@@ -127,18 +136,19 @@ public class NodePoolRequestStateWatcher implements CuratorWatcher {
         Boolean result = latch.await(timeout, unit);
         if (!result) {
             // timeout
-            throw new InterruptedException(MessageFormat.format("Timeout waiting for NodePool ZNode {0} to reach state {1}", zpath, desiredState.toString()));
+            throw new InterruptedException(format("Timeout waiting for NodePool ZNode %s to reach state %s",
+                    zpath, desiredState.toString()));
         }
     }
 
     /**
      * Convenience routine to return the state value from the zpath.
      *
-     * @return the RequestState value stored in the zpath.
+     * @return the NodePoolState value stored in the zpath.
      * @throws KeeperException      if the ZooKeeper server signals an error with a non-zero error code
      * @throws InterruptedException if the ZooKeeper server transaction is interrupted.
      */
-    RequestState getStateFromPath() throws Exception {
+    NodePoolState getStateFromPath() throws Exception {
 
         // Let's fetch the data from ZK directly so we can read the state value
 
@@ -152,7 +162,8 @@ public class NodePoolRequestStateWatcher implements CuratorWatcher {
         final Map<String, Object> data = gson.fromJson(jsonString, new TypeToken<Map<String, Object>>() {
         }.getType());
 
-        // Grab the specific state value
-        return RequestState.valueOf((String) data.get("state"));
+        // Grab the specific state value - we use the fromString() method since it can handle strings with hyphens (such
+        // as the case of the "in-use" state).
+        return NodePoolState.fromString((String) data.get("state"));
     }
 }

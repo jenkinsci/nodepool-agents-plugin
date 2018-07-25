@@ -513,7 +513,7 @@ public class NodePool implements Describable<NodePool> {
         // Let's create a node pool watcher and wait until the request is in the desired state
         // (or until we're timed out)
         final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
-                conn, request.getPath(), RequestState.fulfilled);
+                conn, request.getPath(), NodePoolState.FULFILLED);
 
         try {
             watcher.waitUntilDone(timeoutInSec, TimeUnit.SECONDS);
@@ -526,7 +526,7 @@ public class NodePool implements Describable<NodePool> {
         request.updateFromZK();
 
         // Success represents is request fulfilled - everything else is a problem.
-        if (request.getState() == RequestState.fulfilled) {
+        if (request.getState() == NodePoolState.FULFILLED) {
             try {
                 allocatedNodes = acceptNodes(request);
 
@@ -548,7 +548,7 @@ public class NodePool implements Describable<NodePool> {
             }
 
         } else {
-            throw new Exception("Request failed waiting for request state:" + RequestState.fulfilled
+            throw new Exception("Request failed or aborted while waiting for request state:" + NodePoolState.FULFILLED
                     + ", actual state:" + request.getState());
         }
     }

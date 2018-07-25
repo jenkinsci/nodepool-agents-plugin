@@ -172,7 +172,7 @@ public class NodePoolTest {
                 String path = MessageFormat.format("/{0}/{1}", m.requestRoot, child);
                 Map rdata = m.getNodeData(path);
                 List<String> nodes = Arrays.asList(new String[]{});
-                rdata.put("state", RequestState.fulfilled);
+                rdata.put("state", NodePoolState.FULFILLED.getStateString());
                 rdata.put("nodes", nodes);
                 m.writeNodeData(path, rdata);
 

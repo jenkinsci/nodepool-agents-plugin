@@ -26,14 +26,11 @@ package com.rackspace.jenkins_nodepool;
 import org.junit.*;
 
 import java.text.MessageFormat;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 /**
  *
@@ -70,7 +67,10 @@ public class NodePoolNodeTest {
                     .creatingParentsIfNeeded()
                     .forPath(nodePath, m.jsonString.getBytes(m.charset));
             npn = new NodePoolNode(m.np, m.npID);
-            npn.data.put("type", m.npLabel);
+            // Type field now holds a list of string values
+            final List<String> types = new ArrayList<>();
+            types.add(m.npLabel);
+            npn.data.put("type", types);
             npn.data.put("interface_ip", m.host);
             npn.data.put("connection_port", m.port);
             npn.data.put("host_keys", hostKeys);
@@ -88,7 +88,8 @@ public class NodePoolNodeTest {
      */
     @Test
     public void testGetNPType() {
-        assertEquals(npn.getNPType(), m.npLabel);
+        final List<String> npTypes = npn.getNPTypes();
+        assertTrue("NodePool Types contains Label", npTypes.contains(m.npLabel));
     }
 
     /**
@@ -105,7 +106,7 @@ public class NodePoolNodeTest {
      */
     @Test
     public void testGetJenkinsLabel() {
-        assertEquals(m.label.getDisplayName(), npn.getJenkinsLabel());
+        assertEquals("Display Name in Jenkins Label", npn.getJenkinsLabel(), m.label.getDisplayName());
     }
 
     /**
@@ -178,9 +179,8 @@ public class NodePoolNodeTest {
     public void testSetInUse() throws Exception {
         npn.setInUse();
         Map data = m.getNodeData(nodePath);
-        assertEquals("in-use", (String) data.get("state"));
+        assertSame("NodePoolState is IN-USE", NodePoolState.IN_USE, NodePoolState.fromString((String)data.get("state")));
         assertEquals(KazooLock.State.LOCKED, npn.lock.getState());
-
     }
 
     /**
@@ -191,8 +191,7 @@ public class NodePoolNodeTest {
         npn.setInUse();
         npn.release();
         Map data = m.getNodeData(nodePath);
-        assertEquals("used", (String) data.get("state"));
+        assertSame("NodePoolState is USED", NodePoolState.USED, NodePoolState.fromString((String)data.get("state")));
         assertEquals(KazooLock.State.UNLOCKED, npn.lock.getState());
     }
-
 }
