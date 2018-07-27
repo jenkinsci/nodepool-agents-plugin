@@ -5,7 +5,7 @@ LABEL vendor=Rackspace \
       description="NodePool Launcher service"
 
 ENV NODEPOOL_REPO https://github.com/openstack-infra/nodepool
-ENV NODEPOOL_SHA 3de0b20faa6f90437eb62c56ec23c59c6e15b5fa
+ENV NODEPOOL_SHA 67824d8e64250ede0cb4a3ebe344412f5cba2218
 
 RUN apt-get -y update && \
     apt-get install -y \

@@ -3,17 +3,19 @@ package com.rackspace.jenkins_nodepool;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.util.*;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.RetryOneTime;
 import org.apache.curator.test.InstanceSpec;
 import org.apache.curator.test.TestingServer;
 import org.junit.*;
+
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
+
 import static org.junit.Assert.*;
 
 /**
@@ -88,17 +90,17 @@ public class NodePoolRequestStateWatcherTest {
 
             // Create the timer and schedule it to run after a short delay
             final Timer timer = new Timer();
-            timer.schedule(getTimerTask(zpath, RequestState.fulfilled), 5000L);
+            timer.schedule(getTimerTask(zpath, NodePoolState.FULFILLED), 5000L);
 
             final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
-                    zkCli, zpath, RequestState.fulfilled);
+                    zkCli, zpath, NodePoolState.FULFILLED);
 
             log.fine("Waiting for " + DEFAULT_TEST_TIMEOUT_SEC + " seconds max for the watcher...");
             watcher.waitUntilDone(DEFAULT_TEST_TIMEOUT_SEC, TimeUnit.SECONDS);
 
             assertSame("NodePoolRequestStateWatcher discovered request state was " +
                             watcher.getStateFromPath() + " before timeout of " + DEFAULT_TEST_TIMEOUT_SEC + " seconds",
-                    watcher.getStateFromPath(), RequestState.fulfilled);
+                    watcher.getStateFromPath(), NodePoolState.FULFILLED);
         } catch (Exception e) {
             fail(e.getClass().getSimpleName() + " occurred while creating a NodePool. Message: " +
                     e.getLocalizedMessage());
@@ -106,10 +108,10 @@ public class NodePoolRequestStateWatcherTest {
     }
 
     /**
-     * Test node pool request state with a timeout condition (not fulfilled path).
+     * Test node pool request state with a timeout condition (pending request condition).
      */
     @Test
-    public void testNodePoolRequestStateWatcherNotFulfilled() {
+    public void testNodePoolRequestStateWatcherNotFulfilledDueToPending() {
 
         final String zpath = "/test/NotFulfilled";
 
@@ -119,10 +121,12 @@ public class NodePoolRequestStateWatcherTest {
 
             // Create the timer and schedule it to run after a short delay
             final Timer timer = new Timer();
-            timer.schedule(getTimerTask(zpath, RequestState.pending), 5000L);
+
+            // For this test we'll set the PENDING state after a short delay to test the error handling/timeout logic
+            timer.schedule(getTimerTask(zpath, NodePoolState.PENDING), 5000L);
 
             final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
-                    zkCli, zpath, RequestState.fulfilled);
+                    zkCli, zpath, NodePoolState.FULFILLED);
 
             log.fine("Waiting for " + DEFAULT_TEST_TIMEOUT_SEC + " seconds max for the watcher...");
             try {
@@ -135,7 +139,80 @@ public class NodePoolRequestStateWatcherTest {
             // Should timeout with non-success since we only changed value to pending (not fulfulled)
             assertNotSame("NodePoolRequestStateWatcher discovered request state was NOT fulfilled before timeout of " +
                             DEFAULT_TEST_TIMEOUT_SEC + " seconds",
-                    watcher.getStateFromPath(), RequestState.fulfilled);
+                    watcher.getStateFromPath(), NodePoolState.FULFILLED);
+        } catch (Exception e) {
+            fail(e.getClass().getSimpleName() + " occurred while creating a NodePool. Message: " +
+                    e.getLocalizedMessage());
+        }
+    }
+
+    /**
+     * Test node pool request state with a timeout condition (failed request condition).
+     */
+    @Test
+    public void testNodePoolRequestStateWatcherNotFulfilledDueToFailed() {
+
+        final String zpath = "/test/Failed";
+
+        try {
+            // First we add some data to this ZK instance
+            addData(zpath);
+
+            // Create the timer and schedule it to run after a short delay
+            final Timer timer = new Timer();
+
+            // For this test we'll set the FAILED state after a short delay to test the error handling/timeout logic
+            timer.schedule(getTimerTask(zpath, NodePoolState.FAILED), 5000L);
+
+            // We hope to get a fulfilled end-state, but we won't for this test
+            final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
+                    zkCli, zpath, NodePoolState.FULFILLED);
+
+            log.fine("Waiting for " + DEFAULT_TEST_TIMEOUT_SEC + " seconds max for the watcher...");
+            try {
+                watcher.waitUntilDone(DEFAULT_TEST_TIMEOUT_SEC, TimeUnit.SECONDS);
+                // check state - should be the FAILED state
+                assertSame("Request State Should Be NodePoolState.ABORTED", NodePoolState.FAILED, getCurrentState(zpath));
+            } catch (InterruptedException ex) {
+                fail(ex.getClass().getSimpleName() + " occurred while waiting for FULFILLED state. Message: " +
+                        ex.getLocalizedMessage());
+            }
+        } catch (Exception e) {
+            fail(e.getClass().getSimpleName() + " occurred while creating a NodePool. Message: " +
+                    e.getLocalizedMessage());
+        }
+    }
+    /**
+     * Test node pool request state with a timeout condition (aborted request condition).
+     */
+    @Test
+    public void testNodePoolRequestStateWatcherNotFulfilledDueToAborted() {
+
+        final String zpath = "/test/Aborted";
+
+        try {
+            // First we add some data to this ZK instance
+            addData(zpath);
+
+            // Create the timer and schedule it to run after a short delay
+            final Timer timer = new Timer();
+
+            // For this test we'll set the ABORTED state after a short delay to test the error handling/timeout logic
+            timer.schedule(getTimerTask(zpath, NodePoolState.ABORTED), 5000L);
+
+            // We hope to get a fulfilled end-state, but we won't for this test
+            final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
+                    zkCli, zpath, NodePoolState.FULFILLED);
+
+            log.fine("Waiting for " + DEFAULT_TEST_TIMEOUT_SEC + " seconds max for the watcher...");
+            try {
+                watcher.waitUntilDone(DEFAULT_TEST_TIMEOUT_SEC, TimeUnit.SECONDS);
+                // check state - should be the ABORTED state
+                assertSame("Request State Should Be NodePoolState.ABORTED", NodePoolState.ABORTED, getCurrentState(zpath));
+            } catch (InterruptedException ex) {
+                fail(ex.getClass().getSimpleName() + " occurred while waiting for FULFILLED state. Message: " +
+                        ex.getLocalizedMessage());
+            }
         } catch (Exception e) {
             fail(e.getClass().getSimpleName() + " occurred while creating a NodePool. Message: " +
                     e.getLocalizedMessage());
@@ -156,11 +233,11 @@ public class NodePoolRequestStateWatcherTest {
 
             // Create the timer and schedule it to run after a longer delay which will simulate a long running process
             final Timer timer = new Timer();
-            timer.schedule(getTimerTask(zpath, RequestState.fulfilled), 10000L);
+            timer.schedule(getTimerTask(zpath, NodePoolState.FULFILLED), 10000L);
 
             // Set a watch - this time with a short timeout so that we will...timeout early
             final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
-                    zkCli, zpath, RequestState.fulfilled);
+                    zkCli, zpath, NodePoolState.FULFILLED);
 
             final int timeoutInSeconds = 5;
             log.fine("Waiting for " + timeoutInSeconds + " seconds max for the watcher...");
@@ -173,7 +250,7 @@ public class NodePoolRequestStateWatcherTest {
 
             assertNotSame("NodePoolRequestStateWatcher discovered request state was NOT fulfilled before timeout of " +
                             DEFAULT_TEST_TIMEOUT_SEC + " seconds",
-                    watcher.getStateFromPath(), RequestState.fulfilled);
+                    watcher.getStateFromPath(), NodePoolState.FULFILLED);
         } catch (Exception e) {
             fail(e.getClass().getSimpleName() + " occurred while creating a NodePool. Message: " +
                     e.getLocalizedMessage());
@@ -194,25 +271,25 @@ public class NodePoolRequestStateWatcherTest {
 
             // Create the timer and schedule it to run after a short delay
             final Timer timer1 = new Timer();
-            timer1.schedule(getTimerTask(zpath, RequestState.requested), 2000L);
+            timer1.schedule(getTimerTask(zpath, NodePoolState.REQUESTED), 2000L);
 
             // Create the timer and schedule it to run after a short delay
             final Timer timer2 = new Timer();
-            timer2.schedule(getTimerTask(zpath, RequestState.pending), 3000L);
+            timer2.schedule(getTimerTask(zpath, NodePoolState.PENDING), 3000L);
 
             // Create the timer and schedule it to run after a short delay
             final Timer timer3 = new Timer();
-            timer3.schedule(getTimerTask(zpath, RequestState.fulfilled), 5000L);
+            timer3.schedule(getTimerTask(zpath, NodePoolState.FULFILLED), 5000L);
 
             final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
-                    zkCli, zpath, RequestState.fulfilled);
+                    zkCli, zpath, NodePoolState.FULFILLED);
 
             log.fine("Waiting for " + DEFAULT_TEST_TIMEOUT_SEC + " seconds max for the watcher...");
             watcher.waitUntilDone(DEFAULT_TEST_TIMEOUT_SEC, TimeUnit.SECONDS);
 
             assertSame("NodePoolRequestStateWatcher discovered request state was " +
                             watcher.getStateFromPath() + " before timeout of " + DEFAULT_TEST_TIMEOUT_SEC + " seconds",
-                    watcher.getStateFromPath(), RequestState.fulfilled);
+                    watcher.getStateFromPath(), NodePoolState.FULFILLED);
         } catch (Exception e) {
             fail(e.getClass().getSimpleName() + " occurred while creating a NodePool. Message: " +
                     e.getLocalizedMessage());
@@ -226,7 +303,7 @@ public class NodePoolRequestStateWatcherTest {
      * @param desiredState the desired state
      * @return a new timer task for updating the zpath with the desired state.
      */
-    private TimerTask getTimerTask(final String zpath, final RequestState desiredState) {
+    private TimerTask getTimerTask(final String zpath, final NodePoolState desiredState) {
         // Create a timer task to run based on the path and desired state.
         return new TimerTask() {
             @Override
@@ -256,7 +333,7 @@ public class NodePoolRequestStateWatcherTest {
         // Add some values
         data.put("node_types", Arrays.asList("a", "b"));
         data.put("requestor", "Some NodePool Requestor");
-        data.put("state", RequestState.requested);
+        data.put("state", NodePoolState.REQUESTED);
         data.put("state_time", (double) (System.currentTimeMillis() / 1000));
         data.put("jenkins_label", "Some Jenkins Label");
 
@@ -272,7 +349,7 @@ public class NodePoolRequestStateWatcherTest {
      * @param state the request state value
      * @throws Exception if any errors occur while converting the data or communicating with Zookeeper
      */
-    private void updateState(String zpath, RequestState state) throws Exception {
+    private void updateState(String zpath, NodePoolState state) throws Exception {
         // Read the raw values
         log.fine("Reading data from Zookeeper at path: " + zpath);
         byte[] bytes = zkCli.getData().forPath(zpath);
@@ -285,8 +362,9 @@ public class NodePoolRequestStateWatcherTest {
         }.getType());
         log.fine("Data from Zookeeper at path: " + zpath + ", state: " + data.get("state"));
 
-        // Update the state value and state time
-        data.put("state", state);
+        // Update the state value and state time - use the getStateString() to handle the "in-use" special case that
+        // includes a hyphen.
+        data.put("state", state.getStateString());
         data.put("state_time", (double) (System.currentTimeMillis() / 1000));
 
         // Save back into ZK
@@ -315,6 +393,29 @@ public class NodePoolRequestStateWatcherTest {
             log.fine("Saving data into Zookeeper at existing path: " + zpath);
             zkCli.setData().forPath(zpath, zkDataAsString.getBytes(Charset.forName("UTF-8")));
         }
+    }
+
+    /**
+     * Returns the current state for the specified path.
+     *
+     * @param zpath the path
+     * @return the NodePoolState for this path
+     * @throws Exception if an error occurs while reading data from Zookeeper
+     */
+    private NodePoolState getCurrentState(String zpath) throws Exception {
+        // Read the raw values
+        log.fine("Reading data from Zookeeper at path: " + zpath);
+        byte[] bytes = zkCli.getData().forPath(zpath);
+
+        // Convert to a string
+        String jsonString = new String(bytes, Charset.forName("UTF-8"));
+
+        // Load the data into a into a map
+        final Map<String, Object> data = gson.fromJson(jsonString, new TypeToken<Map<String, Object>>() {
+        }.getType());
+        log.fine("Data from Zookeeper at path: " + zpath + ", state: " + data.get("state"));
+
+        return NodePoolState.fromString((String) data.get("state"));
     }
 
 }
