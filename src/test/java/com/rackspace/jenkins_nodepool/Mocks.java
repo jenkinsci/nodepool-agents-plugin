@@ -81,6 +81,7 @@ public class Mocks {
     NodeRequest nr;
     List<NodePoolNode> allocatedNodes;
     Integer requestTimeout;
+    String holdUntilRoot;
     String jdkInstallationScript;
     String jdkHome;
 

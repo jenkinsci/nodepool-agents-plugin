@@ -35,11 +35,14 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import static com.rackspace.jenkins_nodepool.NodePoolUtils.covertHoldUtilStringToEpochMs;
 import static java.util.logging.Level.*;
 
 /**
@@ -55,6 +58,17 @@ public class NodePoolSlave extends Slave {
     private static final Logger LOG = Logger.getLogger(NodePoolSlave.class.getName());
     private static final String FORCE_HOLD_PROPERTY = "nodepool.slave.forcehold";
     private static final int MAX_HOLD_REASON_LEN = 256;
+    public static final String DEFAULT_HOLD_UNTIL_VALUE = "1d";
+
+    /**
+     * The default hold duration expressed in milliseconds.
+     */
+    public static final long DEFAULT_HOLD_DURATION_MS = Duration.ofDays(1).toMillis();
+
+    /**
+     * The maximum hold duration currently allowed expressed in milliseconds.
+     */
+    public static final long MAX_HOLD_DURATION_MS = Duration.ofDays(31).toMillis();
 
     /**
      * The node from the associated NodePool cluster.
@@ -75,6 +89,16 @@ public class NodePoolSlave extends Slave {
      * The user who is requesting the hold.
      */
     private String holdUser = null;
+
+    /**
+     * The hold until string value (typically something like: 1d, 2w, 6h)
+     */
+    private String holdUntil = null;
+
+    /**
+     * The hold until value as milliseconds since epoch.
+     */
+    private long holdUntilEpochMs;
 
     /**
      * Increment this when modifying this class.
@@ -176,17 +200,17 @@ public class NodePoolSlave extends Slave {
             return null;
         }
 
-        final boolean held = form.getBoolean("held");
-        setHeld(held);
+        final boolean heldFlag = form.getBoolean("held");
+        setHeld(heldFlag);
         LOG.log(FINE, "Set node hold to: " + isHeld());
 
         // Set the number of executors from the form value
         setNumExecutors(form.getInt("numExecutors"));
 
         // Set the hold reason
-        final String holdReason = form.getString("holdReason");
-        if (holdReason != null) {
-            final String trimmedHoldReason = holdReason.substring(0, Math.min(holdReason.length(), MAX_HOLD_REASON_LEN));
+        final String holdReasonValue = form.getString("holdReason");
+        if (holdReasonValue != null) {
+            final String trimmedHoldReason = holdReasonValue.substring(0, Math.min(holdReasonValue.length(), MAX_HOLD_REASON_LEN));
             setHoldReason(trimmedHoldReason);
             LOG.log(FINE, "Set hold reason: " + getHoldReason());
         }
@@ -198,8 +222,14 @@ public class NodePoolSlave extends Slave {
             } else {
                 LOG.log(FINE, "Node held: " + isHeld() + " with previous user: " + getHoldUser());
             }
+
+            // Set the hold until value - no need to recalculate the hold until time if we had an existing value already
+            // calculated from a previous form submission. However, if the value changed it will be recalculated
+            // regardless of the flag. See method docs for more details.
+            setHoldUntil(form.getString("holdUntil"), false);
         } else {
             setHoldUser(null);
+            removeHoldUntil();
             LOG.log(FINE, "Node not held: " + isHeld() + ", setting user: " + getHoldUser());
         }
 
@@ -261,8 +291,134 @@ public class NodePoolSlave extends Slave {
      *
      * @param holdUser the user id of the user requesting the node hold
      */
-    public void setHoldUser(String holdUser) {
+    public void setHoldUser(final String holdUser) {
         this.holdUser = holdUser;
+    }
+
+    /**
+     * Returns the hold until string value.
+     *
+     * @return the hold until string value.
+     */
+    public String getHoldUntil() {
+        return holdUntil;
+    }
+
+    /**
+     * Sets the hold until value which represents a duration encoded as: 1h, 2d, 3w, 6m format.
+     * <p>
+     * If the hold until value has NOT changed from the previous value and the reset hold until is false then the
+     * existing hold until value will not change and remain as previously calculated.
+     * </p>
+     * <p>
+     * If the the reset hold flag is true it will recalculate the hold until time based on the current time
+     * (hold until = current time + hold until time duration - example: * hold until = now + 1d).
+     * </p>
+     * <p>
+     * Scenarios:
+     * <ul>
+     * <li>holdUntil value changed, reset flag true =&gt; recalculate hold until time</li>
+     * <li>holdUntil value changed, reset flag false =&gt; recalculate hold until time</li>
+     * <li>holdUntil value not changed, reset flag true =&gt; recalculate hold until time</li>
+     * <li>holdUntil value not changed, reset flag false =&gt; use existing value</li>
+     * </ul>
+     *
+     * @param holdUntil      the hold until string value
+     * @param resetHoldUntil flag to indicate if we should extend/renew/reset the hold until time. If true, will reset
+     *                       the hold until value to the specified duration from the current
+     *                       time.  Otherwise, if the hold util value is the same it will leave the existing hold until
+     *                       time unchanged.
+     */
+    public void setHoldUntil(final String holdUntil, final boolean resetHoldUntil) {
+
+        // Need this value in several places
+        final long now = System.currentTimeMillis();
+
+        // If the hold until value didn't change and we don't want to reset => use the existing value (no need to
+        // recalculate based on the current time).
+        if (!resetHoldUntil && this.holdUntil != null && this.holdUntil.equals(holdUntil)) {
+            LOG.log(FINE, String.format("No change to hold until time - keeping existing hold time of %s. Currently it is: %s",
+                    NodePoolUtils.getFormattedDateTime(this.holdUntilEpochMs, ZoneOffset.UTC),
+                    NodePoolUtils.getFormattedDateTime(now, ZoneOffset.UTC)));
+            return;
+        }
+
+        this.holdUntil = holdUntil;
+
+        if (this.holdUntil == null || this.holdUntil.isEmpty()) {
+            LOG.log(FINE, String.format("No hold until value specified - using default value of %s", DEFAULT_HOLD_UNTIL_VALUE));
+            this.holdUntil = DEFAULT_HOLD_UNTIL_VALUE;
+        }
+
+        try {
+            long holdUntilTimeEpochMillis = covertHoldUtilStringToEpochMs(now, this.holdUntil);
+            if (holdUntilTimeEpochMillis > now + MAX_HOLD_DURATION_MS) {
+                LOG.log(FINE, "Hold until duration is longer than maximum limit - adjusting value to 1 month");
+                this.holdUntil = "1M";
+                holdUntilTimeEpochMillis = now + MAX_HOLD_DURATION_MS;
+            }
+
+            // Set the value in our local class here and in the node object (which will set the value in ZK)
+            setHoldUntilEpochMs(holdUntilTimeEpochMillis);
+            nodePoolNode.setHoldUntil(holdUntilTimeEpochMillis);
+            LOG.log(FINE, String.format("Holding node for %s until %s - currently it is: %s",
+                    this.holdUntil,
+                    NodePoolUtils.getFormattedDateTime(holdUntilTimeEpochMillis, ZoneOffset.UTC),
+                    NodePoolUtils.getFormattedDateTime(now, ZoneOffset.UTC)));
+        } catch (Exception e) {
+            // Some sort of error - make a note and set the default values
+            LOG.log(Level.WARNING, String.format("%s error while converting and setting hold until value: %s. Message: %s. Setting default hold until value to 1 day.",
+                    e.getClass().getSimpleName(), this.holdUntil, e.getLocalizedMessage()));
+            this.holdUntil = DEFAULT_HOLD_UNTIL_VALUE;
+            setHoldUntilEpochMs(now + DEFAULT_HOLD_DURATION_MS);
+            try {
+                nodePoolNode.setHoldUntil(now + DEFAULT_HOLD_DURATION_MS);
+            } catch (Exception e2) {
+                LOG.log(Level.WARNING, String.format("%s error while saving nodepool slave hold until time. Message: %s. Hold until will not work.",
+                        e.getClass().getSimpleName(), e.getLocalizedMessage()));
+            }
+        }
+    }
+
+    /**
+     * Removes the node hold until time.
+     */
+    public void removeHoldUntil() {
+        try {
+            this.holdUntil = null;
+            this.holdUntilEpochMs = 0L;
+            nodePoolNode.removeHoldUntil();
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, String.format("%s error while converting and setting hold until value: %s. Message: %s",
+                    e.getClass().getSimpleName(), this.holdUntil, e.getLocalizedMessage()));
+        }
+    }
+
+    /**
+     * Returns the hold until time as the number of milliseconds since epoch.
+     *
+     * @return the hold until time as the number of milliseconds since epoch.
+     */
+    public long getHoldUnitEpochMs() {
+        return holdUntilEpochMs;
+    }
+
+    /**
+     * Sets the hold until time as the number of milliseconds since epoch.
+     *
+     * @param holdUntilEpochMs the hold until time as the number of milliseconds since epoch.
+     */
+    public void setHoldUntilEpochMs(final long holdUntilEpochMs) {
+        this.holdUntilEpochMs = holdUntilEpochMs;
+    }
+
+    /**
+     * Returns the hold until time formatted as a UTC ISO date/time.
+     *
+     * @return the hold until time formatted as a UTC ISO date/time.
+     */
+    public String getHoldUntilTimeFormatted() {
+        return NodePoolUtils.getFormattedDateTime(holdUntilEpochMs, ZoneOffset.UTC);
     }
 
     @Override
@@ -301,7 +457,7 @@ public class NodePoolSlave extends Slave {
         // If we've executed at least one build and all the executors are idle and we actually ran something...
         // ...then we must be done, otherwise we are not done
         if (Iterators.size(builds.iterator()) > 0 && isAllExecutorsIdle(computer.getAllExecutors()) && isAllBuildsFinished(builds)) {
-            LOG.log(Level.FINE, "Slave " + this + " started and now idle." +
+            LOG.log(FINE, "Slave " + this + " started and now idle." +
                     "Builds: " + Iterators.size(builds.iterator()) +
                     ", Started: " + isExecutorStarted(computer.getAllExecutors()) +
                     ", Idle: " + isAllExecutorsIdle(computer.getAllExecutors()) +
@@ -309,7 +465,7 @@ public class NodePoolSlave extends Slave {
             return true;
         } else {
             // If we reach this point, either we don't have any builds or at least one executor has yet to return to idle status.
-            LOG.log(Level.FINE, "Slave " + this + " build is not complete. " +
+            LOG.log(FINE, "Slave " + this + " build is not complete. " +
                     "Builds: " + Iterators.size(builds.iterator()) +
                     ", Started: " + isExecutorStarted(computer.getAllExecutors()) +
                     ", Idle: " + isAllExecutorsIdle(computer.getAllExecutors())
@@ -330,7 +486,6 @@ public class NodePoolSlave extends Slave {
             final Run build = (Run) obj;
 
             final Result buildResult = build.getResult();
-
 
             // We should have some sort of result if we're finished
             if (buildResult == null) {
