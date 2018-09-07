@@ -1,11 +1,10 @@
 package com.rackspace.jenkins_nodepool;
 
+import static java.lang.String.format;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import static java.lang.String.format;
 
 
 /**
@@ -72,6 +71,14 @@ public class NodePoolNode extends ZooKeeperObject {
                     o.getClass().getTypeName()));
             return new ArrayList<>();
         }
+    }
+
+    /**
+     * Get the name of the provider that provisioned this node
+     * @return String name of the provider
+     */
+    public String getProvider(){
+        return (String) data.get("provider");
     }
 
     /**
