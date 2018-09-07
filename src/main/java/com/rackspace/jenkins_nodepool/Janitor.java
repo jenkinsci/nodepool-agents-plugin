@@ -4,14 +4,12 @@ import hudson.model.Node;
 import hudson.model.labels.LabelAtom;
 import hudson.security.ACL;
 import hudson.security.ACLContext;
-import jenkins.model.Jenkins;
-
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.logging.Level;
-import java.util.logging.Logger;
-
 import static java.util.logging.Level.WARNING;
+import java.util.logging.Logger;
+import jenkins.model.Jenkins;
 
 /**
  * This class implements the logic for the background janitor thread.
@@ -41,7 +39,10 @@ class Janitor implements Runnable {
 
         try (ACLContext ignored = ACL.as(ACL.SYSTEM)) {
             runAsSystem();
+        } catch (Exception e){
+            LOG.log(Level.SEVERE, "Caught exception while escalating privileges for the Janitor thread:"+e.getMessage());
         }
+        LOG.log(Level.SEVERE, "Janitor Thread Exited - this shouldn't happen, resources may leak.");
     }
 
     /**
@@ -52,7 +53,7 @@ class Janitor implements Runnable {
             try {
                 clean();
                 Thread.currentThread().sleep(sleepMilliseconds);
-            } catch (Exception e) {
+            } catch (InterruptedException e) {
                 LOG.log(WARNING, "Cleanup failed: " + e.getMessage(), e);
             }
         }
@@ -97,8 +98,9 @@ class Janitor implements Runnable {
                 // Grab the hold until time - need to compare it to current time to determine if our hold has expired
                 final long holdUtilEpochMs = ((NodePoolSlave) node).getHoldUnitEpochMs();
                 long now = System.currentTimeMillis();
-                if (nodePoolSlave.isBuildComplete() && now > holdUtilEpochMs) {
-                    LOG.log(Level.FINE, String.format(
+                if (nodePoolSlave.completedABuild() && now > holdUtilEpochMs) {
+                    // Hold expired
+                    LOG.log(Level.INFO, String.format(
                             "Removing held node: %s - job is done and hold has expired - hold until time: %s, current time: %s",
                             nodePoolSlave,
                             NodePoolUtils.getFormattedDateTime(holdUtilEpochMs, ZoneOffset.UTC),
@@ -107,14 +109,14 @@ class Janitor implements Runnable {
                     ((NodePoolSlave) node).setHeld(false);
                     cleanNode(nodePoolSlave, "Hold expired");
                 } else {
-                    // do not reap a slave being "held" -- it shall be inspected by a human and then manually deleted.
+                    // Hold has not expired so skip.
                     LOG.log(Level.FINE, String.format(
                             "Skipping held node: %s - job is running: %b, held: %b - hold until time: %s, current time: %s",
-                            nodePoolSlave, !nodePoolSlave.isBuildComplete(), nodePoolSlave.isHeld(),
+                            nodePoolSlave, !nodePoolSlave.completedABuild(), nodePoolSlave.isHeld(),
                             NodePoolUtils.getFormattedDateTime(holdUtilEpochMs, ZoneOffset.UTC),
                             NodePoolUtils.getFormattedDateTime(System.currentTimeMillis(), ZoneOffset.UTC)));
                 }
-            } else if (nodePoolSlave.isBuildComplete()) {
+            } else if (nodePoolSlave.completedABuild()) {
                 // The node has previously done work and failed to have been scrubbed
                 LOG.log(Level.INFO, "Removing node " + nodePoolSlave + " because it has already been used to "
                         + "run jobs.");

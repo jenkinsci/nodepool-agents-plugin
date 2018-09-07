@@ -3,6 +3,23 @@
 This repository contains a Jenkins plugin to perform builds on cloud instance  nodes sourced
 from [NodePool](https://docs.openstack.org/infra/nodepool/).
 
+## Pipeline Steps
+### nodePoolHold
+This step allows a user to hold the current node from within a job, assuming
+the current node is a node pool node.
+
+Usage:
+```
+    node("nodepool-debian"){
+        nodePoolHold() // hold for one day
+        nodePoolHold("1w") // hold for one week
+        nodePoolHold("1w", "Investigating issue IS-123") // specify reason
+    }
+```
+The hold end time will be calculated from the specified duration
+and is visible on the Computer page in the Jenkins UI for each
+nodepool node. The reason is also visible in the same place.
+
 ## Structure
 
 The implementation consists of a listener class that creates agents (slaves) when a item with a
