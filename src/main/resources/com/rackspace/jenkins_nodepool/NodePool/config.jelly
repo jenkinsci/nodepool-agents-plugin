@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?jelly escape-by-default='true'?>
-<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form" xmlns:c="/lib/credentials" xmlns:st="jelly:stapler">
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form" xmlns:c="/lib/credentials">
         <f:entry title="Zookeeper Connection String" field="connectionString">
             <f:textbox/>
         </f:entry>
@@ -27,6 +27,9 @@
             </f:entry>
             <f:entry title="Request Root" field="requestRoot">
                 <f:textbox default="requests"></f:textbox>
+            </f:entry>
+            <f:entry title="Hold Until Root" field="holdUntilRoot">
+                <f:textbox default="holds"></f:textbox>
             </f:entry>
             <f:entry title="Requestor" field="requestor">
                 <f:textbox default="jenkins"></f:textbox>

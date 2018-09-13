@@ -6,9 +6,12 @@ import hudson.security.ACL;
 import hudson.security.ACLContext;
 import jenkins.model.Jenkins;
 
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import static java.util.logging.Level.WARNING;
 
 /**
  * This class implements the logic for the background janitor thread.
@@ -50,7 +53,7 @@ class Janitor implements Runnable {
                 clean();
                 Thread.currentThread().sleep(sleepMilliseconds);
             } catch (Exception e) {
-                LOG.log(Level.WARNING, "Cleanup failed: " + e.getMessage(), e);
+                LOG.log(WARNING, "Cleanup failed: " + e.getMessage(), e);
             }
         }
     }
@@ -91,18 +94,33 @@ class Janitor implements Runnable {
                 cleanNode(nodePoolSlave, "Invalid label");
 
             } else if (nodePoolSlave.isHeld()) {
-                // do not reap a slave being "held" -- it shall be inspected by a human and then manually deleted.
-                LOG.log(Level.FINE, "Skipping held node " + nodePoolSlave);
-
+                // Grab the hold until time - need to compare it to current time to determine if our hold has expired
+                final long holdUtilEpochMs = ((NodePoolSlave) node).getHoldUnitEpochMs();
+                long now = System.currentTimeMillis();
+                if (nodePoolSlave.isBuildComplete() && now > holdUtilEpochMs) {
+                    LOG.log(Level.FINE, String.format(
+                            "Removing held node: %s - job is done and hold has expired - hold until time: %s, current time: %s",
+                            nodePoolSlave,
+                            NodePoolUtils.getFormattedDateTime(holdUtilEpochMs, ZoneOffset.UTC),
+                            NodePoolUtils.getFormattedDateTime(now, ZoneOffset.UTC)));
+                    // Update the flag and clean up the node.
+                    ((NodePoolSlave) node).setHeld(false);
+                    cleanNode(nodePoolSlave, "Hold expired");
+                } else {
+                    // do not reap a slave being "held" -- it shall be inspected by a human and then manually deleted.
+                    LOG.log(Level.FINE, String.format(
+                            "Skipping held node: %s - job is running: %b, held: %b - hold until time: %s, current time: %s",
+                            nodePoolSlave, !nodePoolSlave.isBuildComplete(), nodePoolSlave.isHeld(),
+                            NodePoolUtils.getFormattedDateTime(holdUtilEpochMs, ZoneOffset.UTC),
+                            NodePoolUtils.getFormattedDateTime(System.currentTimeMillis(), ZoneOffset.UTC)));
+                }
             } else if (nodePoolSlave.isBuildComplete()) {
                 // The node has previously done work and failed to have been scrubbed
                 LOG.log(Level.INFO, "Removing node " + nodePoolSlave + " because it has already been used to "
                         + "run jobs.");
                 cleanNode(nodePoolSlave, "Already used");
             }
-
         }
-
     }
 
     /**
@@ -119,18 +137,18 @@ class Janitor implements Runnable {
             NodePoolNode npn = nodePoolSlave.getNodePoolNode();
             if (c == null) {
                 if (npn == null) {
-                    LOG.log(Level.WARNING, "Can't cleanup nodePoolSlave that has neither a computer nor node associated with it {0}", nodePoolSlave);
+                    LOG.log(WARNING, String.format("Can't cleanup nodePoolSlave that has neither a computer nor node associated with it %s", nodePoolSlave));
                 } else {
-                    LOG.log(Level.WARNING, "Releasing NodePoolNode with no associated computer {0}", npn);
+                    LOG.log(WARNING, String.format("Releasing NodePoolNode with no associated computer %s", npn));
                     npn.release();
                 }
             } else {
                 c.doToggleOffline(reason);
                 c.doDoDelete();
             }
-
         } catch (Exception e) {
-            LOG.log(Level.WARNING, "Failed to clean node " + nodePoolSlave, e);
+            LOG.log(WARNING, String.format("%s while attempting to clean node %s. Message: %s",
+                    e.getClass().getSimpleName(), nodePoolSlave, e.getLocalizedMessage()));
         }
     }
 
@@ -148,6 +166,7 @@ class Janitor implements Runnable {
 
     /**
      * Check if the given slave node has disappeared in ZooKeeper
+     *
      *
      * @param nodePoolSlave the node to check
      * @return true if the node has disappeared
@@ -170,7 +189,7 @@ class Janitor implements Runnable {
                     return true;
                 }
             } catch (Exception e) {
-                LOG.log(Level.WARNING, "Failed to check if node " + nodePoolNode + " exists.", e);
+                LOG.log(WARNING, "Failed to check if node " + nodePoolNode + " exists.", e);
                 return false;
             }
         }

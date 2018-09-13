@@ -1,10 +1,11 @@
 package com.rackspace.jenkins_nodepool;
 
-import static java.lang.String.format;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import static java.lang.String.format;
 
 
 /**
@@ -75,9 +76,10 @@ public class NodePoolNode extends ZooKeeperObject {
 
     /**
      * Get the name of the provider that provisioned this node
+     *
      * @return String name of the provider
      */
-    public String getProvider(){
+    public String getProvider() {
         return (String) data.get("provider");
     }
 
@@ -211,6 +213,37 @@ public class NodePoolNode extends ZooKeeperObject {
         writeToZK();
 
         unlock(); // imitate zuul and unlock here.
+    }
+
+    /**
+     * Returns the hold until time (in milliseconds since epoch) for this Node.
+     *
+     * @return the hold until time value for this Node.
+     * @throws Exception on ZK read error
+     */
+    public Long getHoldUntil() throws Exception {
+        return (Long) data.get("hold_until");
+    }
+
+    /**
+     * Sets the node hold until time (ms since epoch).
+     *
+     * @param holdUntilTimeEpochMillis the hold until time in milliseconds since epoch
+     * @throws Exception on ZK write error
+     */
+    public void setHoldUntil(Long holdUntilTimeEpochMillis) throws Exception {
+        data.put("hold_until", holdUntilTimeEpochMillis);
+        writeToZK();
+    }
+
+    /**
+     * Removes the node hold until time.
+     *
+     * @throws Exception on ZK write error
+     */
+    public void removeHoldUntil() throws Exception {
+        data.remove("hold_until");
+        writeToZK();
     }
 
     /**

@@ -2,8 +2,8 @@
   Config page
 -->
 <?jelly escape-by-default='true'?>
-<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout"
-         xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+<j:jelly xmlns:j="jelly:core"
+         xmlns:f="/lib/form">
     <f:section title="NodePool Agent Properties">
         NodePool agents/slaves are ephemeral and last for the duration of a single build unless the Hold flag is set.
 
@@ -17,17 +17,17 @@
                     <j:choose>
                         <j:when test="${it.node.userId.equals('anonymous')}">
                             ${%anonymous user}
-                            <input type="hidden" name="holdUser" value="${%anonymous user}" />
+                            <input type="hidden" name="holdUser" value="${%anonymous user}"/>
                         </j:when>
                         <j:otherwise>
                             ${user.displayName}
-                            <input type="hidden" name="holdUser" value="${user.displayName}" />
+                            <input type="hidden" name="holdUser" value="${user.displayName}"/>
                         </j:otherwise>
                     </j:choose>
                 </j:when>
                 <j:otherwise>
                     ${it.holdUser}
-                    <input type="hidden" name="holdUser" value="${holdUser}" />
+                    <input type="hidden" name="holdUser" value="${holdUser}"/>
                 </j:otherwise>
             </j:choose>
         </f:entry>
@@ -35,6 +35,20 @@
         <f:entry title="${%Hold Reason}" field="holdReason">
             <f:textbox name="holdReason" value="${holdReason}" maxlength="256"/>
         </f:entry>
+
+        <f:entry title="${%Hold Until}" field="holdUntil">
+            <!-- Change into a drop down list ?? -->
+            <f:textbox name="holdUntil" value="${holdUntil}" maxlength="3"
+                       placeholder="enter a period such as: 10m, 6h, 3d, 3w, 1M - default is 1d"/>
+        </f:entry>
+
+        <j:choose>
+            <j:when test="${it.holdUntil != null}">
+                <f:entry title="${%Hold Until Time}">
+                    ${it.holdUntilTimeFormatted}
+                </f:entry>
+            </j:when>
+        </j:choose>
 
         <f:entry title="${%# of executors}" field="numExecutors">
             <f:number clazz="non-negative-number-required" min="0" step="1" readonly="readonly" disabled="disabled"

@@ -18,6 +18,9 @@ $(document).ready(function () {
             "render": function (data, type, row, meta) {
                 return data.replace(new RegExp(',', 'g'), ' ');
             }
-        }]
+        }],
+        // oSearch defines the global filtering state at initialisation time
+        // < 1.10 syntax => "oSearch": {"sSearch": "nodepool"}
+        "search": {"search": "nodepool"}
     });
 });
