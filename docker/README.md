@@ -275,6 +275,56 @@ This is an example of installing OpenJDK version 8 onto the Debian virtual machi
 apt-get update && apt-get install openjdk-8-jdk -y
 ```
 
+A more through example might look like:
+
+```bash
+# the location to fetch the public keys from
+SSH_PUBLIC_KEYS_URL="https://raw.githubusercontent.com/rcbops/rpc-gating/master/keys/rcb.keys"
+
+# fetch the public keys and put them inside the chroot
+curl --connect-timeout 5 \
+     --retry 3 \
+     ${SSH_PUBLIC_KEYS_URL} > /tmp/ssh-public-keys
+
+##
+## Add jenkins user, group.
+##
+JENKINS_HOME="/var/lib/jenkins"
+groupadd jenkins
+useradd --gid jenkins \
+        --shell /bin/bash \
+        --home-dir ${JENKINS_HOME} \
+        --create-home jenkins
+
+mkdir -p ${JENKINS_HOME}/.ssh
+chmod 700 ${JENKINS_HOME}/.ssh
+
+cp /tmp/ssh-public-keys ${JENKINS_HOME}/.ssh/authorized_keys
+chmod 644 ${JENKINS_HOME}/.ssh/authorized_keys
+
+cat > /etc/sudoers.d/jenkins << EOF
+jenkins ALL=(ALL) NOPASSWD:ALL
+EOF
+chmod 0440 /etc/sudoers.d/jenkins
+
+# ensure everything has the right owner
+chown -R jenkins:jenkins ${JENKINS_HOME}
+
+# ensure the right version of openjdk is available
+source /etc/lsb-release
+if [[ "${DISTRIB_CODENAME}" == "trusty" ]]; then
+  add-apt-repository -y ppa:openjdk-r/ppa
+fi
+
+# install the openjdk
+pkgs_to_install=""
+dpkg-query --list | grep openjdk-8-jre-headless &>/dev/null || pkgs_to_install+="openjdk-8-jre-headless"
+if [ "${pkgs_to_install}" != "" ]; then
+  apt-get update
+  apt-get install -y ${pkgs_to_install}
+fi
+```
+
 ### List Services
 
 Determine the desired virtual machine ID by useing `server list`.
