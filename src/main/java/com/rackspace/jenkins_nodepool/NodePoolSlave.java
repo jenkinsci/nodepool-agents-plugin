@@ -23,27 +23,24 @@
  */
 package com.rackspace.jenkins_nodepool;
 
-import com.google.common.collect.Iterators;
+import static com.rackspace.jenkins_nodepool.NodePoolUtils.covertHoldUtilStringToEpochMs;
 import hudson.Extension;
 import hudson.model.*;
 import hudson.plugins.sshslaves.verifiers.ManuallyProvidedKeyVerificationStrategy;
 import hudson.slaves.RetentionStrategy;
 import hudson.util.RunList;
-import jenkins.model.Jenkins;
-import net.sf.json.JSONObject;
-import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.StaplerRequest;
-
 import java.io.IOException;
 import java.time.Duration;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import static com.rackspace.jenkins_nodepool.NodePoolUtils.covertHoldUtilStringToEpochMs;
 import static java.util.logging.Level.*;
+import java.util.logging.Logger;
+import jenkins.model.Jenkins;
+import net.sf.json.JSONObject;
+import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.StaplerRequest;
 
 /**
  * Representation of a Jenkins slave sourced from NodePool.
@@ -434,72 +431,13 @@ public class NodePoolSlave extends Slave {
      *
      * @return true if the build associated with this slave has completed and the executors for the build are idle.
      */
-    boolean isBuildComplete() {
+    boolean completedABuild() {
 
         final NodePoolComputer computer = (NodePoolComputer) toComputer();
         if (computer == null) {
             return false;
         }
-
-        final RunList builds = computer.getBuilds();
-
-        // DEBUG
-        // printBuildDetails(builds);
-        // printExecutorDetails(computer.getAllExecutors());
-        // DEBUG END
-
-        // The following test is a bit complex due to the fact that we have a separate Janitor worker that is
-        // responsible for cleaning up previously used nodes.  Once the node is handed to Jenkins the Janitor
-        // periodically checks the status.  In this test, we're trying to determine:
-        //   1) if it has a build assigned to it
-        //   2) the executor as attempted to run the job and is now finished/idle
-
-        // If we've executed at least one build and all the executors are idle and we actually ran something...
-        // ...then we must be done, otherwise we are not done
-        if (Iterators.size(builds.iterator()) > 0 && isAllExecutorsIdle(computer.getAllExecutors()) && isAllBuildsFinished(builds)) {
-            LOG.log(FINE, "Slave " + this + " started and now idle." +
-                    "Builds: " + Iterators.size(builds.iterator()) +
-                    ", Started: " + isExecutorStarted(computer.getAllExecutors()) +
-                    ", Idle: " + isAllExecutorsIdle(computer.getAllExecutors()) +
-                    ". Must be done.");
-            return true;
-        } else {
-            // If we reach this point, either we don't have any builds or at least one executor has yet to return to idle status.
-            LOG.log(FINE, "Slave " + this + " build is not complete. " +
-                    "Builds: " + Iterators.size(builds.iterator()) +
-                    ", Started: " + isExecutorStarted(computer.getAllExecutors()) +
-                    ", Idle: " + isAllExecutorsIdle(computer.getAllExecutors())
-            );
-            return false;
-        }
-    }
-
-    /**
-     * A convenience routine to help determine if the builds are finished.
-     *
-     * @param builds a list of builds for this slave
-     * @return true if all the builds are finished, false otherwise
-     */
-    private boolean isAllBuildsFinished(RunList builds) {
-        LOG.log(INFO, "Testing if all builds are finished...");
-        for (Object obj : builds) {
-            final Run build = (Run) obj;
-
-            final Result buildResult = build.getResult();
-
-            // We should have some sort of result if we're finished
-            if (buildResult == null) {
-                LOG.log(FINE, "Build Result is null");
-
-                // We're done - at least one build without a result indicates that we're not finished
-                return false;
-            } else {
-                LOG.log(FINE, String.format("Build Result: %s, result.isCompleteBuild(): %s",
-                        buildResult, buildResult.isCompleteBuild()));
-            }
-        }
-
-        return true;
+        return computer.completedABuild();
     }
 
     /**
