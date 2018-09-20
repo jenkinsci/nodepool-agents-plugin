@@ -23,16 +23,13 @@
  */
 package com.rackspace.jenkins_nodepool;
 
-import static org.junit.Assert.assertEquals;
-
 import hudson.model.Executor;
 import hudson.model.Queue;
+import static org.junit.Assert.assertEquals;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.jvnet.hudson.test.JenkinsRule;
-
-import static org.junit.Assert.fail;
 import static org.mockito.Mockito.*;
 
 /**
@@ -50,7 +47,7 @@ public class NodePoolComputerTest {
     @Before
     public void setUp() {
         m = new Mocks();
-        npc = new NodePoolComputer(m.nps, m.npn);
+        npc = new NodePoolComputer(m.nps, m.npn, m.npj);
     }
 
     /**

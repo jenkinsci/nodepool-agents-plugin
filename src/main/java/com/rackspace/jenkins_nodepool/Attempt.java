@@ -103,13 +103,13 @@ public final class Attempt {
         return isDone() && e == null;
     }
 
-    public NodePoolJob.Status getResult() {
+    public NodePoolJob.NodeRequestAttemptState getResult() {
         if (!isDone()) {
-            return NodePoolJob.Status.INPROGRESS;
+            return NodePoolJob.NodeRequestAttemptState.INPROGRESS;
         } else if (isSuccess()) {
-            return NodePoolJob.Status.SUCCESS;
+            return NodePoolJob.NodeRequestAttemptState.SUCCESS;
         } else {
-            return NodePoolJob.Status.FAILURE;
+            return NodePoolJob.NodeRequestAttemptState.FAILURE;
         }
     }
 

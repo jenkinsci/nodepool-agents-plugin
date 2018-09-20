@@ -1,10 +1,19 @@
 package com.rackspace.jenkins_nodepool;
 
+import hudson.model.Queue;
+import java.io.IOException;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import jenkins.model.Jenkins;
+import org.jenkinsci.plugins.workflow.flow.FlowExecutionOwner;
+import org.jenkinsci.plugins.workflow.graph.FlowNode;
+import org.jenkinsci.plugins.workflow.job.WorkflowRun;
+import org.jenkinsci.plugins.workflow.support.steps.ExecutorStepExecution.PlaceholderTask;
 
 public class NodePoolUtils {
 
@@ -80,5 +89,34 @@ public class NodePoolUtils {
         final Instant instant = Instant.ofEpochMilli(epochMs);
         final OffsetDateTime utcInstant = instant.atOffset(zone);
         return DateTimeFormatter.ISO_DATE_TIME.format(utcInstant);
+    }
+
+    /**
+     * Get the Run (build) associated with a Queue Item
+     * @param task The task  to find a run for.
+     * @return Run object that the Queue item was created for.
+     */
+    public static WorkflowRun getRunForQueueTask(Queue.Task task){
+
+        Logger log = Logger.getLogger(NodePoolUtils.class.getName());
+        if (task instanceof PlaceholderTask){
+            try {
+                FlowNode fn = ((PlaceholderTask)task).getNode();
+                if (fn == null){
+                    throw new IllegalArgumentException("Can't determine run that created task: "+((PlaceholderTask) task).getDisplayName());
+                }
+                FlowExecutionOwner owner = fn.getExecution().getOwner();
+                WorkflowRun run =  (WorkflowRun) owner.getExecutable();
+                return run;
+            } catch (IOException | InterruptedException ex) {
+                Logger.getLogger(NodePoolUtils.class.getName()).log(Level.SEVERE, null, ex);
+                log.log(Level.WARNING, "Failed to find Run for queue item: "+task.getDisplayName());
+                Jenkins.getInstance().getQueue().cancel(task);
+            }
+        }else {
+            throw new IllegalArgumentException("Nodepool plugin is only compatible with Pipeline jobs, no other types (eg Freestyle)");
+        }
+        log.log(Level.WARNING, "Returning null Run from getRunForQueueItem");
+        return null;
     }
 }

@@ -55,6 +55,12 @@
                       style="background-color: #ededed;"/>
         </f:entry>
     </f:section>
+    
+    <f:section title="${%Created For}">
+        <f:entry title="${%Job}">
+            <a href="${it.getBuildUrl()}">${it.getJob().getRun().getExternalizableId()}</a>
+        </f:entry>
+    </f:section>
 
     <f:section title="${%Connectivity}">
         <f:entry title="${%IP Address}">

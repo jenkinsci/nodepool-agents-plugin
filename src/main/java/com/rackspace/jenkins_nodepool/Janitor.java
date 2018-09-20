@@ -10,6 +10,7 @@ import java.util.logging.Level;
 import static java.util.logging.Level.WARNING;
 import java.util.logging.Logger;
 import jenkins.model.Jenkins;
+import org.jenkinsci.plugins.workflow.job.WorkflowRun;
 
 /**
  * This class implements the logic for the background janitor thread.
@@ -51,13 +52,14 @@ class Janitor implements Runnable {
     private void runAsSystem() {
         while (true) {
             try {
-                clean();
                 Thread.currentThread().sleep(sleepMilliseconds);
-            } catch (InterruptedException e) {
+                clean();
+            } catch (Exception e) {
                 LOG.log(WARNING, "Cleanup failed: " + e.getMessage(), e);
             }
         }
     }
+
 
     /**
      * Examines all the nodes Jenkins currently has, and looks for NodePool nodes that should be removed from
@@ -79,48 +81,43 @@ class Janitor implements Runnable {
                 continue;
 
             final NodePoolSlave nodePoolSlave = (NodePoolSlave) node;
+            NodePoolJob nodePoolJob = nodePoolSlave.getJob();
+
             LOG.log(Level.FINE, "Evaluating NodePool Node: " + nodePoolSlave);
+            WorkflowRun run = (WorkflowRun)nodePoolSlave.getJob().getRun();
 
-            // there are several scenarios where we want to scrub this node:
-            if (isMissing(nodePoolSlave)) {
-                // The node has disappeared/failed to launch and is offline
-                LOG.log(Level.INFO, "Removing node " + nodePoolSlave + " because it is offline or has been "
-                        + "deleted/re-assigned in NodePool");
-                cleanNode(nodePoolSlave, "Offline/deleted/re-assigned");
-
-            } else if (hasInvalidLabel(nodePoolSlave)) {
-                // The node is for a label that we no longer have configured as a "NodePool" in Jenkins:
-                LOG.log(Level.INFO, "Removing node " + nodePoolSlave + " because its label doesn't match any "
-                        + "configured NodePool.");
-                cleanNode(nodePoolSlave, "Invalid label");
-
+            if (run.isBuilding()){
+                // The associated build is still executing,
+                // don't remove the node under any circumstances
+                // Timeouts are handled in the jobs, not here.
             } else if (nodePoolSlave.isHeld()) {
+                // Build has ended, but node could be held.
                 // Grab the hold until time - need to compare it to current time to determine if our hold has expired
                 final long holdUtilEpochMs = ((NodePoolSlave) node).getHoldUnitEpochMs();
                 long now = System.currentTimeMillis();
-                if (nodePoolSlave.completedABuild() && now > holdUtilEpochMs) {
-                    // Hold expired
+                if (now > holdUtilEpochMs) {
+                    // Build complete and hold expired, clean node
                     LOG.log(Level.INFO, String.format(
                             "Removing held node: %s - job is done and hold has expired - hold until time: %s, current time: %s",
                             nodePoolSlave,
                             NodePoolUtils.getFormattedDateTime(holdUtilEpochMs, ZoneOffset.UTC),
                             NodePoolUtils.getFormattedDateTime(now, ZoneOffset.UTC)));
-                    // Update the flag and clean up the node.
                     ((NodePoolSlave) node).setHeld(false);
                     cleanNode(nodePoolSlave, "Hold expired");
                 } else {
-                    // Hold has not expired so skip.
+                    // Build complete, but hold has not expired so retain node
                     LOG.log(Level.FINE, String.format(
                             "Skipping held node: %s - job is running: %b, held: %b - hold until time: %s, current time: %s",
-                            nodePoolSlave, !nodePoolSlave.completedABuild(), nodePoolSlave.isHeld(),
+                            nodePoolSlave, nodePoolJob.getRun().isBuilding(), nodePoolSlave.isHeld(),
                             NodePoolUtils.getFormattedDateTime(holdUtilEpochMs, ZoneOffset.UTC),
                             NodePoolUtils.getFormattedDateTime(System.currentTimeMillis(), ZoneOffset.UTC)));
                 }
-            } else if (nodePoolSlave.completedABuild()) {
-                // The node has previously done work and failed to have been scrubbed
-                LOG.log(Level.INFO, "Removing node " + nodePoolSlave + " because it has already been used to "
-                        + "run jobs.");
-                cleanNode(nodePoolSlave, "Already used");
+            } else {
+                // Build complete and node isn't held, clean it.
+                LOG.log(Level.INFO, "Removing node " + nodePoolSlave
+                    + " because the build it was created for ("
+                    +run.getExternalizableId()+") is no longer running.");
+                cleanNode(nodePoolSlave, "Build Complete");
             }
         }
     }

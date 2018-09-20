@@ -99,13 +99,20 @@ public class KazooLock {
     private NodePool nodePool;
 
     /**
+     * Reference to the nodepool job that this node lock was
+     * created for
+     */
+    private NodePoolJob nodePoolJob;
+
+    /**
      * Create a new lock object.
      *
      * @param path  the path to the lock ZNode that will be created upon acquiring the lock
      * @param nodePool  node pool object containing ZooKeeper connection information
+     * @param npj   the nodepool job representing the build that requested this node/lock
      */
-    public KazooLock(String path, NodePool nodePool) {
-        this(path, 600, TimeUnit.SECONDS, nodePool);
+    public KazooLock(String path, NodePool nodePool, NodePoolJob npj) {
+        this(path, 600, TimeUnit.SECONDS, nodePool, npj);
     }
 
     /**
@@ -115,14 +122,17 @@ public class KazooLock {
      * @param timeout  time to wait until lock acquisition is deemed a failure
      * @param unit  unit of time for the timeout
      * @param nodePool  node pool object containing ZooKeeper connection information
+     * @param npj       NodePoolJob representing the build this node/lock was created for
      */
-    public KazooLock(String path, long timeout, TimeUnit unit, NodePool nodePool) {
+    public KazooLock(String path, long timeout, TimeUnit unit, NodePool nodePool,
+                    NodePoolJob npj) {
         this.nodePool = nodePool;
         this.path = path;
         this.timeout = timeout;
         this.unit = unit;
         this.prefix = UUID.randomUUID().toString() + node_name; //type 4
         this.create_path = this.path + "/" + this.prefix;
+        this.nodePoolJob = npj;
     }
 
     private static class KazooLockWatcher<T extends WatchedEvent>
@@ -177,7 +187,10 @@ public class KazooLock {
     public void acquire() throws Exception {
         state = State.LOCKING;
         LOG.log(Level.FINEST, "KazooLock.acquire");
-        final byte[] requestor = nodePool.getRequestor().getBytes(nodePool.getCharset());
+        final byte[] requestor = (
+                nodePool.getRequestor()
+                +"_"+nodePoolJob.getBuildId()
+        ).getBytes(nodePool.getCharset());
         // 1. Ensure path to be locked exists
         try {
             nodePool.getConn().create()

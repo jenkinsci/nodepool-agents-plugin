@@ -141,9 +141,9 @@ public class NodePoolsTest {
     @Test
     public void testProvisionNode() throws Exception {
         nps.getNodePools().add(m.np);
-        nps.provisionNode(m.label, m.task, 0);
+        nps.provisionNode(m.label, m.task, m.qID);
 
-        final NodePoolJob job = new NodePoolJob(m.label, m.task, 0);
+        final NodePoolJob job = new NodePoolJob(m.label, m.task, m.qID);
         verify(m.np).provisionNode(job);
     }
 

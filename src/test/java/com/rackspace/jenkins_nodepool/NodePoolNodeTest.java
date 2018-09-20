@@ -23,13 +23,11 @@
  */
 package com.rackspace.jenkins_nodepool;
 
-import org.junit.*;
-
 import java.text.MessageFormat;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
+import org.junit.*;
 import static org.junit.Assert.*;
 
 /**
@@ -66,7 +64,7 @@ public class NodePoolNodeTest {
             m.conn.create()
                     .creatingParentsIfNeeded()
                     .forPath(nodePath, m.jsonString.getBytes(m.charset));
-            npn = new NodePoolNode(m.np, m.npID);
+            npn = new NodePoolNode(m.np, m.npID, m.npj);
             // Type field now holds a list of string values
             final List<String> types = new ArrayList<>();
             types.add(m.npLabel);

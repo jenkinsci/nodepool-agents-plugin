@@ -26,13 +26,7 @@ package com.rackspace.jenkins_nodepool;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.Extension;
 import hudson.model.Label;
-import hudson.model.Queue.Task;
-import jenkins.model.GlobalConfiguration;
-import jenkins.model.Jenkins;
-import net.sf.json.JSONObject;
-import org.kohsuke.stapler.DataBoundSetter;
-import org.kohsuke.stapler.StaplerRequest;
-
+import hudson.model.Queue;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -41,6 +35,11 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import jenkins.model.GlobalConfiguration;
+import jenkins.model.Jenkins;
+import net.sf.json.JSONObject;
+import org.kohsuke.stapler.DataBoundSetter;
+import org.kohsuke.stapler.StaplerRequest;
 
 /**
  * Top level Jenkins configuration class to manage all NodePool configuration
@@ -135,15 +134,15 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
      * nodes associated with the specified label.
      *
      * @param label  the label attribute to filter the list of available nodes
-     * @param task   the task to execute
-     * @param taskId unique integer identifying the task
+     * @param task   the task the node is being provisioned for
+     * @param queueID the Queue id for the supplied task
      * @throws IllegalArgumentException if timeout is less than 1 second
      * @throws Exception                if an error occurs managing the provision
      *                                  components
      */
-    public void provisionNode(Label label, Task task, long taskId) throws IllegalArgumentException, Exception {
-
-        final NodePoolJob job = new NodePoolJob(label, task, taskId);
+    public void provisionNode(Label label, Queue.Task task, long queueID) throws IllegalArgumentException, Exception {
+        final NodePoolJob job = new NodePoolJob(label, task, queueID);
+        LOG.log(Level.INFO, job.getOverviewString());
         nodePoolJobHistory.add(job);
 
         try {
@@ -154,7 +153,7 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
             }
         } catch (NodePoolException e) {
             // we failed to provision the node(s), cancel the job
-            LOG.log(Level.SEVERE, "Provisioning failed for task: " + task.getName()
+            job.logToBoth("Provisioning failed for task: " + task.getName()
                     + " with node label:" + task.getAssignedLabel().getName() + ".  Task will be cancelled");
             Jenkins.getInstance().getQueue().cancel(task);
         }

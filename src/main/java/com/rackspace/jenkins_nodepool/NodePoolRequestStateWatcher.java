@@ -3,22 +3,20 @@ package com.rackspace.jenkins_nodepool;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.framework.api.CuratorWatcher;
-import org.apache.zookeeper.KeeperException;
-import org.apache.zookeeper.WatchedEvent;
-import org.apache.zookeeper.Watcher;
-import org.apache.zookeeper.data.Stat;
-
+import static java.lang.String.format;
 import java.nio.charset.Charset;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import static java.lang.String.format;
 import static java.util.logging.Logger.getLogger;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.api.CuratorWatcher;
+import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.WatchedEvent;
+import org.apache.zookeeper.Watcher;
+import org.apache.zookeeper.data.Stat;
 
 /**
  * A zookeeper watcher for node pool activity.
@@ -37,6 +35,7 @@ public class NodePoolRequestStateWatcher implements CuratorWatcher {
     private final CuratorFramework curatorFramework;
     private final String zpath;
     private final NodePoolState desiredState;
+    private final NodePoolJob nodePoolJob;
 
     /**
      * Creates a new node pool state watcher for the specified path and NodePool state value.
@@ -45,10 +44,11 @@ public class NodePoolRequestStateWatcher implements CuratorWatcher {
      * @param zpath            the zookeeper node path
      * @param desiredState     the desired state to watch for
      */
-    NodePoolRequestStateWatcher(CuratorFramework curatorFramework, String zpath, NodePoolState desiredState) {
+    NodePoolRequestStateWatcher(CuratorFramework curatorFramework, String zpath, NodePoolState desiredState, NodePoolJob npj) {
         this.curatorFramework = curatorFramework;
         this.zpath = zpath;
         this.desiredState = desiredState;
+        this.nodePoolJob = npj;
 
         try {
             registerWatch(zpath);
@@ -91,6 +91,15 @@ public class NodePoolRequestStateWatcher implements CuratorWatcher {
         }
 
         try {
+            if(!nodePoolJob.getRun().isBuilding()){
+                // if the job that the request was created for
+                // is no longer running, then stop waiting for
+                // the request to complete.
+                // NodePool.attemptProvision2 will test the state
+                // and discover that fulfilled probably wasn't achieved
+                latch.countDown();
+                return;
+            }
             // Re-register if not a NodeDeleted and not a None event type
             if (event.getType() != Watcher.Event.EventType.NodeDeleted && event.getType() != Watcher.Event.EventType.None) {
                 // Continuous watching on znodes requires reset/re-register of watches after every event/trigger.

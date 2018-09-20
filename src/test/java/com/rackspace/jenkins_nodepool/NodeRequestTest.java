@@ -24,9 +24,6 @@
 package com.rackspace.jenkins_nodepool;
 
 import com.google.gson.Gson;
-import org.apache.zookeeper.data.Stat;
-import org.junit.*;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -34,7 +31,8 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
-
+import org.apache.zookeeper.data.Stat;
+import org.junit.*;
 import static org.junit.Assert.*;
 
 /**
@@ -62,7 +60,7 @@ public class NodeRequestTest {
     @Before
     public void setUp() throws Exception {
         m = new Mocks();
-        nr = new NodeRequest(m.np, m.task);
+        nr = new NodeRequest(m.np, m.npj);
     }
 
     @After
@@ -73,7 +71,7 @@ public class NodeRequestTest {
     @Test
     public void TestSerialisation() {
         try {
-            NodeRequest nr = new NodeRequest(m.np, m.task);
+            NodeRequest nr = new NodeRequest(m.np, m.npj);
             String json = nr.toString();
 
             LOG.fine("TestSerialisation json string: " + json);

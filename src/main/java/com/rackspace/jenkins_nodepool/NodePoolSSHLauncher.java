@@ -21,7 +21,6 @@ import hudson.slaves.ComputerLauncher;
 import hudson.slaves.SlaveComputer;
 import hudson.util.NamingThreadFactory;
 import hudson.util.NullStream;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -207,9 +206,22 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
                     reportEnvironment(tl, computer);
 
                     // Perform the JDK/JRE installation
-                    final FilePath jdkInstallationFolder = jdkInstaller.performInstallation(computer.getNode(), tl, connection);
-                    info(tl, String.format("Installation is complete for node: %s on %s:%d.  Installation folder is: %s",
-                            computer, getHost(), getPort(), jdkInstallationFolder));
+                    for (int i = 0; i <= maxNumRetries; i++) {
+                        try{
+                            FilePath jdkInstallationFolder = jdkInstaller.performInstallation(computer.getNode(), tl, connection);
+                            info(tl, String.format("Installation is complete for node: %s on %s:%d.  Installation folder is: %s",
+                                    computer, getHost(), getPort(), jdkInstallationFolder));
+                            break;
+                        } catch (Exception e){
+                            if (maxNumRetries - i > 0) {
+                                tl.getLogger().println("Failed to install JDK, retrying");
+                            } else {
+                                tl.getLogger().println("Failed to install JDK and out of retries.");
+                                throw e;
+                            }
+                        }
+                        Thread.sleep(TimeUnit.SECONDS.toMillis(retryWaitTimeSeconds*(i+1)));
+                    }
 
                     // The java binary _should_ be in the path now
                     final String java = "java";

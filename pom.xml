@@ -11,7 +11,7 @@
     <version>0.0.15-SNAPSHOT</version>
     <packaging>hpi</packaging>
     <properties>
-        <jenkins.version>2.60.3</jenkins.version>
+        <jenkins.version>2.73.3</jenkins.version>
         <java.level>8</java.level>
     </properties>
     <name>NodePool Agents Plugin</name>
@@ -107,7 +107,7 @@
                             <properties>
                                 <property>
                                     <name>java.util.logging.SimpleFormatter.format</name>
-                                    <value>[%1$tY-%1$tm-%1$tdT%1$tH:%1$tM:%1$tS%tz][%4$s] %2$s %5$s%6$s%n</value>
+                                    <value>[%4$.4s][%1$tY-%1$tm-%1$tdT%1$tH:%1$tM:%1$tS%tz] %2$s %5$s%6$s%n</value>
                                 </property>
                             </properties>
                         </configuration>
@@ -177,25 +177,46 @@
             <version>3.0.14</version>
         </dependency>
         <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>ssh-slaves</artifactId>
-            <version>1.26</version>
-        </dependency>
-        <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>credentials</artifactId>
-            <version>2.1.11</version>
-        </dependency>
-        <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
             <version>2.15.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>org.jenkins-ci.plugins.workflow</groupId>
+            <artifactId>workflow-job</artifactId>
+            <version>2.25</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>ssh-slaves</artifactId>
+            <version>1.26</version>
+        </dependency>
+        <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>structs</artifactId>
-            <version>1.10</version>
+            <version>1.14</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>scm-api</artifactId>
+            <version>2.2.6</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jenkins-ci.plugins</groupId>
+            <artifactId>credentials</artifactId>
+            <version>2.1.18</version>
+            <type>jar</type>
+        </dependency>
+        <dependency>
+            <groupId>org.jenkins-ci.plugins.workflow</groupId>
+            <artifactId>workflow-aggregator</artifactId>
+            <version>2.5</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>ssh-credentials</artifactId>
+            <version>1.12</version>
         </dependency>
     </dependencies>
 

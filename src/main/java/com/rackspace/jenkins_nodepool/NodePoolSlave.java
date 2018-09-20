@@ -103,15 +103,21 @@ public class NodePoolSlave extends Slave {
     static final long serialVersionUID = 1L;
 
     /**
+     * NodePoolJob this slave/agent was created for.
+     */
+    final transient NodePoolJob nodePoolJob;
+
+    /**
      * Create a new slave
      *
      * @param nodePoolNode  the node from NodePool
      * @param credentialsId the Jenkins credential identifier
+     * @param npj           The job this slave/agent was created for
      * @throws Descriptor.FormException on configuration exception
      * @throws IOException              on configuration exception
      */
     @DataBoundConstructor  // not used, but it makes stapler happy if you click "Save" while editing a Node.
-    public NodePoolSlave(NodePoolNode nodePoolNode, String credentialsId) throws Descriptor.FormException, IOException {
+    public NodePoolSlave(NodePoolNode nodePoolNode, String credentialsId, NodePoolJob npj) throws Descriptor.FormException, IOException {
         super(
                 nodePoolNode.getName(), // name
                 "Nodepool Node", // description
@@ -127,16 +133,25 @@ public class NodePoolSlave extends Slave {
                         determineJDKInstaller(nodePoolNode.getNodePool()), //jdkInstaller
                         "", //prefixStartSlaveCmd
                         "", //suffixStartSlaveCmd
-                        300, //launchTimeoutSeconds
-                        30, //maxNumRetries
+                        60, //launchTimeoutSeconds
+                         2, //maxNumRetries keep this low, as the whole provision process is retried (request, accept, launch)
                         10, //retryWaitTime
                         new ManuallyProvidedKeyVerificationStrategy(nodePoolNode.getHostKey())
                 ),
-                new RetentionStrategy.Always(), //retentionStrategy
+                RetentionStrategy.NOOP, //retentionStrategy
                 new ArrayList() //nodeProperties
         );
-
+        this.nodePoolJob =  npj;
         this.nodePoolNode = nodePoolNode;
+        this.nodePoolJob.logToBoth("NodePoolSlave created: "+ this.getDisplayName());
+    }
+
+    /**
+     * Get the NodePoolJob this slave was created for
+     * @return NodePoolJob object
+     */
+    public NodePoolJob getJob(){
+        return this.nodePoolJob;
     }
 
     /**
@@ -164,6 +179,10 @@ public class NodePoolSlave extends Slave {
         return nodePoolNode;
     }
 
+    public String getBuildUrl(){
+        return Jenkins.getInstance().getRootUrl() + nodePoolJob.getRun().getUrl();
+    }
+
     // Called for deserialisation
     private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
         in.defaultReadObject(); // call default deserializer
@@ -178,7 +197,8 @@ public class NodePoolSlave extends Slave {
      */
     @Override
     public Computer createComputer() {
-        return new NodePoolComputer(this, nodePoolNode);
+        NodePoolComputer npc = new NodePoolComputer(this, nodePoolNode, nodePoolJob);
+        return npc;
     }
 
     /**
@@ -254,6 +274,7 @@ public class NodePoolSlave extends Slave {
      */
     public void setHeld(boolean held) {
         this.held = held;
+        this.nodePoolJob.logToBoth("Setting hold status for "+this.getDisplayName()+" to "+this.held);
     }
 
     /**
@@ -299,6 +320,14 @@ public class NodePoolSlave extends Slave {
      */
     public String getHoldUntil() {
         return holdUntil;
+    }
+
+    /**
+     * Get a reference to the nodepoolJob related to this agent
+     * @return nodePoolJob object.
+     */
+    public NodePoolJob getNodePoolJob(){
+        return nodePoolJob;
     }
 
     /**
@@ -426,21 +455,6 @@ public class NodePoolSlave extends Slave {
     }
 
     /**
-     * Test if the slave's build is done.  A slave is considered complete when we've executed at least one build and all
-     * the executors are idle, otherwise we are not done.
-     *
-     * @return true if the build associated with this slave has completed and the executors for the build are idle.
-     */
-    boolean completedABuild() {
-
-        final NodePoolComputer computer = (NodePoolComputer) toComputer();
-        if (computer == null) {
-            return false;
-        }
-        return computer.completedABuild();
-    }
-
-    /**
      * Debug routine to print the build details.
      *
      * @param builds a run list with all the builds
@@ -489,50 +503,8 @@ public class NodePoolSlave extends Slave {
         }
     }
 
-    /**
-     * Convenience method to determine if all executors are idle. Returns true if all executors are idle, false otherwise.
-     *
-     * @param executorList a list of executors
-     * @return true if all executors are idle, false otherwise.
-     */
-    private boolean isAllExecutorsIdle(final List<Executor> executorList) {
-
-        // Flag to indicate if all the executors are idle
-        boolean allExecutorsIdle = true;
-
-        for (final Executor executor : executorList) {
-            // If one of the executors are not idle - set the flag, we're done
-            if (!executor.isIdle()) {
-                allExecutorsIdle = false;
-                break;
-            }
-        }
-
-        return allExecutorsIdle;
-    }
-
-    /**
-     * Returns true if one of the executor's threads have started running, false otherwise.
-     *
-     * @param executorList a list of executors
-     * @return true if one of the executor's threads have started running, false otherwise.
-     */
-    private boolean isExecutorStarted(final List<Executor> executorList) {
-
-        // Flag to indicate if all of the executor work units are empty
-        boolean executorStarted = false;
-
-        for (final Executor executor : executorList) {
-            LOG.log(FINE, String.format("Testing Executor Thread State: %s", executor.getState()));
-            // If one of the executors is NOT in a new state, then it's transition from NEW to something else
-            // NEW == Thread state for a thread which has not yet started.
-            if (executor.getState() != Thread.State.NEW) {
-                executorStarted = true;
-                break;
-            }
-        }
-
-        return executorStarted;
+    public Boolean isFinished(){
+        return ! nodePoolJob.getRun().isBuilding();
     }
 
     /**

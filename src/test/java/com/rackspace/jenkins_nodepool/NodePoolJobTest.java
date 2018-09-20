@@ -1,23 +1,28 @@
 package com.rackspace.jenkins_nodepool;
 
-import hudson.model.FreeStyleProject;
-import hudson.model.ItemGroup;
 import hudson.model.Label;
-import hudson.model.Queue;
 import hudson.model.labels.LabelAtom;
-import org.junit.Test;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import org.junit.Before;
+import org.junit.Test;
 
 public class NodePoolJobTest {
 
+    private Mocks m = new Mocks();
     private final long taskId = 42;
     private final Label label = new LabelAtom("mylabel");
 
-    private final Queue.Task task = new FreeStyleProject((ItemGroup)null, "myproject");
-    private final NodePoolJob job = new NodePoolJob(label, task, taskId);
+    //private final Queue.Task task = new FreeStyleProject((ItemGroup)null, "myproject");
+    //private final Queue.Item item = new Queue.WaitingItem(new GregorianCalendar(), task, new ArrayList<>());
+    private NodePoolJob job = new NodePoolJob(label, m.task, m.qID);
+
+    @Before
+    public void before(){
+        m = new Mocks();
+        job = new NodePoolJob(label, m.task, m.qID);
+    }
 
     @Test
     public void testGetLabel() {
@@ -26,7 +31,7 @@ public class NodePoolJobTest {
 
     @Test
     public void testGetTask() {
-        assertEquals(task, job.getTask());
+        assertEquals(m.task, job.getTask());
     }
 
     @Test
@@ -36,10 +41,10 @@ public class NodePoolJobTest {
 
     @Test
     public void testSuccess() {
-        job.addAttempt(null);
+        job.addAttempt(m.nr);
         job.failAttempt(new Exception("a bad thing happened."));
 
-        job.addAttempt(null);
+        job.addAttempt(m.nr);
         job.succeed();
 
         assertEquals(2, job.getAttempts().size());
@@ -48,7 +53,7 @@ public class NodePoolJobTest {
 
     @Test
     public void testFailure() {
-        job.addAttempt(null);
+        job.addAttempt(m.nr);
         job.failAttempt(new Exception("could be better."));
 
         assertTrue(job.isDone());
