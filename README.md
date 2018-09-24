@@ -12,8 +12,8 @@ Usage:
 ```
     node("nodepool-debian"){
         nodePoolHold() // hold for one day
-        nodePoolHold("1w") // hold for one week
-        nodePoolHold("1w", "Investigating issue IS-123") // specify reason
+        nodePoolHold(duration: "1w") // hold for one week
+        nodePoolHold(duration: "1w", reason: "Investigating issue IS-123") // specify reason
     }
 ```
 The hold end time will be calculated from the specified duration
