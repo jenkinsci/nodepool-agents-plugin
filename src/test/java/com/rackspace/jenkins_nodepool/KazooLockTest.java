@@ -92,7 +92,7 @@ public class KazooLockTest {
         assertEquals(0, children.size());
 
         // create and acquire lock
-        KazooLock kl = new KazooLock(path, m.np);
+        KazooLock kl = new KazooLock(path, m.np, m.npj);
         assertEquals(KazooLock.State.UNLOCKED, kl.getState());
         kl.acquire();
         assertEquals(KazooLock.State.LOCKED, kl.getState());
@@ -113,7 +113,7 @@ public class KazooLockTest {
     @Test(expected = KazooLockException.class)
     public void testBlockingAcquireTimesOut() throws Exception {
         // create and acquire lock
-        final KazooLock kl = new KazooLock(path, 1, TimeUnit.SECONDS, m.np);
+        final KazooLock kl = new KazooLock(path, 1, TimeUnit.SECONDS, m.np, m.npj);
         kl.acquire();
 
         // lock is not reentrant, so second acquire should timeout
@@ -152,8 +152,8 @@ public class KazooLockTest {
 
         // Create two contenders for a single lock. One for this thread and one
         // for the background thread.
-        KazooLock kl = new KazooLock(path, m.np);
-        KazooLock klBackground = new KazooLock(path, m.np);
+        KazooLock kl = new KazooLock(path, m.np, m.npj);
+        KazooLock klBackground = new KazooLock(path, m.np, m.npj);
 
         LockHolder background = new LockHolder(klBackground);
         klBackground.acquire(); // Acquire lock before starting background

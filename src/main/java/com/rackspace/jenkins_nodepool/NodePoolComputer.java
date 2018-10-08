@@ -24,13 +24,8 @@
 package com.rackspace.jenkins_nodepool;
 
 import hudson.model.*;
-import hudson.model.Queue.Task;
 import hudson.slaves.SlaveComputer;
-import hudson.util.RunList;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.kohsuke.stapler.HttpResponse;
@@ -48,20 +43,19 @@ public class NodePoolComputer extends SlaveComputer {
      */
     private String name;
     private NodePoolNode nodePoolNode;
-    private List<Task> inProgressBuilds;
-    private List<Task> completedBuilds;
+    private NodePoolJob nodePoolJob;
 
     public NodePoolComputer(Slave slave) {
         super(slave);
-        initAccounting();
-
         // required by superclass but shouldn't be used.
         throw new IllegalStateException("Attempting to initialise NodePoolComputer without supplying a NodePoolNode.");
     }
 
-    public NodePoolComputer(final NodePoolSlave nps, final NodePoolNode npn) {
+    public NodePoolComputer(final NodePoolSlave nps, final NodePoolNode npn, final NodePoolJob npj) {
         super(nps);
-        initAccounting();
+        this.nodePoolJob = npj;
+        this.nodePoolJob.logToBoth(("NodePoolComputer created: "+this.nodeName));
+
         setNodePoolNode(npn);
         if (npn != null) {
             name = npn.getName();
@@ -78,18 +72,12 @@ public class NodePoolComputer extends SlaveComputer {
         }
     }
 
-    public final void initAccounting(){
-        inProgressBuilds = new ArrayList<>();
-        completedBuilds = new ArrayList<>();
-    }
-
     /**
-     * Determine if this computer has completed a build
-     * Based on accounting within this class.
-     * @return Boolean stating whether this computer has completed a build
+     * Get the Job associated with this computer
+     * @return NodePoolJob object
      */
-    public Boolean completedABuild(){
-        return completedBuilds.size() > 0;
+    public NodePoolJob getJob(){
+        return this.nodePoolJob;
     }
 
     public final void setNodePoolNode(NodePoolNode npn) {
@@ -134,12 +122,13 @@ public class NodePoolComputer extends SlaveComputer {
         return toString();
     }
 
+    private NodePoolJob getNodePoolJob(){
+        return nodePoolJob;
+    }
+
     @Override
     public void taskAccepted(Executor executor, Queue.Task task) {
         super.taskAccepted(executor, task);
-        // Add this task to the list of tasks this node has executed.
-        inProgressBuilds.add(task);
-
         NodePoolComputer c = (NodePoolComputer) executor.getOwner();
         LOG.log(Level.FINE, "Starting task {0} on NodePoolComputer {1}", new Object[]{task.getFullDisplayName(), c});
     }
@@ -148,11 +137,7 @@ public class NodePoolComputer extends SlaveComputer {
     public void taskCompleted(Executor executor, Queue.Task task, long durationMS) {
         super.taskCompleted(executor, task, durationMS);
 
-        inProgressBuilds.remove(task);
-        completedBuilds.add(task);
-
         LOG.log(Level.FINE, "Task " + task.getFullDisplayName() + " completed normally");
-        saveTaskHistory(executor, task);
         postBuildCleanup(executor, task);
     }
 
@@ -160,44 +145,14 @@ public class NodePoolComputer extends SlaveComputer {
     public void taskCompletedWithProblems(Executor executor, Queue.Task task, long durationMS, Throwable problems) {
         super.taskCompletedWithProblems(executor, task, durationMS, problems);
 
-        inProgressBuilds.remove(task);
-        completedBuilds.add(task);
-
         LOG.log(Level.WARNING, "Task " + task.getFullDisplayName() + " completed with problems: ", problems);
-        saveTaskHistory(executor, task);
         postBuildCleanup(executor, task);
-    }
-
-    /**
-     * Associate job run/build information with a task that was previously queued.
-     *
-     * @param executor executor that will run the task
-     * @param task     task getting run
-     */
-    public void saveTaskHistory(Executor executor, Queue.Task task) {
-        final NodePoolJobHistory jobHistory = NodePools.get().getJobHistory();
-
-        final NodePoolComputer c = (NodePoolComputer) executor.getOwner();
-        final RunList runList = c.getBuilds();
-        if (runList == null) {
-            return;
-        }
-
-        final Iterator<Run> runIterator = runList.iterator();
-        while (runIterator.hasNext()) {
-            final Run run = runIterator.next();
-            final long taskId = run.getQueueId();
-            final NodePoolJob job = jobHistory.getJob(taskId);
-            if (job != null) {
-                // save build number of the task:
-                job.setBuildNumber(run.getNumber());
-            }
-        }
     }
 
     private void postBuildCleanup(Executor executor, Queue.Task task) {
         final NodePoolComputer c = (NodePoolComputer) executor.getOwner();
         final NodePoolSlave slave = (NodePoolSlave) c.getNode();
+
         if (slave == null) {
             LOG.log(Level.WARNING, "The computer : " + c + " has a null slave associated with it.");
             return;

@@ -33,6 +33,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import jenkins.model.Jenkins;
+import org.jenkinsci.plugins.workflow.support.steps.ExecutorStepExecution.PlaceholderTask;
 
 //TODO: Scan build queue on startup for pipelines that persist across restarts as the
 // queue entry event won't refire.
@@ -57,6 +58,7 @@ public class NodePoolQueueListener extends QueueListener {
     public void onEnterWaiting(Queue.WaitingItem wi) {
         final Label label = wi.getAssignedLabel();
         LOG.log(Level.FINE, "NodePoolQueueListener received queue notification for label {0}.", new Object[]{label});
+        Queue queue = Jenkins.getInstance().getQueue();
 
         if (label == null) {
             return;
@@ -72,17 +74,31 @@ public class NodePoolQueueListener extends QueueListener {
         // for a prefix match.
         if (!nps.isEmpty() && Pattern.matches(".*-[0-9]{10}$", label.getName())) {
             LOG.log(Level.WARNING, "Killing queued task {0} as it refers to specific NodePool node {1}", new Object[]{wi.task, label});
-            Jenkins.getInstance().getQueue().cancel(wi.task);
+            queue.cancel(wi);
             return;
         }
 
-        Computer.threadPoolForRemoting.submit(() -> {
-            try {
-                nodePools.provisionNode(label, wi.task, wi.getId());
-            } catch (Exception ex) {
-                LOG.log(Level.SEVERE, ex.getLocalizedMessage(), ex);
-            }
-        });
+        if (!nps.isEmpty() && ! (wi.task instanceof PlaceholderTask)){
+            // Not a pipeline job.
+            // Only pipeline jobs are supported as the FlowExecution class is used
+            // to link queue tasks to run objects.
+            LOG.log(Level.WARNING, "Killing queued task as it used a nodepool label but isn't a pipeline job");
+            queue.cancel(wi);
+            return;
+        }
+
+        // Test added so we don't take a thread for every build
+        // This also has the side effect of removing non nodepool jobs
+        // from NodePoolJobHistory and therefore NodePool View.
+        if(!nps.isEmpty()){
+            Computer.threadPoolForRemoting.submit(() -> {
+                try {
+                    nodePools.provisionNode(label, wi.task, wi.getId());
+                } catch (Exception ex) {
+                    LOG.log(Level.SEVERE, ex.getLocalizedMessage(), ex);
+                }
+            });
+        }
     }
 
 }

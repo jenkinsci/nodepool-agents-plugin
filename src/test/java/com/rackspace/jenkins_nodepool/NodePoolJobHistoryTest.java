@@ -1,27 +1,27 @@
 package com.rackspace.jenkins_nodepool;
 
-import org.junit.Before;
-import org.junit.Test;
-
 import java.util.Iterator;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import org.junit.Before;
+import org.junit.Test;
 
 public class NodePoolJobHistoryTest {
 
     private static final int maxHistoryLength = 2;
     private NodePoolJobHistory nodePoolJobHistory;
+    private Mocks m;
 
     @Before
     public void setUp() {
         nodePoolJobHistory = new NodePoolJobHistory(maxHistoryLength);
+        m = new Mocks();
     }
 
     @Test
     public void testAddJob() {
-        final NodePoolJob job = new NodePoolJob(null, null, 1);
+        final NodePoolJob job = new NodePoolJob(m.label, m.task, m.qID);
         nodePoolJobHistory.add(job);
 
         int sz = 0;
@@ -42,7 +42,7 @@ public class NodePoolJobHistoryTest {
         // test pruning of excess jobs.
         for (int i = 0; i < maxHistoryLength + 1; i++ ) {
             nodePoolJobHistory.add(
-                    new NodePoolJob(null, null, i)
+                    new NodePoolJob(m.label, m.task, m.qID)
             );
         }
 
@@ -59,22 +59,19 @@ public class NodePoolJobHistoryTest {
 
     @Test
     public void testGetJob() {
-        nodePoolJobHistory.add(
-                new NodePoolJob(null, null, 1)
-        );
 
         nodePoolJobHistory.add(
-                new NodePoolJob(null, null, 42)
+            new NodePoolJob(m.label, m.task, m.qID)
         );
 
-        final NodePoolJob job = nodePoolJobHistory.getJob(42);
+        final NodePoolJob job = nodePoolJobHistory.getJob(m.qID);
         assertNotNull(job);
     }
 
     @Test
     public void testGetJobNonExistent() {
         nodePoolJobHistory.add(
-                new NodePoolJob(null, null, 1)
+            new NodePoolJob(m.label, m.task, m.qID)
         );
 
         assertNull(nodePoolJobHistory.getJob(2));

@@ -3,19 +3,17 @@ package com.rackspace.jenkins_nodepool;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.RetryOneTime;
 import org.apache.curator.test.InstanceSpec;
 import org.apache.curator.test.TestingServer;
 import org.junit.*;
-
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.util.*;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
-
 import static org.junit.Assert.*;
 
 /**
@@ -34,8 +32,10 @@ public class NodePoolRequestStateWatcherTest {
     private static CuratorFramework zkCli;
     private final static Gson gson = new Gson();
     private static final int DEFAULT_TEST_TIMEOUT_SEC = 30;
+    private Mocks m;
 
     public NodePoolRequestStateWatcherTest() {
+        m = new Mocks();
     }
 
     @BeforeClass
@@ -70,6 +70,7 @@ public class NodePoolRequestStateWatcherTest {
 
     @Before
     public void before() {
+        m = new Mocks();
     }
 
     @After
@@ -93,7 +94,7 @@ public class NodePoolRequestStateWatcherTest {
             timer.schedule(getTimerTask(zpath, NodePoolState.FULFILLED), 5000L);
 
             final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
-                    zkCli, zpath, NodePoolState.FULFILLED);
+                    zkCli, zpath, NodePoolState.FULFILLED, m.npj);
 
             log.fine("Waiting for " + DEFAULT_TEST_TIMEOUT_SEC + " seconds max for the watcher...");
             watcher.waitUntilDone(DEFAULT_TEST_TIMEOUT_SEC, TimeUnit.SECONDS);
@@ -126,7 +127,7 @@ public class NodePoolRequestStateWatcherTest {
             timer.schedule(getTimerTask(zpath, NodePoolState.PENDING), 5000L);
 
             final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
-                    zkCli, zpath, NodePoolState.FULFILLED);
+                    zkCli, zpath, NodePoolState.FULFILLED, m.npj);
 
             log.fine("Waiting for " + DEFAULT_TEST_TIMEOUT_SEC + " seconds max for the watcher...");
             try {
@@ -166,7 +167,7 @@ public class NodePoolRequestStateWatcherTest {
 
             // We hope to get a fulfilled end-state, but we won't for this test
             final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
-                    zkCli, zpath, NodePoolState.FULFILLED);
+                    zkCli, zpath, NodePoolState.FULFILLED, m.npj);
 
             log.fine("Waiting for " + DEFAULT_TEST_TIMEOUT_SEC + " seconds max for the watcher...");
             try {
@@ -202,7 +203,7 @@ public class NodePoolRequestStateWatcherTest {
 
             // We hope to get a fulfilled end-state, but we won't for this test
             final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
-                    zkCli, zpath, NodePoolState.FULFILLED);
+                    zkCli, zpath, NodePoolState.FULFILLED, m.npj);
 
             log.fine("Waiting for " + DEFAULT_TEST_TIMEOUT_SEC + " seconds max for the watcher...");
             try {
@@ -237,7 +238,7 @@ public class NodePoolRequestStateWatcherTest {
 
             // Set a watch - this time with a short timeout so that we will...timeout early
             final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
-                    zkCli, zpath, NodePoolState.FULFILLED);
+                    zkCli, zpath, NodePoolState.FULFILLED, m.npj);
 
             final int timeoutInSeconds = 5;
             log.fine("Waiting for " + timeoutInSeconds + " seconds max for the watcher...");
@@ -282,7 +283,7 @@ public class NodePoolRequestStateWatcherTest {
             timer3.schedule(getTimerTask(zpath, NodePoolState.FULFILLED), 5000L);
 
             final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
-                    zkCli, zpath, NodePoolState.FULFILLED);
+                    zkCli, zpath, NodePoolState.FULFILLED, m.npj);
 
             log.fine("Waiting for " + DEFAULT_TEST_TIMEOUT_SEC + " seconds max for the watcher...");
             watcher.waitUntilDone(DEFAULT_TEST_TIMEOUT_SEC, TimeUnit.SECONDS);

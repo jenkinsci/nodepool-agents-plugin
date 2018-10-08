@@ -26,8 +26,6 @@ package com.rackspace.jenkins_nodepool;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.model.Label;
 import hudson.model.Queue.Task;
-import org.apache.zookeeper.CreateMode;
-
 import java.text.MessageFormat;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -36,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.apache.zookeeper.CreateMode;
 
 /**
  * Represents a nodepool node request. Data format is JSON dump of following
@@ -57,20 +56,24 @@ public class NodeRequest extends ZooKeeperObject {
     private final Long startTime;
 
     /**
-     * Associatd Jenkins task that triggered this request
+     * Associated Jenkins task that triggered this request
      */
     private final Task task;
+
+    private final NodePoolJob nodePoolJob;
 
     /**
      * Create new request
      *
      * @param nodePool NodePool cluster to use
-     * @param task     Associated Jenkins task/build
+     * @param npj     Associated NodePoolJob which contains the task
      * @throws Exception on ZooKeeper error
      */
     @SuppressFBWarnings
-    public NodeRequest(NodePool nodePool, Task task) throws Exception {
+    public NodeRequest(NodePool nodePool, NodePoolJob npj) throws Exception {
         super(nodePool);
+        this.nodePoolJob = npj;
+        task = npj.getTask();
         final String jenkinsLabel = task.getAssignedLabel().getDisplayName();
         final List<String> node_types = new ArrayList();
         node_types.add(nodePool.nodePoolLabelFromJenkinsLabel(jenkinsLabel));
@@ -79,10 +82,10 @@ public class NodeRequest extends ZooKeeperObject {
         data.put("state", NodePoolState.REQUESTED.getStateString());
         data.put("state_time", new Double(System.currentTimeMillis() / 1000));
         data.put("jenkins_label", jenkinsLabel);
+        data.put("build_id", npj.getBuildId());
         // sets path and zkid
         createZNode();
         startTime = System.currentTimeMillis();
-        this.task = task;
     }
 
     /**
@@ -119,6 +122,22 @@ public class NodeRequest extends ZooKeeperObject {
     }
 
     /**
+     * Returns the NodePoolJob associated with this request
+     * @return NodePoolJob
+     */
+    public NodePoolJob getJob(){
+        return this.nodePoolJob;
+    }
+
+    /**
+     * Get a string representation of this object, in JSON.
+     * @return JSON representation of this object, same as is  stored in zookeeper.
+     */
+    public String toString(){
+        return "NodePool Node Request["+this.getJson()+"]";
+    }
+
+    /**
      * Get node names only from the local cache of the ZNode
      *
      * @return list of node names
@@ -150,7 +169,10 @@ public class NodeRequest extends ZooKeeperObject {
         }
         final List<NodePoolNode> nodeObjects = new ArrayList<>();
         for (Object id : (List) data.get("nodes")) {
-            nodeObjects.add(new NodePoolNode(nodePool, (String) id));
+            //this is a list but, there should only be one node as we only ever request one node.
+            NodePoolNode npn = new NodePoolNode(nodePool, (String) id, nodePoolJob);
+            nodeObjects.add(npn);
+            nodePoolJob.setNodePoolNode(npn);
         }
         return nodeObjects;
     }

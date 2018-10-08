@@ -121,7 +121,9 @@ public class HoldStep extends Builder implements SimpleBuildStep {
                     nps.setHoldReason(reason);
                     nps.setHoldUser(build_id);
                     nps.setHoldUntil(duration, true);
-                    log("Held node: " + npc.toString());
+                    log("Held node: " + npc.toString()
+                      + " IP:"+nps.getNodePoolNode().getHost()
+                      + " Hold Expiry Time: "+nps.getHoldUntilTimeFormatted());
                 }
             } catch (Exception ex) {
                 log("Failed to hold node: "+ex.toString(), Level.SEVERE);

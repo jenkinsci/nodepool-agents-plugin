@@ -3,13 +3,14 @@ package com.rackspace.jenkins_nodepool;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Track historical information about Jenkins jobs handled by the plugin.
  */
 public class NodePoolJobHistory implements Iterable<NodePoolJob> {
 
-    private static final int MAX_HISTORY_LENGTH = 100;
+    private static final int MAX_HISTORY_LENGTH = 250;
     private final Object lock = new Object();
 
     private final List<NodePoolJob> jobs;
@@ -51,6 +52,11 @@ public class NodePoolJobHistory implements Iterable<NodePoolJob> {
         return jobsCopy.iterator();
     }
 
+    /**
+     * Find job matching taskID
+     * @param taskId
+     * @return
+     */
     NodePoolJob getJob(long taskId) {
 
         final Iterator<NodePoolJob> iter = iterator();
@@ -62,4 +68,45 @@ public class NodePoolJobHistory implements Iterable<NodePoolJob> {
         }
         return null;
     }
+
+    /**
+     * Find job matching request object
+     * @param request
+     * @return
+     */
+    NodePoolJob getJob(NodeRequest request){
+        return jobs
+            .stream()
+            .filter(j -> j.hasRequest(request))
+            .findFirst()
+            .get();
+    }
+
+    /**
+     * Find jobs matching JobName
+     * @param jobName
+     * @return
+     */
+    List<NodePoolJob> getJobs(String jobName){
+        return jobs.stream()
+                .filter(j -> j.getRun().getDisplayName().equals(jobName))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Find jobs matching JobName and Build number
+     * There could be multiple as each job represents a usage
+     * of a nodepool node and a build may use multiple nodes.
+     * @param jobName
+     * @param buildNum
+     * @return
+     */
+    List<NodePoolJob> getJobs(String jobName, Integer buildNum){
+        return jobs.stream()
+                .filter(j -> j.getRun().getDisplayName().equals(jobName) &&
+                        j.getRun().getNumber() == buildNum)
+                .collect(Collectors.toList());
+    }
+
+
 }

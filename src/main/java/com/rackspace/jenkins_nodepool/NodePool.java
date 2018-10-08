@@ -34,21 +34,12 @@ import hudson.model.Computer;
 import hudson.model.Describable;
 import hudson.model.Descriptor;
 import hudson.model.ItemGroup;
-import hudson.model.Queue.Task;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.security.ACL;
 import hudson.security.AccessControlled;
 import hudson.util.FormFieldValidator;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
-import jenkins.model.Jenkins;
-import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.framework.CuratorFrameworkFactory;
-import org.apache.curator.retry.ExponentialBackoffRetry;
-import org.apache.zookeeper.CreateMode;
-import org.kohsuke.stapler.*;
-
-import javax.servlet.ServletException;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.text.MessageFormat;
@@ -59,6 +50,14 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.servlet.ServletException;
+import jenkins.model.Jenkins;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.zookeeper.CreateMode;
+import org.joda.time.LocalDateTime;
+import org.kohsuke.stapler.*;
 
 /**
  * Representation of a ZooKeeper+NodePool cluster configuration.
@@ -76,6 +75,10 @@ public class NodePool implements Describable<NodePool> {
 
     // maximum number of times provisioning a node will be tried for a given task
     private static final int MAX_ATTEMPTS = 3;
+
+    // How long to wait to connect to a node via ssh, install java, and start
+    // the jenkins agent
+    private static final int LAUNCH_TIMEOUT_MINUTES = 2;
 
     /**
      * Create a curator managed connection to ZooKeeper
@@ -220,9 +223,7 @@ public class NodePool implements Describable<NodePool> {
         try {
             for (NodePoolNode node : allocatedNodes) {
                 LOG.log(Level.INFO, String.format("Accepting node %s on behalf of request %s", node, request.getZKID()));
-
                 node.setInUse(); // TODO: debug making sure this lock stuff actually works
-
                 acceptedNodes.add(node);
 
             }
@@ -448,13 +449,18 @@ public class NodePool implements Describable<NodePool> {
 
         for (int i = 0; i < maxAttempts; i++) {
             try {
-                attemptProvision(job, timeoutInSec);
-                break;
+                if(job.getRun().isBuilding()){
+                    attemptProvision(job, timeoutInSec);
+                    break;
+                } else {
+                    // build has been cancelled
+                    // nothing else to do, janitor will cleanup any remaining objects
+                    return;
+                }
 
             } catch (Exception e) {
-                LOG.log(Level.WARNING, String.format("Node provisioning attempt for task: %s failed. Message: %s",
-                        job.getTask().getName(), e.getLocalizedMessage()));
-
+                job.logToBoth(String.format("Node provisioning attempt for task: %s failed. Message: %s",
+                        job.getTask().getName(), e.getLocalizedMessage()), Level.WARNING);
                 if (i + 1 == maxAttempts) {
                     throw new NodePoolException(String.format("Maximum attempts exceeded: %d out of %d.",
                             (i + 1), maxAttempts));
@@ -472,12 +478,12 @@ public class NodePool implements Describable<NodePool> {
      */
     void attemptProvision(NodePoolJob job, int timeoutInSec) throws Exception {
 
-        final Task task = job.getTask();
+        //final Task task = job.getTask();
 
-        LOG.info(String.format("Waiting on node to become available for task: %s with label: %s with timeout: %d seconds...",
-                task.getName(), job.getLabel(), timeoutInSec));
+        //job.logToBoth(String.format("Waiting on node to become available for task: %s with label: %s with timeout: %d seconds...",
+        //        task.getName(), job.getLabel(), timeoutInSec));
 
-        final NodeRequest request = createNodeRequest(task);
+        final NodeRequest request = createNodeRequest(job);
         requests.add(request);
 
         try {
@@ -495,8 +501,8 @@ public class NodePool implements Describable<NodePool> {
         job.succeed();
     }
 
-    NodeRequest createNodeRequest(final Task task) throws Exception {
-        return new NodeRequest(this, task);
+    NodeRequest createNodeRequest(final NodePoolJob job) throws Exception {
+        return new NodeRequest(this, job);
     }
 
     /**
@@ -509,15 +515,17 @@ public class NodePool implements Describable<NodePool> {
     void attemptProvisionNode2(final NodeRequest request, final int timeoutInSec) throws Exception {
 
         List<NodePoolNode> allocatedNodes;
+        NodePoolJob nodePoolJob = request.getJob();
 
         // Let's create a node pool watcher and wait until the request is in the desired state
         // (or until we're timed out)
         final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
-                conn, request.getPath(), NodePoolState.FULFILLED);
+                conn, request.getPath(), NodePoolState.FULFILLED, nodePoolJob);
 
         try {
             watcher.waitUntilDone(timeoutInSec, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
+            request.delete();
             throw new InterruptedException("Timeout waiting for request to get fulfilled: "
                     + e.getMessage());
         }
@@ -527,26 +535,39 @@ public class NodePool implements Describable<NodePool> {
 
         // Success represents is request fulfilled - everything else is a problem.
         if (request.getState() == NodePoolState.FULFILLED) {
-            try {
-                allocatedNodes = acceptNodes(request);
+            allocatedNodes = acceptNodes(request);
 
-                // Get allocated nodes from the request and add to Jenkins
-                for (NodePoolNode node : allocatedNodes) {
+            // Get allocated nodes from the request and add to Jenkins
+            for (NodePoolNode node : allocatedNodes) {
+                // This creates the slave, then the launcher and computer
+                // it returns before the launch is complete, so errors are
+                // not handled.
+                final NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId(), nodePoolJob);
+                Jenkins.getInstance().addNode(nps);
 
-                    final NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId());
-                    Jenkins.getInstance().addNode(nps);
-                    LOG.log(Level.INFO, "NodePoolSlave instance " + nps.getNodePoolNode().getName() +
-                            " with host: " + nps.getNodePoolNode().getHost() +
-                            " with label: " + request.getJenkinsLabel().getDisplayName() +
-                            " from task: " + request.getTask().getName() +
-                            " is ready...adding slave to Jenkins");
+                LocalDateTime launchDeadline = LocalDateTime.now().plusMinutes(LAUNCH_TIMEOUT_MINUTES);
+                NodePoolComputer npc;
+                while (true){
+                    npc = (NodePoolComputer) Jenkins.getInstance().getComputer(nodePoolJob.getNodePoolNode().getName());
+                    if(LocalDateTime.now().isAfter(launchDeadline)){
+                        break;
+                    }
+                    if(npc == null|| npc.isOffline()){
+                        Thread.sleep(10000);
+                        continue;
+                    }
                 }
-
-            } catch (Exception e) {
-                throw new Exception("An error occurred while accepting nodes: "
-                        + e.getLocalizedMessage(), e);
+                if (npc == null || npc.isOffline()){
+                    throw new Exception("Failed to launch Jenkins agent on "+nps.getNodePoolNode().getName());
+                }
+                nodePoolJob.logToBoth("NodePoolSlave instance " + nps.getNodePoolNode().getName() +
+                        " with host: " + nps.getNodePoolNode().getHost() +
+                        " with label: " + request.getJenkinsLabel().getDisplayName() +
+                        " from task: " + request.getTask().getName() +
+                        " for build: " + nodePoolJob.getBuildId() +
+                        " is ready...adding slave to Jenkins");
+                nodePoolJob.setNodePoolSlave(nps);
             }
-
         } else {
             throw new Exception("Request failed or aborted while waiting for request state:" + NodePoolState.FULFILLED
                     + ", actual state:" + request.getState());

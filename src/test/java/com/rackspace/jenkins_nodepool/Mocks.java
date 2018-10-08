@@ -26,13 +26,8 @@ package com.rackspace.jenkins_nodepool;
 import com.google.gson.Gson;
 import hudson.model.Label;
 import hudson.model.Queue;
-import hudson.model.Queue.Task;
+import hudson.model.Run;
 import hudson.model.labels.LabelAtom;
-import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.framework.CuratorFrameworkFactory;
-import org.apache.curator.retry.ExponentialBackoffRetry;
-import org.apache.curator.test.TestingServer;
-
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.text.MessageFormat;
@@ -42,7 +37,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.curator.test.TestingServer;
+import org.jenkinsci.plugins.workflow.flow.FlowExecution;
+import org.jenkinsci.plugins.workflow.flow.FlowExecutionOwner;
+import org.jenkinsci.plugins.workflow.graph.FlowNode;
+import org.jenkinsci.plugins.workflow.job.WorkflowJob;
+import org.jenkinsci.plugins.workflow.job.WorkflowRun;
+import org.jenkinsci.plugins.workflow.support.steps.ExecutorStepExecution.PlaceholderTask;
 import static org.mockito.Mockito.*;
 
 /**
@@ -74,7 +78,7 @@ public class Mocks {
     Queue.Item queueItem;
     String requestRoot;
     String requestor;
-    Task task;
+    PlaceholderTask task;
     String value;
     String zkNamespace;
     TestingServer zkTestServer;
@@ -84,6 +88,17 @@ public class Mocks {
     String holdUntilRoot;
     String jdkInstallationScript;
     String jdkHome;
+    NodePoolJob npj;
+    FlowNode fn;
+    FlowExecution fe;
+    FlowExecutionOwner feo;
+    WorkflowRun run;
+    Long qID = 42L;
+    WorkflowJob job;
+    List<Attempt> attemptListFailure;
+    Attempt attemptFailure;
+    List<Attempt> attemptListSuccess;
+    Attempt attemptSuccess;
 
     public Mocks() {
         requestTimeout = 30;
@@ -105,39 +120,88 @@ public class Mocks {
         label = new LabelAtom(MessageFormat.format("{0}{1}", labelPrefix, npLabel));
         npcName = MessageFormat.format("{0}-{1}", label.getDisplayName(), npID);
         np = mock(NodePool.class, withSettings().serializable());
-        task = mock(Task.class);
-        queueItem = mock(Queue.Item.class);
+        task = mock(PlaceholderTask.class);
+        //queueItem = mock(Queue.Item.class);
         npn = mock(NodePoolNode.class);
         nps = mock(NodePoolSlave.class);
         nr = mock(NodeRequest.class);
         npc = mock(NodePoolComputer.class);
         jdkInstallationScript = "apt-get update && apt-get install openjdk-8-jre-headless -y";
         jdkHome = "/usr/lib/jvm/java-8-openjdk-amd64";
+        npj = mock(NodePoolJob.class);
+        fn = mock(FlowNode.class);
+        fe = mock(FlowExecution.class);
+        feo = mock(FlowExecutionOwner.class);
+        run = mock(WorkflowRun.class);
+        job = mock(WorkflowJob.class);
+        attemptListSuccess = new ArrayList<>();
+        attemptSuccess = mock(Attempt.class);
+        attemptListFailure = new ArrayList<>();
+        attemptFailure = mock(Attempt.class);
+
+        attemptListSuccess.add(attemptSuccess);
+        attemptListFailure.add(attemptFailure);
+        allocatedNodes = new ArrayList<>();
+        allocatedNodes.add(npn);
 
         startTestServer();
         when(npn.getName()).thenReturn(npcName);
+        when(npn.getHostKey()).thenReturn("ahostkey");
         // final, can't be mocked: when(nps.toComputer()).thenReturn(npc);
+
+        // commented so spy nodepool can be returned in NodePoolTest
+        //when(npn.getNodePool()).thenReturn(np);
         when(nps.getNodePoolNode()).thenReturn(npn);
         when(nps.getNumExecutors()).thenReturn(1);
         when(nps.getLabelString()).thenReturn(label.getDisplayName());
         when(nps.getNodeName()).thenReturn(npcName);
-        when(queueItem.getAssignedLabel()).thenReturn(label);
+        when(nps.getNodePoolJob()).thenReturn(npj);
+        //when(queueItem.getAssignedLabel()).thenReturn(label);
+        //when(queueItem.getId()).thenReturn(42L);
+
         when(np.getConn()).thenReturn(conn);
         when(np.getRequestor()).thenReturn(requestor);
         when(np.getCharset()).thenReturn(charset);
         when(np.getLabelPrefix()).thenReturn(labelPrefix);
         when(np.getRequestRoot()).thenReturn(requestRoot);
         when(np.getNodeRoot()).thenReturn(nodeRoot);
-        when(task.getAssignedLabel()).thenReturn(label);
         when(np.nodePoolLabelFromJenkinsLabel(label.getDisplayName())).thenReturn(npLabel);
-
-        allocatedNodes = new ArrayList();
-        allocatedNodes.add(npn);
+        when(task.getAssignedLabel()).thenReturn(label);
+        try {
+            when(task.getNode()).thenReturn(fn);
+            when(feo.getExecutable()).thenReturn(run);
+        } catch (IOException ex) {
+            Logger.getLogger(Mocks.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (InterruptedException ex) {
+            Logger.getLogger(Mocks.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        when(fn.getExecution()).thenReturn(fe);
+        when(fe.getOwner()).thenReturn(feo);
+        try {
+            when(feo.getExecutable()).thenReturn(run);
+        } catch (IOException ex) {
+            Logger.getLogger(Mocks.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        when(run.getBuildStatusSummary()).thenReturn(new Run.Summary(false, "message"));
+        when(run.getParent()).thenReturn(job);
+        when(run.getNumber()).thenReturn(22);
+        when(run.isBuilding()).thenReturn(true);
+        when(job.getDisplayName()).thenReturn("a job");
+        when(npj.getTask()).thenReturn(task);
+        when(npj.getAttempts()).thenReturn(attemptListSuccess);
+        when(npj.getRun()).thenReturn(run);
+        when(attemptSuccess.isSuccess()).thenReturn(true);
+        when(attemptSuccess.getDurationSeconds()).thenReturn(1L);
+        when(attemptFailure.isSuccess()).thenReturn(false);
+        when(attemptFailure.getDurationSeconds()).thenReturn(1L);
         try {
             when(nr.getAllocatedNodes()).thenReturn(allocatedNodes);
+            doNothing().when(nr).updateFromZK();
+            when(nr.getState()).thenReturn(NodePoolState.FULFILLED);
         } catch (Exception ex) {
             Logger.getLogger(Mocks.class.getName()).log(Level.SEVERE, null, ex);
         }
+
     }
 
     void cleanup() {

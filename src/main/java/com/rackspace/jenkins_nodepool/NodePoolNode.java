@@ -1,11 +1,10 @@
 package com.rackspace.jenkins_nodepool;
 
+import static java.lang.String.format;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import static java.lang.String.format;
 
 
 /**
@@ -25,18 +24,36 @@ public class NodePoolNode extends ZooKeeperObject {
     final KazooLock lock;
 
     /**
+     * The job this node was requested for
+     */
+    final NodePoolJob nodePoolJob;
+
+    /**
      * Creates a new Zookeeper node for the node pool.
      *
      * @param nodePool NodePool
      * @param id       id of node as represented in ZooKeeper
+     * @param npj      NodePoolJob object representing the build that this node was requested for.
      * @throws Exception on ZooKeeper error
      */
-    public NodePoolNode(NodePool nodePool, String id) throws Exception {
+    public NodePoolNode(NodePool nodePool, String id, NodePoolJob npj) throws Exception {
         super(nodePool);
+        this.nodePoolJob = npj;
         super.setPath(format("/%s/%s", nodePool.getNodeRoot(), id));
         super.setZKID(id);
         super.updateFromZK();
-        this.lock = new KazooLock(getLockPath(), nodePool);
+        data.put("build_id", npj.getBuildId());
+        super.writeToZK();
+        this.lock = new KazooLock(getLockPath(), nodePool, npj);
+
+    }
+
+    /**
+     * Get the NodePoolJob associated with this node
+     * @return NodePoolJob object
+     */
+    public NodePoolJob getJob(){
+        return this.nodePoolJob;
     }
 
     /**
