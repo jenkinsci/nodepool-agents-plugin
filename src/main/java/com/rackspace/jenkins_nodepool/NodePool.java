@@ -40,10 +40,18 @@ import hudson.security.AccessControlled;
 import hudson.util.FormFieldValidator;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
+import jenkins.model.Jenkins;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.zookeeper.CreateMode;
+import org.joda.time.LocalDateTime;
+import org.kohsuke.stapler.*;
+
+import javax.servlet.ServletException;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.text.MessageFormat;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -51,13 +59,6 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.servlet.ServletException;
-import jenkins.model.Jenkins;
-import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.framework.CuratorFrameworkFactory;
-import org.apache.curator.retry.ExponentialBackoffRetry;
-import org.apache.zookeeper.CreateMode;
-import org.kohsuke.stapler.*;
 
 /**
  * Representation of a ZooKeeper+NodePool cluster configuration.
@@ -449,7 +450,7 @@ public class NodePool implements Describable<NodePool> {
 
         for (int i = 0; i < maxAttempts; i++) {
             try {
-                if(job.getRun().isBuilding()){
+                if (job.getRun().isBuilding()) {
                     attemptProvision(job, timeoutInSec);
                     break;
                 } else {
@@ -547,18 +548,21 @@ public class NodePool implements Describable<NodePool> {
 
                 LocalDateTime launchDeadline = LocalDateTime.now().plusMinutes(LAUNCH_TIMEOUT_MINUTES);
                 NodePoolComputer npc;
-                while (true){
+                while (true) {
                     npc = (NodePoolComputer) Jenkins.getInstance().getComputer(nodePoolJob.getNodePoolNode().getName());
-                    if(LocalDateTime.now().isAfter(launchDeadline)){
+                    if (LocalDateTime.now().isAfter(launchDeadline)) {
                         break;
                     }
-                    if(npc == null|| npc.isOffline()){
+                    if (npc == null || npc.isOffline()) {
                         Thread.sleep(10000);
                         continue;
                     }
                 }
-                if (npc == null || npc.isOffline()){
-                    throw new Exception("Failed to launch Jenkins agent on "+nps.getNodePoolNode().getName());
+                if (npc == null || npc.isOffline()) {
+                    if (npc != null) {
+                        npc.doDoDelete();
+                    }
+                    throw new Exception("Failed to launch Jenkins agent on " + nps.getNodePoolNode().getName());
                 }
                 nodePoolJob.logToBoth("NodePoolSlave instance " + nps.getNodePoolNode().getName() +
                         " with host: " + nps.getNodePoolNode().getHost() +

@@ -23,24 +23,27 @@
  */
 package com.rackspace.jenkins_nodepool;
 
-import static com.rackspace.jenkins_nodepool.NodePoolUtils.covertHoldUtilStringToEpochMs;
 import hudson.Extension;
 import hudson.model.*;
 import hudson.plugins.sshslaves.verifiers.ManuallyProvidedKeyVerificationStrategy;
 import hudson.slaves.RetentionStrategy;
 import hudson.util.RunList;
+import jenkins.model.Jenkins;
+import net.sf.json.JSONObject;
+import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.StaplerRequest;
+
 import java.io.IOException;
 import java.time.Duration;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
-import static java.util.logging.Level.*;
 import java.util.logging.Logger;
-import jenkins.model.Jenkins;
-import net.sf.json.JSONObject;
-import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.StaplerRequest;
+
+import static com.rackspace.jenkins_nodepool.NodePoolUtils.covertHoldUtilStringToEpochMs;
+import static java.util.logging.Level.FINE;
+import static java.util.logging.Level.WARNING;
 
 /**
  * Representation of a Jenkins slave sourced from NodePool.
@@ -134,23 +137,24 @@ public class NodePoolSlave extends Slave {
                         "", //prefixStartSlaveCmd
                         "", //suffixStartSlaveCmd
                         60, //launchTimeoutSeconds
-                         2, //maxNumRetries keep this low, as the whole provision process is retried (request, accept, launch)
+                        2, //maxNumRetries keep this low, as the whole provision process is retried (request, accept, launch)
                         10, //retryWaitTime
                         new ManuallyProvidedKeyVerificationStrategy(nodePoolNode.getHostKey())
                 ),
                 RetentionStrategy.NOOP, //retentionStrategy
                 new ArrayList() //nodeProperties
         );
-        this.nodePoolJob =  npj;
+        this.nodePoolJob = npj;
         this.nodePoolNode = nodePoolNode;
-        this.nodePoolJob.logToBoth("NodePoolSlave created: "+ this.getDisplayName());
+        this.nodePoolJob.logToBoth("NodePoolSlave created: " + this.getDisplayName());
     }
 
     /**
      * Get the NodePoolJob this slave was created for
+     *
      * @return NodePoolJob object
      */
-    public NodePoolJob getJob(){
+    public NodePoolJob getJob() {
         return this.nodePoolJob;
     }
 
@@ -179,7 +183,7 @@ public class NodePoolSlave extends Slave {
         return nodePoolNode;
     }
 
-    public String getBuildUrl(){
+    public String getBuildUrl() {
         return Jenkins.getInstance().getRootUrl() + nodePoolJob.getRun().getUrl();
     }
 
@@ -219,7 +223,6 @@ public class NodePoolSlave extends Slave {
 
         final boolean heldFlag = form.getBoolean("held");
         setHeld(heldFlag);
-        LOG.log(FINE, "Set node hold to: " + isHeld());
 
         // Set the number of executors from the form value
         setNumExecutors(form.getInt("numExecutors"));
@@ -274,7 +277,7 @@ public class NodePoolSlave extends Slave {
      */
     public void setHeld(boolean held) {
         this.held = held;
-        this.nodePoolJob.logToBoth("Setting hold status for "+this.getDisplayName()+" to "+this.held);
+        this.nodePoolJob.logToBoth("Setting hold status for " + this.getDisplayName() + " to " + this.held);
     }
 
     /**
@@ -324,9 +327,10 @@ public class NodePoolSlave extends Slave {
 
     /**
      * Get a reference to the nodepoolJob related to this agent
+     *
      * @return nodePoolJob object.
      */
-    public NodePoolJob getNodePoolJob(){
+    public NodePoolJob getNodePoolJob() {
         return nodePoolJob;
     }
 
@@ -503,8 +507,8 @@ public class NodePoolSlave extends Slave {
         }
     }
 
-    public Boolean isFinished(){
-        return ! nodePoolJob.getRun().isBuilding();
+    public Boolean isFinished() {
+        return !nodePoolJob.getRun().isBuilding();
     }
 
     /**
