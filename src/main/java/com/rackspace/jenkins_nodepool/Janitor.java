@@ -1,7 +1,8 @@
 package com.rackspace.jenkins_nodepool;
 
 import com.google.gson.Gson;
-import com.rackspace.jenkins_nodepool.models.ZKNodeModel;
+import com.rackspace.jenkins_nodepool.models.NodeModel;
+import com.rackspace.jenkins_nodepool.models.NodeRequestModel;
 import hudson.model.Node;
 import hudson.model.Run;
 import hudson.model.labels.LabelAtom;
@@ -104,8 +105,18 @@ class Janitor implements Runnable {
             final NodePoolSlave nodePoolSlave = (NodePoolSlave) node;
             NodePoolJob nodePoolJob = nodePoolSlave.getJob();
 
-            LOG.log(FINE, "Evaluating NodePool Node: " + nodePoolSlave);
-            WorkflowRun run = (WorkflowRun) nodePoolSlave.getJob().getRun();
+            LOG.log(FINE, format("Evaluating NodePool Node: %s", nodePoolSlave));
+            final NodePoolJob job = nodePoolSlave.getJob();
+            if (job == null) {
+                LOG.log(WARNING, format("NodePool Node: %s does not have a job. Skipping.", nodePoolSlave));
+                continue;
+            }
+
+            final WorkflowRun run = (WorkflowRun) job.getRun();
+            if (run == null) {
+                LOG.log(WARNING, format("NodePool Node: %s does not have a workflow run object associated with the job. Skipping.", nodePoolSlave));
+                continue;
+            }
 
             if (run.isBuilding()) {
                 // The associated build is still executing,
@@ -192,11 +203,31 @@ class Janitor implements Runnable {
 
         // Only interested in NP nodes
         if (NodePools.get().getNodePools().isEmpty()) {
-            LOG.log(WARNING, "Empty NodePool list - unable to query for requests and nodes.");
+            LOG.log(FINE, "Empty NodePool list - unable to query for requests and nodes.");
             return;
         }
 
         try {
+            LOG.log(FINE, "Looking for requests...");
+            final String zkNodesRequestRootPath = format("/%s", NodePools.get().getNodePools().get(0).getRequestRoot());
+            final List<String> nodesRequestPaths = conn.getChildren().forPath(zkNodesRequestRootPath);
+            if (nodesRequestPaths.isEmpty()) {
+                LOG.log(FINE, "No Node Requests registered.");
+            } else {
+                for (String nodeRequestPath : nodesRequestPaths) {
+                    // Read and parse the data into a POJO model
+                    final String path = format("%s/%s", zkNodesRequestRootPath, nodeRequestPath);
+                    //LOG.log(FINE, format("ZK Node Request path: %s", path));
+                    final byte[] data = conn.getData().forPath(path);
+                    final NodeRequestModel model = gson.fromJson(new String(data, StandardCharsets.UTF_8), NodeRequestModel.class);
+                    LOG.log(FINE, format("Node Request, path: %s, state: %s, requestor: %s, build id: %s",
+                            path,
+                            model.getState(),
+                            model.getRequestor(),
+                            model.getBuild_id()));
+                }
+            }
+
             LOG.log(FINE, "Looking for nodes...");
             final String zkNodesRootPath = format("/%s", NodePools.get().getNodePools().get(0).getNodeRoot());
             final List<String> nodesPaths = conn.getChildren().forPath(zkNodesRootPath);
@@ -207,7 +238,7 @@ class Janitor implements Runnable {
                     // Read and parse the data into a POJO model
                     final String path = format("%s/%s", zkNodesRootPath, nodePath);
                     final byte[] data = conn.getData().forPath(path);
-                    final ZKNodeModel model = gson.fromJson(new String(data, StandardCharsets.UTF_8), ZKNodeModel.class);
+                    final NodeModel model = gson.fromJson(new String(data, StandardCharsets.UTF_8), NodeModel.class);
 
                     // If we have a build id, then we should get a Run object - will be null if node isn't allocated
                     // to a job yet (on standby/min-ready)
@@ -251,7 +282,7 @@ class Janitor implements Runnable {
                         // Toggle the state to used
                         model.setState(NodePoolState.USED.getStateString());
                         // Save the changes back to ZK
-                        final String jsonStringModel = gson.toJson(model, ZKNodeModel.class);
+                        final String jsonStringModel = gson.toJson(model, NodeModel.class);
                         conn.setData().forPath(path, jsonStringModel.getBytes(StandardCharsets.UTF_8));
                         LOG.log(FINE, format("Retired Node (not held): %s, region: %s, held: %b, allocated to: %s, build id: %s, is running: %s - changed state to USED - launcher should remove.",
                                 nodePath,

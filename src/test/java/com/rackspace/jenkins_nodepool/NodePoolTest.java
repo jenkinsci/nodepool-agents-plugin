@@ -24,17 +24,19 @@
 package com.rackspace.jenkins_nodepool;
 
 import hudson.model.Descriptor;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.imps.CuratorFrameworkState;
+import org.junit.*;
+import org.jvnet.hudson.test.JenkinsRule;
+
 import java.text.MessageFormat;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.framework.imps.CuratorFrameworkState;
-import org.junit.*;
+
 import static org.junit.Assert.*;
-import org.jvnet.hudson.test.JenkinsRule;
 import static org.mockito.Mockito.*;
 
 /**
@@ -198,7 +200,7 @@ public class NodePoolTest {
         // to fulfil requests.
         Long start = System.currentTimeMillis();
         Integer requestTimeout = 2;
-        final NodeRequest request = new NodeRequest(m.np, m.npj);
+        final NodeRequest request = new NodeRequest(m.np, m.priority, m.npj);
 
         try {
             np.attemptProvisionNode2(request, requestTimeout);
@@ -235,7 +237,6 @@ public class NodePoolTest {
 
         final NodePoolJob job = new NodePoolJob(m.label, m.task, m.qID);
 
-        when(m.npn.getNodePool()).thenReturn(np);
         doReturn(m.nr).when(np).createNodeRequest(job);
         //doNothing().when(np).attemptProvision(job, timeoutInSec);
         //when(np.createNodeRequest(job)).thenReturn(m.nr);

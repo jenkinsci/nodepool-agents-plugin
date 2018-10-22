@@ -27,19 +27,23 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.Extension;
 import hudson.model.Label;
 import hudson.model.Queue;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import jenkins.model.GlobalConfiguration;
 import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.StaplerRequest;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.logging.Logger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import static java.lang.String.format;
+import static java.util.logging.Level.FINE;
+import static java.util.logging.Level.INFO;
 
 /**
  * Top level Jenkins configuration class to manage all NodePool configuration
@@ -142,14 +146,16 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
      */
     public void provisionNode(Label label, Queue.Task task, long queueID) throws IllegalArgumentException, Exception {
         final NodePoolJob job = new NodePoolJob(label, task, queueID);
-        LOG.log(Level.INFO, job.getOverviewString());
+        LOG.log(INFO, job.getOverviewString());
         nodePoolJobHistory.add(job);
 
         try {
-            for (NodePool np : nodePoolsForLabel(label)) {
-                np.provisionNode(job);
-                // Prevent multiple nodes being provisioned if label prefixes were to overlap.
-                break;
+            LOG.log(FINE, format("Scanning for nodes matching label: %s", label));
+            final List<NodePool> nodePoolsMatchingLabel = nodePoolsForLabel(label);
+            if (nodePoolsMatchingLabel == null || nodePoolsMatchingLabel.isEmpty()) {
+                LOG.log(INFO, format("No NodePool instances matching label: %s", label));
+            } else {
+                nodePoolsMatchingLabel.get(0).provisionNode(job);
             }
         } catch (NodePoolException e) {
             // we failed to provision the node(s), cancel the job

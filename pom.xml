@@ -84,6 +84,19 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>org.jenkins-ci.tools</groupId>
+                <artifactId>maven-hpi-plugin</artifactId>
+                <configuration>
+                    <!-- See: https://jenkinsci.github.io/maven-hpi-plugin/run-mojo.html -->
+                    <loggers>
+                        <com.rackspace>ALL</com.rackspace>
+                        <org.apache.zookeeper>WARNING</org.apache.zookeeper>
+                        <org.apache.curator>WARNING</org.apache.curator>
+                        <org.springframework.beans>WARNING</org.springframework.beans>
+                    </loggers>
+                </configuration>
+            </plugin>
+            <plugin>
                 <groupId>org.eclipse.jetty</groupId>
                 <artifactId>jetty-maven-plugin</artifactId>
                 <version>9.4.10.v20180503</version>

@@ -4,9 +4,9 @@ import java.io.Serializable;
 import java.util.List;
 import java.util.Objects;
 
-public class ZKNodeModel implements Serializable {
+public class NodeModel implements Serializable {
     private List<String> host_keys;
-    private Float state_time;
+    private Double state_time;
     private Float created_time;
     private String launcher;
     private String allocated_to;
@@ -33,7 +33,10 @@ public class ZKNodeModel implements Serializable {
     private String region;
     private String build_id;
 
-    public ZKNodeModel(List<String> host_keys, Float state_time, Float created_time, String launcher, String allocated_to, String pool, String interface_ip, Integer ssh_port, String hostname, String public_ipv6, String public_ipv4, String private_ipv4, Integer connection_port, String connection_type, String cloud, String image_id, Long hold_expiration, String hold_job, String username, String az, String provider, String external_id, List<String> type, String comment, String state, String region, String build_id) {
+    public NodeModel() {
+    }
+
+    public NodeModel(List<String> host_keys, Double state_time, Float created_time, String launcher, String allocated_to, String pool, String interface_ip, Integer ssh_port, String hostname, String public_ipv6, String public_ipv4, String private_ipv4, Integer connection_port, String connection_type, String cloud, String image_id, Long hold_expiration, String hold_job, String username, String az, String provider, String external_id, List<String> type, String comment, String state, String region, String build_id) {
         this.host_keys = host_keys;
         this.state_time = state_time;
         this.created_time = created_time;
@@ -71,11 +74,11 @@ public class ZKNodeModel implements Serializable {
         this.host_keys = host_keys;
     }
 
-    public Float getState_time() {
+    public Double getState_time() {
         return state_time;
     }
 
-    public void setState_time(Float state_time) {
+    public void setState_time(Double state_time) {
         this.state_time = state_time;
     }
 
@@ -160,7 +163,11 @@ public class ZKNodeModel implements Serializable {
     }
 
     public Integer getConnection_port() {
-        return connection_port;
+        if (connection_port == null) {
+            return 22;
+        } else {
+            return connection_port;
+        }
     }
 
     public void setConnection_port(Integer connection_port) {
@@ -283,7 +290,7 @@ public class ZKNodeModel implements Serializable {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        ZKNodeModel that = (ZKNodeModel) o;
+        NodeModel that = (NodeModel) o;
         return Objects.equals(host_keys, that.host_keys) &&
                 Objects.equals(state_time, that.state_time) &&
                 Objects.equals(created_time, that.created_time) &&
@@ -320,7 +327,7 @@ public class ZKNodeModel implements Serializable {
 
     @Override
     public String toString() {
-        return "ZKNodeModel{" +
+        return "NodeModel{" +
                 "host_keys=" + host_keys +
                 ", state_time=" + state_time +
                 ", created_time=" + created_time +

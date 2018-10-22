@@ -21,6 +21,7 @@ import hudson.slaves.ComputerLauncher;
 import hudson.slaves.SlaveComputer;
 import hudson.util.NamingThreadFactory;
 import hudson.util.NullStream;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -220,7 +221,7 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
                                 throw e;
                             }
                         }
-                        Thread.sleep(TimeUnit.SECONDS.toMillis(retryWaitTimeSeconds*(i+1)));
+                        Thread.sleep(TimeUnit.SECONDS.toMillis(retryWaitTimeSeconds * (i + 1L)));
                     }
 
                     // The java binary _should_ be in the path now

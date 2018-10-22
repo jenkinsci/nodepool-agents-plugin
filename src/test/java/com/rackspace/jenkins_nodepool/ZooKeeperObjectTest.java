@@ -23,35 +23,26 @@
  */
 package com.rackspace.jenkins_nodepool;
 
-import com.google.gson.Gson;
-import java.util.HashMap;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.rackspace.jenkins_nodepool.models.NodeRequestModel;
+import org.apache.zookeeper.CreateMode;
+import org.junit.*;
+
+import java.util.List;
 import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import org.apache.zookeeper.data.Stat;
-import org.junit.After;
-import org.junit.AfterClass;
+
+import static java.lang.String.format;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import static org.junit.Assert.fail;
 
 /**
- *
  * @author hughsaunders
  */
 public class ZooKeeperObjectTest {
 
-    Mocks m;
-    ZooKeeperObjectImpl zko;
-    String key;
-    String value;
-    String path;
-    Map map;
+    private Mocks m;
+    private ZooKeeperObject<NodeRequestModel> zko;
 
     public ZooKeeperObjectTest() {
     }
@@ -66,14 +57,10 @@ public class ZooKeeperObjectTest {
 
     @Before
     public void setUp() {
-        path = "/tgfzk";
-
         m = new Mocks();
-        zko = new ZooKeeperObjectImpl(m.np);
-        zko.setPath(path);
-        assert m.np.getConn() != null;
-        map = new HashMap();
-        map.put(key, value);
+        // Create an instance of the ZK object wrapper - path is relative to the ZK connection namespace (typically: /nodepool)
+        // Create a dummy ZK object for a model - model isn't important
+        zko = new ZooKeeperObject<>(format("/%s/%s-", m.np.getRequestRoot(), 100), m.npID, m.np.getConn(), NodeRequestModel.class);
     }
 
     @After
@@ -81,102 +68,85 @@ public class ZooKeeperObjectTest {
         m.cleanup();
     }
 
-    /**
-     * Test of updateFromMap method, of class ZooKeeperObject.
-     */
     @Test
-    public void testUpdateFromMap() {
+    public void testRequestModel() {
+        // Create a request model
+        final NodeRequestModel model = new NodeRequestModel();
+        model.setState(NodePoolState.INIT);
+        model.setRequestor("my jenkins");
+        model.setState_time(new Double(System.currentTimeMillis() / 1000.0d));
+        model.setReuse(false);
+        model.setBuild_id("44");
 
-        zko.updateFromMap(map);
-        String rvalue = (String) zko.data.get(key);
-        assertEquals(value, rvalue);
-    }
-
-    /**
-     * Test of getFromZK method, of class ZooKeeperObject.
-     */
-    @Test
-    public void testGetFromZK() throws Exception {
-        m.writeNodeData(path, map);
-        Map rdata = zko.getFromZK();
-        String rvalue = (String) rdata.get(key);
-        assertEquals(value, rvalue);
-    }
-
-    /**
-     * Test of updateFromZK method, of class ZooKeeperObject.
-     */
-    @Test
-    public void testUpdateFromZK() throws Exception {
-        m.writeNodeData(path, map);
-        zko.updateFromZK();
-        String rvalue = (String) zko.data.get(key);
-        assertEquals(value, rvalue);
-    }
-
-    /**
-     * Test of getJson method, of class ZooKeeperObject.
-     */
-    @Test
-    public void testGetJson() {
-        zko.data.clear();
-        zko.data.put(key, value);
-        Map rdata = new Gson().fromJson(zko.getJson(), Map.class);
-        assertEquals(value, rdata.get(key));
-    }
-
-    /**
-     * Test of writeToZK method, of class ZooKeeperObject.
-     */
-    @Test
-    public void testWriteToZK() throws Exception {
-        zko.data.clear();
-        zko.data.put(key, value);
-        zko.writeToZK();
-        Map rdata = m.getNodeData(path);
-        assertEquals(value, rdata.get(key));
-
-    }
-
-    /**
-     * Test of delete method, of class ZooKeeperObject.
-     */
-    @Test
-    public void testDelete() {
-        Stat results = null;
         try {
-            zko.createZNode();
-            results = m.conn.checkExists().forPath(path);
-        } catch (Exception ex) {
-            Logger.getLogger(ZooKeeperObjectTest.class.getName()).log(Level.SEVERE, null, ex);
+            // Save it
+            final String newPath = zko.save(model, CreateMode.EPHEMERAL_SEQUENTIAL);
+            // Load it back
+            final NodeRequestModel loadedModel = zko.load();
+            // Check the values
+            assertEquals("BuildID should be: " + model.getBuild_id(), model.getBuild_id(), loadedModel.getBuild_id());
+            assertEquals("State should be: " + model.getState(), model.getState(), loadedModel.getState());
+            assertEquals("Requestor should be: " + model.getRequestor(), model.getRequestor(), loadedModel.getRequestor());
+            assertEquals("Path should be: " + zko.getPath(), zko.getPath(), newPath);
+            assertEquals("ZK ID Should be: " + zko.getZKID(), zko.getZKID(), zko.idFromPath(newPath));
+        } catch (ZookeeperException | NodePoolException e) {
+            fail("Saving Request Model failed. Message: " + e.getMessage());
         }
-        assertNotNull(results);
-        zko.delete();
-        try {
-            results = m.conn.checkExists().forPath(path);
-        } catch (Exception ex) {
-            Logger.getLogger(ZooKeeperObjectTest.class.getName()).log(Level.SEVERE, null, ex);
-        }
-        assertNull(results);
     }
 
-    /**
-     * Test of exists method, of class ZooKeeperObject.
-     */
     @Test
-    public void testExists() throws Exception {
-        Boolean result = zko.exists();
-        assertFalse(result);
-        zko.createZNode();
-        result = zko.exists();
-        assertTrue(result);
-    }
+    public void testIdsFromPath() {
+        // Valid Examples: path -> ID
+        final Map<String, String> mapValidPathIDs = ImmutableMap.of(
+                "/some/node/path/nodepool-0000000001", "0000000001",
+                "/some/other/path/nodepool-master-bionic-pubcloud-iad-0082170008", "0082170008",
+                "/some/other/path/-1747766601", "1747766601"
+        );
 
-    public class ZooKeeperObjectImpl extends ZooKeeperObject {
-
-        public ZooKeeperObjectImpl(NodePool np) {
-            super(np);
+        for (final String path : mapValidPathIDs.keySet()) {
+            try {
+                assertEquals("Testing Valid Path: " + path, mapValidPathIDs.get(path), zko.idFromPath(path));
+            } catch (NodePoolException e) {
+                fail(e.getMessage());
+            }
         }
     }
 
+    @Test
+    public void testInvalidIdsFromPath() {
+        // Invalid examples: invalid path where we can't extract the id
+        final List<String> mapInValidPathIDs = ImmutableList.of(
+                "/some/node/path/nodepool0000000001",
+                "",
+                "/",
+                "//",
+                "/-",
+                "some/path/without/leading/slash",
+                "/--",
+                "/some/node-0000000d1", // no characters allowed in numeric id portion
+                "/some/node-d00000051", // no characters allowed in numeric id portion
+                "/some/node-000000051c", // no characters allowed in numeric id portion
+                "/some/node-0000!0051", // no characters allowed in numeric id portion
+                "/some/node-0000~0051", // no characters allowed in numeric id portion
+                "/some/node-0000&0051", // no characters allowed in numeric id portion
+                "/some/node-0000*0051", // no characters allowed in numeric id portion
+                "/some/node-0$7000051", // no characters allowed in numeric id portion
+                "/some/node-0%7000051", // no characters allowed in numeric id portion
+                "/some/node-0_7000051", // no characters allowed in numeric id portion
+                "/some/node-0+7000051", // no characters allowed in numeric id portion
+                "/some/node-00700005=", // no characters allowed in numeric id portion
+                "/some/node-007000@50", // no characters allowed in numeric id portion
+                "/some/node-0#7000050" // no characters allowed in numeric id portion
+        );
+
+        // Make sure all the invalid paths throw an exception
+        for (final String path : mapInValidPathIDs) {
+            try {
+                final String id = zko.idFromPath(path);
+                fail(format("Expected to throw Exception with invalid path: %s but extracted id: %s", path, id));
+            } catch (NodePoolException e) {
+                // Ignore as this was expected with bad input
+            }
+        }
+    }
 }

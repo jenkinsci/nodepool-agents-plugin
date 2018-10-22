@@ -24,26 +24,25 @@
 package com.rackspace.jenkins_nodepool;
 
 import com.google.gson.Gson;
+import org.apache.zookeeper.data.Stat;
+import org.junit.*;
+
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
-import org.apache.zookeeper.data.Stat;
-import org.junit.*;
+
 import static org.junit.Assert.*;
 
 /**
- *
  * @author Rackspace
  */
 public class NodeRequestTest {
 
     private static final Logger LOG = Logger.getLogger(NodeRequestTest.class.getName());
     static Gson gson;
-    private final String label = "testlabel";
+    private final String label = "debian"; // matches mock data
     Mocks m;
     NodeRequest nr;
 
@@ -60,7 +59,7 @@ public class NodeRequestTest {
     @Before
     public void setUp() throws Exception {
         m = new Mocks();
-        nr = new NodeRequest(m.np, m.npj);
+        nr = new NodeRequest(m.np, m.np.getPriority(), m.npj);
     }
 
     @After
@@ -71,34 +70,14 @@ public class NodeRequestTest {
     @Test
     public void TestSerialisation() {
         try {
-            NodeRequest nr = new NodeRequest(m.np, m.npj);
-            String json = nr.toString();
-
-            LOG.fine("TestSerialisation json string: " + json);
-
-            // ensure the json is valid by deserialising it
-            Map data = gson.fromJson(json, HashMap.class);
+            NodeRequest nr = new NodeRequest(m.np, m.np.getPriority(), m.npj);
 
             // Check a couple of key value pairs are as expected
-            assertEquals("Request State is REQUESTED", NodePoolState.REQUESTED, NodePoolState.fromString((String)data.get("state")));
-            assertEquals(((List) data.get("node_types")).get(0), label);
+            assertEquals("Request State is REQUESTED", NodePoolState.REQUESTED, nr.getState());
+            assertEquals("Request Label is " + label, label, nr.getNodePoolLabel());
         } catch (Exception ex) {
             Logger.getLogger(NodeRequestTest.class.getName()).log(Level.SEVERE, null, ex);
         }
-    }
-
-    @Test
-    public void TestUpdateFromMap() {
-        try {
-            Map updateData = new HashMap();
-            updateData.put("state_time", 1);
-            updateData.put("state", NodePoolState.PENDING.getStateString());
-            nr.updateFromMap(updateData);
-            assertEquals("Request State is PENDING", NodePoolState.PENDING, nr.getState());
-        } catch (Exception ex) {
-            Logger.getLogger(NodeRequestTest.class.getName()).log(Level.SEVERE, null, ex);
-        }
-
     }
 
     /**
@@ -114,13 +93,10 @@ public class NodeRequestTest {
         m.conn.delete().forPath(rpath);
         Stat exists = m.conn.checkExists().forPath(rpath);
         assertNull(exists);
-        assertFalse(nr.exists());
 
-        nr.createZNode();
         rpath = nr.getPath();
         exists = m.conn.checkExists().forPath(rpath);
         assertNotNull(exists);
-        assertTrue(nr.exists());
     }
 
     /**
@@ -143,13 +119,14 @@ public class NodeRequestTest {
             // pass
         }
 
-        nr.data.put("state", NodePoolState.FULFILLED.getStateString());
-        List<String> nodeIds = new ArrayList();
+        assertTrue("NodePoolState FULFILLED Set", nr.updateState(NodePoolState.FULFILLED));
+        assertSame("NodePoolState FULFILLED Set", NodePoolState.FULFILLED, nr.getState());
+
+        List<String> nodeIds = new ArrayList<>();
         nodeIds.add(m.npID);
-        nr.data.put("nodes", nodeIds);
-        List<NodePoolNode> nodes = (List) nr.data.get("nodes");
-        assertNotNull(nodes);
-        assertTrue(nodes.size() == 1);
+        nr.setAllocatedNodes(nodeIds);
+        assertNotNull(nr.getAllocatedNodes());
+        assertEquals(1, nr.getAllocatedNodes().size());
     }
 
     /**
@@ -177,6 +154,4 @@ public class NodeRequestTest {
         String age = nr.getAge();
         assertTrue(Pattern.matches("[0-9]+[sm]", age));
     }
-
-
 }

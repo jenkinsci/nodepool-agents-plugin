@@ -28,15 +28,6 @@ import hudson.model.Label;
 import hudson.model.Queue;
 import hudson.model.Run;
 import hudson.model.labels.LabelAtom;
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.text.MessageFormat;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
@@ -47,6 +38,17 @@ import org.jenkinsci.plugins.workflow.graph.FlowNode;
 import org.jenkinsci.plugins.workflow.job.WorkflowJob;
 import org.jenkinsci.plugins.workflow.job.WorkflowRun;
 import org.jenkinsci.plugins.workflow.support.steps.ExecutorStepExecution.PlaceholderTask;
+
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.text.MessageFormat;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import static org.mockito.Mockito.*;
 
 /**
@@ -72,7 +74,7 @@ public class Mocks {
     NodePoolNode npn;
     NodePoolSlave nps;
     NodePoolComputer npc;
-    Double port; // I know this is dumb. I think its because GSON creates a double when deserialising.
+    Integer port; // I know this is dumb. I think its because GSON creates a double when deserialising.
 
     String priority;
     Queue.Item queueItem;
@@ -115,7 +117,7 @@ public class Mocks {
         charset = Charset.forName("UTF-8");
         npLabel = "debian";
         host = "host";
-        port = 22.0;
+        port = 22;
         credentialsID = "somecreds";
         label = new LabelAtom(MessageFormat.format("{0}{1}", labelPrefix, npLabel));
         npcName = MessageFormat.format("{0}-{1}", label.getDisplayName(), npID);
@@ -150,7 +152,6 @@ public class Mocks {
         // final, can't be mocked: when(nps.toComputer()).thenReturn(npc);
 
         // commented so spy nodepool can be returned in NodePoolTest
-        //when(npn.getNodePool()).thenReturn(np);
         when(nps.getNodePoolNode()).thenReturn(npn);
         when(nps.getNumExecutors()).thenReturn(1);
         when(nps.getLabelString()).thenReturn(label.getDisplayName());
@@ -196,7 +197,6 @@ public class Mocks {
         when(attemptFailure.getDurationSeconds()).thenReturn(1L);
         try {
             when(nr.getAllocatedNodes()).thenReturn(allocatedNodes);
-            doNothing().when(nr).updateFromZK();
             when(nr.getState()).thenReturn(NodePoolState.FULFILLED);
         } catch (Exception ex) {
             Logger.getLogger(Mocks.class.getName()).log(Level.SEVERE, null, ex);

@@ -23,15 +23,19 @@
  */
 package com.rackspace.jenkins_nodepool;
 
+import com.rackspace.jenkins_nodepool.models.NodeModel;
+import org.junit.*;
+
 import java.text.MessageFormat;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import org.junit.*;
+
 import static org.junit.Assert.*;
 
 /**
- *
  * @author hughsaunders
  */
 public class NodePoolNodeTest {
@@ -65,13 +69,18 @@ public class NodePoolNodeTest {
                     .creatingParentsIfNeeded()
                     .forPath(nodePath, m.jsonString.getBytes(m.charset));
             npn = new NodePoolNode(m.np, m.npID, m.npj);
+
+            // Create an instance of the ZK object wrapper - path is relative to the ZK connection namespace (typically: /nodepool)
+            final ZooKeeperObject<NodeModel> zkObject = new ZooKeeperObject<>("/nodes/"+m.npID, m.npID, m.conn, NodeModel.class);
             // Type field now holds a list of string values
             final List<String> types = new ArrayList<>();
             types.add(m.npLabel);
-            npn.data.put("type", types);
-            npn.data.put("interface_ip", m.host);
-            npn.data.put("connection_port", m.port);
-            npn.data.put("host_keys", hostKeys);
+            final NodeModel model = new NodeModel();
+            model.setType(types);
+            model.setInterface_ip(m.host);
+            model.setConnection_port(m.port);
+            model.setHost_keys(hostKeys);
+            zkObject.save(model);
         } catch (Exception ex) {
             Logger.getLogger(NodePoolNodeTest.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -114,7 +123,7 @@ public class NodePoolNodeTest {
     public void testGetName() {
         assertEquals(
                 MessageFormat.format("{0}-{1}", m.label.getDisplayName(), m.npID),
-                 npn.getName());
+                npn.getName());
     }
 
     /**
@@ -138,10 +147,11 @@ public class NodePoolNodeTest {
      */
     @Test
     public void testGetPortBackwardCompat() {
-        npn.data.remove("connection_port");
-        npn.data.put("ssh_port", 2222.0);
-
-        assertEquals(new Integer(2222), npn.getPort());
+        final NodeModel model = new NodeModel();
+        model.setConnection_port(m.port);
+        assertSame(m.port, model.getConnection_port());
+        model.setConnection_port(2222);
+        assertSame(2222, model.getConnection_port());
     }
 
     /**
@@ -149,8 +159,11 @@ public class NodePoolNodeTest {
      */
     @Test
     public void testDefaultPort() {
-        npn.data.remove("connection_port");
-        assertEquals(new Integer(22), npn.getPort());
+        final NodeModel model = new NodeModel();
+        model.setConnection_port(m.port);
+        assertSame(m.port, model.getConnection_port());
+        model.setConnection_port(null);
+        assertSame(m.port, model.getConnection_port());
     }
 
     /**
@@ -169,7 +182,6 @@ public class NodePoolNodeTest {
         assertTrue(hostKeys.containsAll(npn.getHostKeys()));
     }
 
-
     /**
      * Test of setInUse method, of class NodePoolNode.
      */
@@ -177,7 +189,7 @@ public class NodePoolNodeTest {
     public void testSetInUse() throws Exception {
         npn.setInUse();
         Map data = m.getNodeData(nodePath);
-        assertSame("NodePoolState is IN-USE", NodePoolState.IN_USE, NodePoolState.fromString((String)data.get("state")));
+        assertSame("NodePoolState is IN-USE", NodePoolState.IN_USE, NodePoolState.fromString((String) data.get("state")));
         assertEquals(KazooLock.State.LOCKED, npn.lock.getState());
     }
 
@@ -189,7 +201,7 @@ public class NodePoolNodeTest {
         npn.setInUse();
         npn.release();
         Map data = m.getNodeData(nodePath);
-        assertSame("NodePoolState is USED", NodePoolState.USED, NodePoolState.fromString((String)data.get("state")));
+        assertSame("NodePoolState is USED", NodePoolState.USED, NodePoolState.fromString((String) data.get("state")));
         assertEquals(KazooLock.State.UNLOCKED, npn.lock.getState());
     }
 }

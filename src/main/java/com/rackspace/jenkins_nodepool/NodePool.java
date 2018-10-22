@@ -60,6 +60,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import static java.lang.String.format;
+import static java.util.logging.Level.INFO;
+
 /**
  * Representation of a ZooKeeper+NodePool cluster configuration.
  * <p>
@@ -223,19 +226,18 @@ public class NodePool implements Describable<NodePool> {
 
         try {
             for (NodePoolNode node : allocatedNodes) {
-                LOG.log(Level.INFO, String.format("Accepting node %s on behalf of request %s", node, request.getZKID()));
+                LOG.log(INFO, format("Accepting node %s on behalf of request %s", node, request.getZKID()));
                 node.setInUse(); // TODO: debug making sure this lock stuff actually works
                 acceptedNodes.add(node);
-
             }
         } catch (Exception e) {
             // (if we hit this, then the request will get re-created on the next isDone() poll.)
-            LOG.log(Level.WARNING, "Failed to lock node" + e.getMessage(), e);
+            LOG.log(Level.WARNING, "Failed to lock node. Message: " + e.getMessage(), e);
 
             // roll back acceptance on any nodes we managed to successfully accept
             for (NodePoolNode acceptedNode : acceptedNodes) {
                 try {
-                    LOG.log(Level.INFO, String.format("Releasing node %s on behalf of request %s", acceptedNode, request.getZKID()));
+                    LOG.log(INFO, format("Releasing node %s on behalf of request %s", acceptedNode, request.getZKID()));
                     acceptedNode.release();
 
                 } catch (Exception lockException) {
@@ -454,16 +456,16 @@ public class NodePool implements Describable<NodePool> {
                     attemptProvision(job, timeoutInSec);
                     break;
                 } else {
+                    LOG.log(INFO, format("Build has been cancelled. Janitor will clean up job: %s.", job.getOverviewString()));
                     // build has been cancelled
                     // nothing else to do, janitor will cleanup any remaining objects
                     return;
                 }
-
             } catch (Exception e) {
-                job.logToBoth(String.format("Node provisioning attempt for task: %s failed. Message: %s",
+                job.logToBoth(format("Node provisioning attempt for task: %s failed. Message: %s",
                         job.getTask().getName(), e.getLocalizedMessage()), Level.WARNING);
                 if (i + 1 == maxAttempts) {
-                    throw new NodePoolException(String.format("Maximum attempts exceeded: %d out of %d.",
+                    throw new NodePoolException(format("Maximum attempts exceeded: %d out of %d.",
                             (i + 1), maxAttempts));
                 }
             }
@@ -503,7 +505,7 @@ public class NodePool implements Describable<NodePool> {
     }
 
     NodeRequest createNodeRequest(final NodePoolJob job) throws Exception {
-        return new NodeRequest(this, job);
+        return new NodeRequest(this, getPriority(), job);
     }
 
     /**
@@ -531,9 +533,6 @@ public class NodePool implements Describable<NodePool> {
                     + e.getMessage());
         }
 
-        // Update request to refresh our view
-        request.updateFromZK();
-
         // Success represents is request fulfilled - everything else is a problem.
         if (request.getState() == NodePoolState.FULFILLED) {
             allocatedNodes = acceptNodes(request);
@@ -543,7 +542,7 @@ public class NodePool implements Describable<NodePool> {
                 // This creates the slave, then the launcher and computer
                 // it returns before the launch is complete, so errors are
                 // not handled.
-                final NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId(), nodePoolJob);
+                final NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId(), nodePoolJob, getJdkHome(), getJdkInstallationScript());
                 Jenkins.getInstance().addNode(nps);
 
                 LocalDateTime launchDeadline = LocalDateTime.now().plusMinutes(LAUNCH_TIMEOUT_MINUTES);
@@ -676,7 +675,7 @@ public class NodePool implements Describable<NodePool> {
      * Release resources related to this nodepool
      */
     void cleanup() {
-        LOG.log(Level.INFO, "Removing Nodepool Configuration {0}", connectionString);
+        LOG.log(INFO, "Removing Nodepool Configuration {0}", connectionString);
         if (conn != null) {
             conn.close();
         }

@@ -113,14 +113,16 @@ public class NodePoolSlave extends Slave {
     /**
      * Create a new slave
      *
-     * @param nodePoolNode  the node from NodePool
-     * @param credentialsId the Jenkins credential identifier
-     * @param npj           The job this slave/agent was created for
+     * @param nodePoolNode          the node from NodePool
+     * @param credentialsId         the Jenkins credential identifier
+     * @param npj                   The job this slave/agent was created for
+     * @param jdkHome               the JDK home folder
+     * @param jdkInstallationScript the script for installing the JDK
      * @throws Descriptor.FormException on configuration exception
      * @throws IOException              on configuration exception
      */
     @DataBoundConstructor  // not used, but it makes stapler happy if you click "Save" while editing a Node.
-    public NodePoolSlave(NodePoolNode nodePoolNode, String credentialsId, NodePoolJob npj) throws Descriptor.FormException, IOException {
+    public NodePoolSlave(NodePoolNode nodePoolNode, String credentialsId, NodePoolJob npj, String jdkHome, String jdkInstallationScript) throws Descriptor.FormException, IOException {
         super(
                 nodePoolNode.getName(), // name
                 "Nodepool Node", // description
@@ -133,10 +135,10 @@ public class NodePoolSlave extends Slave {
                         nodePoolNode.getPort(),
                         credentialsId,
                         "", //jvmoptions
-                        determineJDKInstaller(nodePoolNode.getNodePool()), //jdkInstaller
+                        determineJDKInstaller(jdkHome, jdkInstallationScript), //jdkInstaller
                         "", //prefixStartSlaveCmd
                         "", //suffixStartSlaveCmd
-                        60, //launchTimeoutSeconds
+                        300, //launchTimeoutSeconds
                         2, //maxNumRetries keep this low, as the whole provision process is retried (request, accept, launch)
                         10, //retryWaitTime
                         new ManuallyProvidedKeyVerificationStrategy(nodePoolNode.getHostKey())
@@ -161,18 +163,17 @@ public class NodePoolSlave extends Slave {
     /**
      * A quick function to determine which JDK installer we have based on the NodePool configuration.
      *
-     * @param np a nodepool object reference
+     * @param jdkHome               the JDK home folder
+     * @param jdkInstallationScript the script to install the JDK
      * @return a NodePool JDK installer instance
      */
-    private static NodePoolJDKInstaller determineJDKInstaller(final NodePool np) {
-        final String jdkInstallationScript = np.getJdkInstallationScript();
-
+    private static NodePoolJDKInstaller determineJDKInstaller(final String jdkHome, final String jdkInstallationScript) {
         // If we are not provided a script or if the value is empty, use a default - otherwise use the script installer
         NodePoolJDKInstaller installer;
         if (jdkInstallationScript == null || jdkInstallationScript.trim().isEmpty()) {
             installer = new NodePoolDebianOpenJDKInstaller();
         } else {
-            installer = new NodePoolJDKScriptInstaller(np.getJdkInstallationScript().trim(), np.getJdkHome());
+            installer = new NodePoolJDKScriptInstaller(jdkInstallationScript.trim(), jdkHome);
         }
 
         LOG.log(FINE, String.format("Using JDK Installer:  %s", installer.getClass().getSimpleName()));

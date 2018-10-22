@@ -1,14 +1,17 @@
 package com.rackspace.jenkins_nodepool;
 
 import hudson.model.*;
+import org.jenkinsci.plugins.workflow.flow.FlowExecutionOwner;
+import org.jenkinsci.plugins.workflow.job.WorkflowRun;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
-import org.jenkinsci.plugins.workflow.flow.FlowExecutionOwner;
-import org.jenkinsci.plugins.workflow.job.WorkflowRun;
+
+import static java.lang.String.format;
 
 /**
  * Wrap a Jenkins task so we can track some information over the NodePool processing cycle.
@@ -34,29 +37,30 @@ public class NodePoolJob {
         this.task = task;
         this.run = NodePoolUtils.getRunForQueueTask(task);
         this.job = run.getParent();
-        logToBoth("NodepoolJob "+this.toString()+" tracking node usage with label: "+this.label.getDisplayName());
+        logToBoth(format("NodepoolJob %s tracking node usage with label: %s", this.toString(), this.label.getDisplayName()));
     }
 
 
     /**
      * Get string identifying the build that created this task
+     *
      * @return jobName#buildNum
      */
-    public String getBuildId(){
+    public String getBuildId() {
         return run.getExternalizableId();
     }
 
-    public String getOverviewString(){
-        return String.format("Queue Item: %s, %s Build: %s-%s, %s",
-            queueID,// Queue ID
-            task.toString(),// Queue Status
-            job.getDisplayName(),// Job Name
-            run.getNumber(), // Build Number
-            run.getBuildStatusSummary().message// Build Status
+    public String getOverviewString() {
+        return format("Queue Item: %s, %s Build: %s-%s, %s",
+                queueID,// Queue ID
+                task.toString(),// Queue Status
+                job.getDisplayName(),// Job Name
+                run.getNumber(), // Build Number
+                run.getBuildStatusSummary().message// Build Status
         );
     }
 
-    public NodePoolSlave getNodePoolSlave(){
+    public NodePoolSlave getNodePoolSlave() {
         return nodePoolSlave;
     }
 
@@ -72,18 +76,18 @@ public class NodePoolJob {
         this.nodePoolSlave = nodePoolSlave;
     }
 
-    public Run getRun(){
+    public Run getRun() {
         return run;
     }
 
-    public List<NodeRequest> getRequests(){
+    public List<NodeRequest> getRequests() {
         return attempts
                 .stream()
                 .map(a -> a.getRequest())
                 .collect(Collectors.toList());
     }
 
-    public Boolean hasRequest(NodeRequest request){
+    public Boolean hasRequest(NodeRequest request) {
         return getRequests()
                 .stream()
                 .anyMatch(r -> r.equals(request));
@@ -103,27 +107,27 @@ public class NodePoolJob {
 
     /**
      * Write message to system log and build log with level INFO.
+     *
      * @param msg the message to log
      */
-    public void logToBoth(String msg){
+    public void logToBoth(String msg) {
         logToBoth(msg, Level.INFO);
     }
 
     /**
      * Writes log message to the Jenkins System log and the relevant build log
-     * @param msg the message to log
+     *
+     * @param msg   the message to log
      * @param level the log level to use for the system log
      */
-    public void logToBoth(String msg, Level level){
-        Logger.getLogger(NodePoolJob.class.getName()).log(
-                level,
-                msg);
-        if (run != null){
+    public void logToBoth(String msg, Level level) {
+        Logger.getLogger(NodePoolJob.class.getName()).log(level, msg);
+        if (run != null) {
             WorkflowRun wr = (WorkflowRun) run;
             try {
                 FlowExecutionOwner feo = wr.asFlowExecutionOwner();
                 // findbugs
-                if (feo == null){
+                if (feo == null) {
                     return;
                 }
                 TaskListener tl = feo.getListener();
@@ -138,18 +142,18 @@ public class NodePoolJob {
 
     void addAttempt(NodeRequest request) {
         attempts.add(new Attempt(request));
-        logToBoth("Nodepool Node Requested: "+request.toString());
+        logToBoth("Nodepool Node Requested: " + request.toString());
     }
 
     void failAttempt(Exception e) {
-        logToBoth("Nodepool Node Requested Failed: "+e.toString());
+        logToBoth("Nodepool Node Requested Failed: " + e.toString());
         // mark current attempt as a failure
         getCurrentAttempt().fail(e);
     }
 
     void succeed() {
-        logToBoth("Nodepool Node Requested Succeded: "
-                +getCurrentAttempt().getRequest().toString());
+        logToBoth("Nodepool Node Requested Succeeded: "
+                + getCurrentAttempt().getRequest().toString());
         getCurrentAttempt().succeed();
     }
 
@@ -192,19 +196,10 @@ public class NodePoolJob {
      */
     public String getDurationFormatted() {
         final long seconds = getDurationSeconds();
-        return String.format("%02d:%02d:%02d",
+        return format("%02d:%02d:%02d",
                 seconds / 3600,
                 (seconds % 3600) / 60,
                 seconds % 60);
-    }
-
-    /**
-     * Returns the underlying NodePool object assisted with the current request attempt.
-     *
-     * @return the underlying NodePool object assisted with the current request attempt.
-     */
-    public NodePool getNodePool() {
-        return getCurrentAttempt().getRequest().nodePool;
     }
 
     /**
@@ -215,7 +210,7 @@ public class NodePoolJob {
      * @return build number of Jenkins project
      */
     public String getBuildNumber() {
-        if (run ==  null){
+        if (run == null) {
             return "";
         } else {
             return "#" + String.valueOf(run.number);
@@ -276,5 +271,4 @@ public class NodePoolJob {
     public String toString() {
         return "NodePoolJob[taskId=" + getTaskId() + ", task=" + task.getFullDisplayName() + ", label=" + label + "]";
     }
-
 }
