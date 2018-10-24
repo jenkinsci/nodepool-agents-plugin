@@ -74,7 +74,9 @@ public class NodePoolTest {
                 m.nodeRoot,
                 m.requestTimeout,
                 m.jdkInstallationScript,
-                m.jdkHome
+                m.jdkHome,
+                m.installTimeout,
+                m.maxAttempts
         );
     }
 
@@ -187,7 +189,7 @@ public class NodePoolTest {
         }).start();
 
         final NodePoolJob job = new NodePoolJob(m.label, m.task, m.qID);
-        np.provisionNode(job, 30, 3);
+        np.provisionNode(job, m.requestTimeout, m.maxAttempts, m.installTimeout);
 
         // this test will timeout on failure
     }
@@ -201,7 +203,7 @@ public class NodePoolTest {
         final NodeRequest request = new NodeRequest(m.np, m.npj);
 
         try {
-            np.attemptProvisionNode2(request, requestTimeout);
+            np.attemptProvisionNode2(request, requestTimeout, m.installTimeout);
             fail("Exception Expected, but not thrown");
         } catch (InterruptedException ex) {
             Long end = System.currentTimeMillis();
@@ -217,8 +219,6 @@ public class NodePoolTest {
      */
     @Test
     public void testRetries() throws Exception {
-        final int timeoutInSec = 30;
-
         final NodePool np = spy(new NodePool(
                 null,
                 "credentialsId",
@@ -228,9 +228,11 @@ public class NodePoolTest {
                 "requestor",
                 "nodepool",
                 "nodes",
-                timeoutInSec,
+                m.requestTimeout,
                 m.jdkInstallationScript,
-                m.jdkHome
+                m.jdkHome,
+                m.installTimeout,
+                2
         ));
 
         final NodePoolJob job = new NodePoolJob(m.label, m.task, m.qID);
@@ -242,12 +244,12 @@ public class NodePoolTest {
         doThrow(new NodePoolException("request fail"))
                 .doNothing()
                 .when(np)
-                .attemptProvision(job, timeoutInSec);
+                .attemptProvision(job, m.requestTimeout, m.installTimeout);
 
         //np.attemptProvision(job, timeoutInSec);
         np.provisionNode(job);  // lack of exception indicates provisioning success
 
-        verify(np, times(2)).attemptProvision(job, timeoutInSec);
+        verify(np, times(2)).attemptProvision(job, m.requestTimeout, m.installTimeout);
     }
 
     /**
@@ -255,7 +257,6 @@ public class NodePoolTest {
      */
     @Test
     public void testJobTrackingAttemptSuccessful() throws Exception {
-        final int timeoutInSec = 30;
 
         final NodePool np = spy(new NodePool(
                 null,
@@ -266,18 +267,20 @@ public class NodePoolTest {
                 "requestor",
                 "nodepool",
                 "nodes",
-                timeoutInSec,
+                m.requestTimeout,
                 m.jdkInstallationScript,
-                m.jdkHome
+                m.jdkHome,
+                m.installTimeout,
+                m.maxAttempts
         ));
 
 
         final NodeRequest request = mock(NodeRequest.class);
         doReturn(request).when(np).createNodeRequest(m.npj);
 
-        doNothing().when(np).attemptProvisionNode2(request, 30);
+        doNothing().when(np).attemptProvisionNode2(request, m.requestTimeout, m.installTimeout);
 
-        np.attemptProvision(m.npj, timeoutInSec);
+        np.attemptProvision(m.npj, m.requestTimeout, m.installTimeout);
 
         final List<Attempt> attempts = m.npj.getAttempts();
         assertEquals(1, attempts.size());
@@ -304,23 +307,25 @@ public class NodePoolTest {
                 "requestor",
                 "nodepool",
                 "nodes",
-                timeoutInSec,
+                m.requestTimeout,
                 m.jdkInstallationScript,
-                m.jdkHome
+                m.jdkHome,
+                m.installTimeout,
+                m.maxAttempts
         ));
 
 
         final NodeRequest request = mock(NodeRequest.class);
         doReturn(request).when(np).createNodeRequest(m.npj);
 
-        doThrow(new NodePoolException("request error")).when(np).attemptProvisionNode2(request, 30);
+        doThrow(new NodePoolException("request error")).when(np).attemptProvisionNode2(request, m.requestTimeout, m.installTimeout);
 
         // override mock default which is to return a single successful attempt
         when(m.npj.getAttempts()).thenReturn(m.attemptListFailure);
         boolean success = true;
 
         try {
-            np.attemptProvision(m.npj, timeoutInSec);
+            np.attemptProvision(m.npj, m.requestTimeout, m.installTimeout);
         } catch (NodePoolException e) {
             // expected
             success = false;

@@ -1,5 +1,6 @@
 zookeeper-servers:
   - host: zookeeper
+    port: 2181
 
 labels:
   - name: debian

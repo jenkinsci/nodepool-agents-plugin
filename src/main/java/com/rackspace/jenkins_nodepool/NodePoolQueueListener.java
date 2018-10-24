@@ -95,7 +95,8 @@ public class NodePoolQueueListener extends QueueListener {
                 try {
                     nodePools.provisionNode(label, wi.task, wi.getId());
                 } catch (Exception ex) {
-                    LOG.log(Level.SEVERE, ex.getLocalizedMessage(), ex);
+                    LOG.log(Level.SEVERE,
+                            "Exception thrown in provisioning thread, caught in onEnterWaiting: "+ex.getLocalizedMessage(), ex);
                 }
             });
         }

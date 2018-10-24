@@ -31,6 +31,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -56,6 +58,16 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
         return GlobalConfiguration.all().get(NodePools.class);
     }
 
+    /**
+     * Lock that controls cleanup.
+     * We cleanup nodes in the Janitor thread and whenever
+     * a job completes. This lock will be acquired by
+     * either thread when performing cleanup to prevent
+     * races
+     */
+    private transient Lock cleanupLock;
+
+
     private List<NodePool> nodePools;
 
     // track job history - do not persist across restarts
@@ -75,6 +87,9 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
     private void initTransients() {
         if (nodePools == null) {
             nodePools = new ArrayList<NodePool>();
+        }
+        if (cleanupLock == null){
+            cleanupLock = new ReentrantLock();
         }
     }
 
@@ -110,6 +125,10 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
 
     public List<NodePool> getNodePools() {
         return nodePools;
+    }
+
+    public Lock getCleanupLock() {
+        return cleanupLock;
     }
 
     @Override

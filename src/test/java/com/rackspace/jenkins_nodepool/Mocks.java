@@ -85,6 +85,8 @@ public class Mocks {
     NodeRequest nr;
     List<NodePoolNode> allocatedNodes;
     Integer requestTimeout;
+    Integer installTimeout;
+    Integer maxAttempts;
     String holdUntilRoot;
     String jdkInstallationScript;
     String jdkHome;
@@ -100,8 +102,11 @@ public class Mocks {
     List<Attempt> attemptListSuccess;
     Attempt attemptSuccess;
 
+
     public Mocks() {
         requestTimeout = 30;
+        installTimeout = 60;
+        maxAttempts = 3;
         requestor = "unittests";
         priority = "001";
         labelPrefix = "nodepool-";

@@ -142,20 +142,30 @@ public class NodePoolJob {
     }
 
     void failAttempt(Exception e) {
+        if(attempts.isEmpty()){
+            throw new IllegalStateException("Cannot mark attempt as failed if there are no attempts");
+        }
         logToBoth("Nodepool Node Requested Failed: "+e.toString());
         // mark current attempt as a failure
         getCurrentAttempt().fail(e);
     }
 
     void succeed() {
+        if(attempts.isEmpty()){
+            throw new IllegalStateException("Cannot mark attempt as successfull if there are no attempts");
+        }
         logToBoth("Nodepool Node Requested Succeded: "
                 +getCurrentAttempt().getRequest().toString());
         getCurrentAttempt().succeed();
     }
 
     private Attempt getCurrentAttempt() {
-        final int sz = attempts.size();
-        return attempts.get(sz - 1);
+        if (!attempts.isEmpty()){
+            final int sz = attempts.size();
+            return attempts.get(sz - 1);
+        }else{
+            return null;
+        }
     }
 
     public List<Attempt> getAttempts() {
@@ -164,14 +174,23 @@ public class NodePoolJob {
 
 
     public boolean isDone() {
+        if (attempts.isEmpty()){
+            return false;
+        }
         return getCurrentAttempt().isDone();
     }
 
     public boolean isSuccess() {
+        if (attempts.isEmpty()){
+            return false;
+        }
         return getCurrentAttempt().isSuccess();
     }
 
     public boolean isFailure() {
+        if(attempts.isEmpty()){
+            return false;
+        }
         return getCurrentAttempt().isFailure();
     }
 
@@ -196,15 +215,6 @@ public class NodePoolJob {
                 seconds / 3600,
                 (seconds % 3600) / 60,
                 seconds % 60);
-    }
-
-    /**
-     * Returns the underlying NodePool object assisted with the current request attempt.
-     *
-     * @return the underlying NodePool object assisted with the current request attempt.
-     */
-    public NodePool getNodePool() {
-        return getCurrentAttempt().getRequest().nodePool;
     }
 
     /**

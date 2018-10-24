@@ -220,7 +220,11 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
                                 throw e;
                             }
                         }
-                        Thread.sleep(TimeUnit.SECONDS.toMillis(retryWaitTimeSeconds*(i+1)));
+                        try {
+                            Thread.sleep(TimeUnit.SECONDS.toMillis(retryWaitTimeSeconds*(i+1)));
+                        }catch (InterruptedException e){
+                            // meh
+                        }
                     }
 
                     // The java binary _should_ be in the path now
@@ -400,7 +404,11 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
                     throw ioexception;
                 }
             }
-            Thread.sleep(TimeUnit.SECONDS.toMillis(retryWaitTimeSeconds));
+            try {
+                Thread.sleep(TimeUnit.SECONDS.toMillis(retryWaitTimeSeconds));
+            } catch (InterruptedException ex){
+                Thread.currentThread().interrupt();
+            }
         }
 
         StandardUsernameCredentials credentials = getCredentials();

@@ -135,15 +135,19 @@ public class NodePoolSlave extends Slave {
                         "", //suffixStartSlaveCmd
                         60, //launchTimeoutSeconds
                          2, //maxNumRetries keep this low, as the whole provision process is retried (request, accept, launch)
-                        10, //retryWaitTime
+                        60, //retryWaitTime. This should relate to launchTimeout in NodePool.java
                         new ManuallyProvidedKeyVerificationStrategy(nodePoolNode.getHostKey())
                 ),
                 RetentionStrategy.NOOP, //retentionStrategy
                 new ArrayList() //nodeProperties
         );
         this.nodePoolJob =  npj;
+        if(this.nodePoolJob == null){
+            LOG.warning("NodePoolJob null in NodePoolSlave constructor");
+        } else {
+            this.nodePoolJob.logToBoth("NodePoolSlave created: "+ this.getDisplayName());
+        }
         this.nodePoolNode = nodePoolNode;
-        this.nodePoolJob.logToBoth("NodePoolSlave created: "+ this.getDisplayName());
     }
 
     /**

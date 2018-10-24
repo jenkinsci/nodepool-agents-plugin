@@ -24,10 +24,15 @@
 package com.rackspace.jenkins_nodepool;
 
 import hudson.model.*;
+import hudson.slaves.OfflineCause;
 import hudson.slaves.SlaveComputer;
 import java.io.IOException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.locks.Lock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import jenkins.model.Jenkins;
 import org.kohsuke.stapler.HttpResponse;
 
 /**
@@ -54,7 +59,11 @@ public class NodePoolComputer extends SlaveComputer {
     public NodePoolComputer(final NodePoolSlave nps, final NodePoolNode npn, final NodePoolJob npj) {
         super(nps);
         this.nodePoolJob = npj;
-        this.nodePoolJob.logToBoth(("NodePoolComputer created: "+this.nodeName));
+        if (npj == null){
+            LOG.warning("NodePoolJob null in NodePoolComputerConstructor");
+        } else {
+            this.nodePoolJob.logToBoth(("NodePoolComputer created: "+this.nodeName));
+        }
 
         setNodePoolNode(npn);
         if (npn != null) {
@@ -71,6 +80,31 @@ public class NodePoolComputer extends SlaveComputer {
             });
         }
     }
+
+    /**
+     * Override so that lock can be used for cleaning up
+     * @param cause: reason for disconnecting
+     * @return Future representing disconnect progress
+     */
+    @Override
+    public Future<?> disconnect(OfflineCause cause) {
+        Lock cleanupLock = NodePools.get().getCleanupLock();
+        Future<?> result = null;
+        cleanupLock.lock();
+        try{
+            result = super.disconnect(cause); //To change body of generated methods, choose Tools | Templates.
+            // Call get to block until disconnection
+            // has been executed, to ensure execution
+            // happens while cleanupLock is held.
+            result.get();
+        } catch (InterruptedException | ExecutionException ex) {
+            Logger.getLogger(NodePoolComputer.class.getName()).log(Level.SEVERE, null, ex);
+        } finally {
+            cleanupLock.unlock();
+        }
+        return result;
+    }
+
 
     /**
      * Get the Job associated with this computer
@@ -200,19 +234,50 @@ public class NodePoolComputer extends SlaveComputer {
 
         LOG.log(Level.INFO, "Deleting NodePoolNode: {0} after task: {1}", new Object[]{computer,
                 task.getFullDisplayName()});
-
-        Computer.threadPoolForRemoting.submit(() -> {
-            try {
-                if (computer == null) {
-                    LOG.log(Level.WARNING, "Unable to delete NodePool node - computer reference is null");
-                } else {
-                    computer.doDoDelete();
+        try{
+            Computer.threadPoolForRemoting.submit(() -> {
+                // Wait for other processes that may still be cleaning up
+                // as its likely a build has just finished. Not waiting
+                // here leads to IOExceptions in the log.
+                // This time is essentially free as its in a background
+                // thread.
+                try {
+                    Thread.sleep(30000L);
+                } catch (InterruptedException ex) {
+                    // meh we woke up
                 }
-            } catch (IOException ex) {
-                LOG.log(Level.WARNING,
-                        String.format("%s error while deleting node. Message: %s. Was it already deleted?",
-                                ex.getClass().getSimpleName(), ex.getLocalizedMessage()));
-            }
-        });
+
+                Jenkins jenkins = Jenkins.getInstance();
+                // Lock to prevent cleanup races with the Janitor thread
+                Lock cleanupLock = NodePools.get().getCleanupLock();
+
+                // semantics are such that unlock fails
+                // if lock is not held
+                cleanupLock.lock();
+                try {
+                    // Check that the computer is still registered with Jenkins
+                    // If it's already been removed by the Janitor then npc
+                    // will be null.
+                    NodePoolComputer npc = (NodePoolComputer) jenkins.getComputer(this.name);
+                    if (npc == null) {
+                        LOG.log(Level.INFO, "Computer already unregistered, skipping end of build cleanup");
+                    } else if (computer == null) {
+                        LOG.info("Not cleaning null computer");
+                    } else {
+                        computer.doDoDelete();
+                    }
+                } catch (Exception ex) {
+                    LOG.log(Level.WARNING,
+                            String.format("%s error while deleting node (in threadPoolForRemtoing). Message: %s. Was it already deleted?",
+                                    ex.getClass().getSimpleName(), ex.getLocalizedMessage()));
+                }finally{
+                    cleanupLock.unlock();
+                }
+            });
+        } catch (Exception ex){
+             LOG.log(Level.WARNING,
+                     String.format("%s error while deleting node (in taskCompleted handler). Message: %s. Was it already deleted?",
+                                    ex.getClass().getSimpleName(), ex.getLocalizedMessage()));
+        }
     }
 }
