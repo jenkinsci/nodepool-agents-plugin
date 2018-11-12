@@ -5,7 +5,7 @@
             <f:textbox/>
         </f:entry>
         <f:validateButton title="Test ZooKeeper Connection"
-                          progress="Testing.." 
+                          progress="Testing.."
                           method="testZooKeeperConnection"
                           with="connectionString">
         </f:validateButton>
@@ -15,10 +15,16 @@
         <f:entry title="Label Prefix" field="labelPrefix">
             <f:textbox default="nodepool-"></f:textbox>
         </f:entry>
-        <f:entry title="Request Timeout Seconds" field="requestTimeout">
-            <f:number default="500"></f:number>
-        </f:entry>
         <f:advanced>
+            <f:entry title="Install Timeout Seconds" field="installTimeout">
+                <f:number default="240"></f:number>
+            </f:entry>
+            <f:entry title="Request Timeout Seconds" field="requestTimeout">
+                <f:number default="500"></f:number>
+            </f:entry>
+            <f:entry title="Request Attempts" field="maxAttempts">
+                <f:number default="3"></f:number>
+            </f:entry>
             <f:entry title="ZooKeeper Root" field="zooKeeperRoot">
                 <f:textbox default="nodepool"></f:textbox>
             </f:entry>
@@ -45,4 +51,4 @@
                 <f:textbox name="jdkHome" value="${jdkHome}"/>
             </f:entry>
         </f:advanced>
-</j:jelly>  
+</j:jelly>

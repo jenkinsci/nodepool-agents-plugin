@@ -73,12 +73,6 @@ public class NodePool implements Describable<NodePool> {
 
     private static final Logger LOG = Logger.getLogger(NodePool.class.getName());
 
-    // maximum number of times provisioning a node will be tried for a given task
-    private static final int MAX_ATTEMPTS = 3;
-
-    // How long to wait to connect to a node via ssh, install java, and start
-    // the jenkins agent
-    private static final int LAUNCH_TIMEOUT_MINUTES = 2;
 
     /**
      * Create a curator managed connection to ZooKeeper
@@ -151,6 +145,16 @@ public class NodePool implements Describable<NodePool> {
     private Integer requestTimeout;
 
     /**
+     * maximum number of times provisioning a node will be tried for a given task
+     */
+    private Integer maxAttempts;
+
+    /**
+     * Timeout for ssh connection to a node and installation of the JRE.
+     */
+    private Integer installTimeout;
+
+    /**
      * List of node requests submitted to this NodePool cluster
      */
     transient List<NodeRequest> requests;
@@ -190,7 +194,8 @@ public class NodePool implements Describable<NodePool> {
     public NodePool(String connectionString,
                     String credentialsId, String labelPrefix, String requestRoot,
                     String priority, String requestor, String zooKeeperRoot,
-                    String nodeRoot, Integer requestTimeout, String jdkInstallationScript, String jdkHome) {
+                    String nodeRoot, Integer requestTimeout, String jdkInstallationScript, String jdkHome,
+                    Integer installTimeout, Integer maxAttempts) {
         this.connectionString = connectionString;
         this.credentialsId = credentialsId;
         this.requestRoot = requestRoot;
@@ -201,6 +206,8 @@ public class NodePool implements Describable<NodePool> {
         this.nodeRoot = nodeRoot;
         this.jdkInstallationScript = jdkInstallationScript;
         this.jdkHome = jdkHome;
+        this.installTimeout = installTimeout;
+        this.maxAttempts = maxAttempts;
         setRequestTimeout(requestTimeout);
         initTransients();
     }
@@ -423,22 +430,23 @@ public class NodePool implements Describable<NodePool> {
      * @throws Exception                if an error occurs managing the provision components
      */
     public void provisionNode(NodePoolJob job) throws Exception {
-        provisionNode(job, requestTimeout, MAX_ATTEMPTS);
+        provisionNode(job, requestTimeout, maxAttempts, installTimeout);
     }
 
     /**
      * Submit request for node(s) required to execute the given task.
      *
      * @param job          job/task/build being executed
-     * @param timeoutInSec the timeout in seconds to provision the node(s)
+     * @param requestTimeoutSec the timeout in seconds to provision the node(s)
      * @param maxAttempts  maximum number of times to try to provision the node
+     * @param installTimeoutSec timeout in seconds to connect to a new node and provision the JRE
      * @throws IllegalArgumentException if timeout is less than 1 second or if the maxAttempts is less than 1
      * @throws NodePoolException        if an error occurs managing the provision components
      */
-    void provisionNode(NodePoolJob job, int timeoutInSec, int maxAttempts) throws NodePoolException {
+    void provisionNode(NodePoolJob job, int requestTimeoutSec, int maxAttempts, int installTimeoutSec) throws NodePoolException {
 
-        if (timeoutInSec < 1) {
-            throw new IllegalArgumentException("Timeout value is less than 1 second: " + timeoutInSec);
+        if (requestTimeoutSec < 1) {
+            throw new IllegalArgumentException("Timeout value is less than 1 second: " + requestTimeoutSec);
         }
 
         if (maxAttempts < 1) {
@@ -450,7 +458,7 @@ public class NodePool implements Describable<NodePool> {
         for (int i = 0; i < maxAttempts; i++) {
             try {
                 if(job.getRun().isBuilding()){
-                    attemptProvision(job, timeoutInSec);
+                    attemptProvision(job, requestTimeoutSec, installTimeoutSec);
                     break;
                 } else {
                     // build has been cancelled
@@ -473,10 +481,11 @@ public class NodePool implements Describable<NodePool> {
      * Make a single node provisioning attempt.  Update the progress state of the `job`.
      *
      * @param job          object for tracking overall progress of the task/job
-     * @param timeoutInSec watcher timeout
+     * @param requestTimeoutSec watcher timeout
+     * @param installTimeoutSec ssh connection / jre install timeout
      * @throws Exception if the provisioning attempt fails
      */
-    void attemptProvision(NodePoolJob job, int timeoutInSec) throws Exception {
+    void attemptProvision(NodePoolJob job, int requestTimeoutSec, int installTimeoutSec) throws Exception {
 
         //final Task task = job.getTask();
 
@@ -488,16 +497,39 @@ public class NodePool implements Describable<NodePool> {
 
         try {
             job.addAttempt(request);
-            attemptProvisionNode2(request, timeoutInSec);
+            attemptProvisionNode2(request, requestTimeoutSec, installTimeoutSec);
         } catch (Exception e) {
             // provisioning attempt failed
             job.failAttempt(e);
+            LOG.severe("Caught exception in attemptProvision:" +e.getClass()+" "+e.getMessage());
+            try {
+                LOG.log(Level.FINE, "Releasing node after failed provisioning attempt:{0}", job.getNodePoolNode().getName());
+                job.getNodePoolNode().release();
+                try {
+                    // Findbugs :(
+                    NodePoolSlave nodePoolSlave = job.getNodePoolSlave();
+                    if (nodePoolSlave == null){
+                        return;
+                    }
+                    Computer c = nodePoolSlave.toComputer();
+                    if (c != null){
+                        c.doDoDelete();
+                    }
+                } catch (IOException ex){
+                    Jenkins.getInstance().removeNode(job.getNodePoolSlave());
+                }
+            }catch (Exception ex){
+                // Failed to cleanup node after a failed attempt
+                // This is only an optimisation, the Janitor
+                // will ensure cleanup is completed once the
+                // build is complete.
+                LOG.log(Level.FINE, "Failed to cleanup after a failed provision attempt:{0}", e.toString());
+            }
             throw e;
-
         } finally {
             requests.remove(request);
+            request.delete();
         }
-
         job.succeed();
     }
 
@@ -509,25 +541,31 @@ public class NodePool implements Describable<NodePool> {
      * Make a single provisioning attempt.
      *
      * @param request      node request object
-     * @param timeoutInSec watcher timeout
+     * @param requestTimeoutInSec watcher timeout
      * @throws Exception if provisioning fails
      */
-    void attemptProvisionNode2(final NodeRequest request, final int timeoutInSec) throws Exception {
+    void attemptProvisionNode2(final NodeRequest request,
+            final int requestTimeoutInSec, final int installTimeoutSec) throws Exception {
 
         List<NodePoolNode> allocatedNodes;
         NodePoolJob nodePoolJob = request.getJob();
-
+        if (nodePoolJob == null){
+            throw new NodePoolException("NodePoolJob null in NodePool.attemptProvision2 for request:" + request);
+        }
         // Let's create a node pool watcher and wait until the request is in the desired state
         // (or until we're timed out)
         final NodePoolRequestStateWatcher watcher = new NodePoolRequestStateWatcher(
                 conn, request.getPath(), NodePoolState.FULFILLED, nodePoolJob);
 
         try {
-            watcher.waitUntilDone(timeoutInSec, TimeUnit.SECONDS);
+            watcher.waitUntilDone(requestTimeoutInSec, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             request.delete();
             throw new InterruptedException("Timeout waiting for request to get fulfilled: "
                     + e.getMessage());
+        } catch (NodePoolException e){
+            request.delete();
+            throw e;
         }
 
         // Update request to refresh our view
@@ -543,30 +581,49 @@ public class NodePool implements Describable<NodePool> {
                 // it returns before the launch is complete, so errors are
                 // not handled.
                 final NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId(), nodePoolJob);
+                nodePoolJob.setNodePoolSlave(nps);
                 Jenkins.getInstance().addNode(nps);
 
-                LocalDateTime launchDeadline = LocalDateTime.now().plusMinutes(LAUNCH_TIMEOUT_MINUTES);
+                LocalDateTime launchDeadline = LocalDateTime.now().plusSeconds(installTimeoutSec);
                 NodePoolComputer npc;
                 while (true){
                     npc = (NodePoolComputer) Jenkins.getInstance().getComputer(nodePoolJob.getNodePoolNode().getName());
-                    if(LocalDateTime.now().isAfter(launchDeadline)){
+
+                    if(npc != null && !npc.isOffline()){
+                        // node is online, great, stop waiting for it.
                         break;
                     }
-                    if(npc == null|| npc.isOffline()){
-                        Thread.sleep(10000);
-                        continue;
+
+                    // Check for conditions that mean that we no longer
+                    // need to wait for this node (Build finished and Timeout)
+                    if (!nodePoolJob.getRun().isBuilding()){
+                        // If the build has completed, we no longer care if
+                        // the node managed to come online, so stop waiting.
+                        break;
+                    }
+                    if(LocalDateTime.now().isAfter(launchDeadline)){
+                        LOG.warning("Launch deadline expired: "+nps.getDisplayName()+" For: "+nodePoolJob.getRun().getDisplayName());
+                        break;
+                    }
+
+                    Thread.sleep(500);
+                }
+
+                if (nodePoolJob.getRun().isBuilding()){
+                    // build still running
+                    if( npc == null || npc.isOffline()){
+                        // build still running and node failed to come online
+                        throw new NodePoolException("Failed to launch Jenkins agent on "+nps.getNodePoolNode().getName()+" NPC: "+npc);
+                    }else{
+                        // build running and node is online, add some details to the logs
+                        nodePoolJob.logToBoth("NodePoolSlave instance " + nps.getNodePoolNode().getName() +
+                                " with host: " + nps.getNodePoolNode().getHost() +
+                                " with label: " + request.getJenkinsLabel().getDisplayName() +
+                                " from task: " + request.getTask().getName() +
+                                " for build: " + nodePoolJob.getBuildId() +
+                                " is online.");
                     }
                 }
-                if (npc == null || npc.isOffline()){
-                    throw new Exception("Failed to launch Jenkins agent on "+nps.getNodePoolNode().getName());
-                }
-                nodePoolJob.logToBoth("NodePoolSlave instance " + nps.getNodePoolNode().getName() +
-                        " with host: " + nps.getNodePoolNode().getHost() +
-                        " with label: " + request.getJenkinsLabel().getDisplayName() +
-                        " from task: " + request.getTask().getName() +
-                        " for build: " + nodePoolJob.getBuildId() +
-                        " is ready...adding slave to Jenkins");
-                nodePoolJob.setNodePoolSlave(nps);
             }
         } else {
             throw new Exception("Request failed or aborted while waiting for request state:" + NodePoolState.FULFILLED

@@ -1,12 +1,15 @@
 package com.rackspace.jenkins_nodepool;
 
+import hudson.model.Computer;
 import hudson.model.Node;
 import hudson.model.labels.LabelAtom;
 import hudson.security.ACL;
 import hudson.security.ACLContext;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.concurrent.locks.Lock;
 import java.util.logging.Level;
+import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.WARNING;
 import java.util.logging.Logger;
 import jenkins.model.Jenkins;
@@ -81,10 +84,15 @@ class Janitor implements Runnable {
                 continue;
 
             final NodePoolSlave nodePoolSlave = (NodePoolSlave) node;
-            NodePoolJob nodePoolJob = nodePoolSlave.getJob();
-
             LOG.log(Level.FINE, "Evaluating NodePool Node: " + nodePoolSlave);
-            WorkflowRun run = (WorkflowRun)nodePoolSlave.getJob().getRun();
+
+            NodePoolJob nodePoolJob = nodePoolSlave.getJob();
+            if (nodePoolJob == null){
+                LOG.log(Level.FINE, "No NodePoolJob found for: {0} cleaning.", nodePoolSlave);
+                cleanNode(nodePoolSlave, "Job Reference is null");
+                continue;
+            }
+            WorkflowRun run = (WorkflowRun)nodePoolJob.getRun();
 
             if (run.isBuilding()){
                 // The associated build is still executing,
@@ -131,24 +139,49 @@ class Janitor implements Runnable {
      * @param reason        the reason why the node is being removed
      */
     void cleanNode(NodePoolSlave nodePoolSlave, String reason) {
-        try {
-            NodePoolComputer c = (NodePoolComputer) nodePoolSlave.toComputer();
-            NodePoolNode npn = nodePoolSlave.getNodePoolNode();
-            if (c == null) {
-                if (npn == null) {
-                    LOG.log(WARNING, String.format("Can't cleanup nodePoolSlave that has neither a computer nor node associated with it %s", nodePoolSlave));
-                } else {
-                    LOG.log(WARNING, String.format("Releasing NodePoolNode with no associated computer %s", npn));
-                    npn.release();
-                }
-            } else {
-                c.doToggleOffline(reason);
-                c.doDoDelete();
+        // Executed from a threadpool so that
+        // the 30s waits don't block the Janitor.
+        Computer.threadPoolForRemoting.submit(() -> {
+            try {
+                // We may select a node for cleanup immediately after a build
+                // has completed. In this case there may still be processes
+                // communicating with the node. Give those 30s to terminate
+                // to prevent IOExceptions in the log.
+                // This is run from a background thread, so the wait
+                // won't block anything.
+                Thread.sleep(30000L);
+            } catch (InterruptedException ex) {
+               //meh we woke up.
             }
-        } catch (Exception e) {
-            LOG.log(WARNING, String.format("%s while attempting to clean node %s. Message: %s",
-                    e.getClass().getSimpleName(), nodePoolSlave, e.getLocalizedMessage()));
-        }
+            // Lock to prevent races with other threads that attempt cleanup
+            Lock cleanupLock = NodePools.get().getCleanupLock();
+            // semantics are such that unlock fails
+            // if lock is not held
+            cleanupLock.lock();
+            try {
+                NodePoolComputer c = (NodePoolComputer) nodePoolSlave.toComputer();
+                NodePoolNode npn = nodePoolSlave.getNodePoolNode();
+                if (c != null){
+                    c.doToggleOffline(reason);
+                    c.doDoDelete();
+                } else {
+                    LOG.log(FINE, String.format("Releasing NodePoolNode with no associated computer %s", npn));
+                    // inner try to ensure we attempt removeNode
+                    try {
+                        npn.release();
+                    }catch (Exception e){
+                        LOG.log(FINE, String.format("%s while attempting to clean node %s. Message: %s",
+                        e.getClass().getSimpleName(), npn, e.getLocalizedMessage()));
+                    };
+                    Jenkins.getInstance().removeNode(nodePoolSlave);
+                }
+            } catch (Exception e) {
+                LOG.log(FINE, String.format("%s while attempting to clean node %s. Message: %s",
+                        e.getClass().getSimpleName(), nodePoolSlave, e.getLocalizedMessage()));
+            }finally{
+                cleanupLock.unlock();
+            }
+        });
     }
 
     /**

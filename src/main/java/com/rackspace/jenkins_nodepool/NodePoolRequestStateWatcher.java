@@ -139,14 +139,29 @@ public class NodePoolRequestStateWatcher implements CuratorWatcher {
      * @param timeout the timeout value
      * @param unit    the unit of the timeout value, typically TimeUnit.SECONDS
      * @throws InterruptedException if the current thread is interrupted while waiting
+     * @throws NodePoolException if the initial state check fails
      */
     @SuppressFBWarnings("RV_RETURN_VALUE_IGNORED")
-    public void waitUntilDone(long timeout, TimeUnit unit) throws InterruptedException {
-        Boolean result = latch.await(timeout, unit);
-        if (!result) {
-            // timeout
-            throw new InterruptedException(format("Timeout waiting for NodePool ZNode %s to reach state %s",
-                    zpath, desiredState.toString()));
+    public void waitUntilDone(long timeout, TimeUnit unit) throws InterruptedException, NodePoolException {
+       NodePoolState state = null;
+        try {
+            state = getStateFromPath();
+        } catch (Exception e){
+            throw new NodePoolException("Failed to check state of node request before setting watch: "+zpath+" Exception:"+e.toString());
+        }
+        // Check if we're already in the desired state.
+        // Need to check this before setting the watch
+        // as there won't be a change event to the desired
+        // state if the desired state has already been reached
+        if(state == desiredState){
+            return;
+        } else {
+            Boolean result = latch.await(timeout, unit);
+            if (!result) {
+                // timeout
+                throw new InterruptedException(format("Timeout waiting for NodePool ZNode %s to reach state %s",
+                        zpath, desiredState.toString()));
+            }
         }
     }
 
