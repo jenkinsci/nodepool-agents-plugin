@@ -38,6 +38,10 @@ public abstract class NodePoolJDKInstaller extends ToolInstaller {
 
     private String installWorkingDir = DEFAULT_INSTALL_WORKING_DIR;
 
+    public NodePoolJDKInstaller() {
+        super("nodepool-jdk-installer");
+    }
+
     /**
      * Creates a new NodePool JDK installer.
      *

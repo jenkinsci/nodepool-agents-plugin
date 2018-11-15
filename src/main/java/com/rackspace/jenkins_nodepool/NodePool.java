@@ -40,6 +40,7 @@ import hudson.security.AccessControlled;
 import hudson.util.FormFieldValidator;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
+
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.text.MessageFormat;
@@ -52,12 +53,18 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.servlet.ServletException;
+
 import jenkins.model.Jenkins;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.zookeeper.CreateMode;
 import org.kohsuke.stapler.*;
+
+import static java.lang.String.format;
+import static java.util.logging.Level.FINE;
+import static java.util.logging.Level.INFO;
+import static java.util.logging.Level.WARNING;
 
 /**
  * Representation of a ZooKeeper+NodePool cluster configuration.
@@ -81,8 +88,7 @@ public class NodePool implements Describable<NodePool> {
      * @param zkRoot           root path to prefix onto all Curator (ZK) requests
      * @return CuratorFramework connection wrapper instance
      */
-    public static CuratorFramework createZKConnection(String connectionString,
-                                                      String zkRoot) {
+    public static CuratorFramework createZKConnection(String connectionString, String zkRoot) {
         final CuratorFramework conn = CuratorFrameworkFactory.builder()
                 .connectString(connectionString)
                 .namespace(zkRoot)
@@ -150,7 +156,7 @@ public class NodePool implements Describable<NodePool> {
     private Integer maxAttempts;
 
     /**
-     * Timeout for ssh connection to a node and installation of the JRE.
+     * Timeout in seconds for ssh connection to a node and installation of the JRE.
      */
     private Integer installTimeout;
 
@@ -189,6 +195,8 @@ public class NodePool implements Describable<NodePool> {
      *                              fulfilled
      * @param jdkInstallationScript the JDK installation script
      * @param jdkHome               the JDK home
+     * @param installTimeout        timeout in seconds to connect to a new node and provision the JRE
+     * @param maxAttempts           maximum number of times to try to provision the node
      */
     @DataBoundConstructor
     public NodePool(String connectionString,
@@ -229,23 +237,23 @@ public class NodePool implements Describable<NodePool> {
 
         try {
             for (NodePoolNode node : allocatedNodes) {
-                LOG.log(Level.INFO, String.format("Accepting node %s on behalf of request %s", node, request.getZKID()));
+                LOG.log(INFO, format("Accepting node %s on behalf of request %s", node, request.getZKID()));
                 node.setInUse(); // TODO: debug making sure this lock stuff actually works
                 acceptedNodes.add(node);
 
             }
         } catch (Exception e) {
             // (if we hit this, then the request will get re-created on the next isDone() poll.)
-            LOG.log(Level.WARNING, "Failed to lock node" + e.getMessage(), e);
+            LOG.log(WARNING, "Failed to lock node" + e.getMessage(), e);
 
             // roll back acceptance on any nodes we managed to successfully accept
             for (NodePoolNode acceptedNode : acceptedNodes) {
                 try {
-                    LOG.log(Level.INFO, String.format("Releasing node %s on behalf of request %s", acceptedNode, request.getZKID()));
+                    LOG.log(INFO, format("Releasing node %s on behalf of request %s", acceptedNode, request.getZKID()));
                     acceptedNode.release();
 
                 } catch (Exception lockException) {
-                    LOG.log(Level.WARNING, "Failed to release lock on node " + acceptedNode.getName() + ": "
+                    LOG.log(WARNING, "Failed to release lock on node " + acceptedNode.getName() + ": "
                             + lockException.getMessage(), lockException);
                 }
             }
@@ -397,7 +405,7 @@ public class NodePool implements Describable<NodePool> {
 
     private void initTransients() {
         if (requests == null) {
-            requests = new ArrayList();
+            requests = new ArrayList<>();
         }
         if (conn == null && connectionString != null) {
             conn = NodePool.createZKConnection(connectionString, zooKeeperRoot);
@@ -436,9 +444,9 @@ public class NodePool implements Describable<NodePool> {
     /**
      * Submit request for node(s) required to execute the given task.
      *
-     * @param job          job/task/build being executed
+     * @param job               job/task/build being executed
      * @param requestTimeoutSec the timeout in seconds to provision the node(s)
-     * @param maxAttempts  maximum number of times to try to provision the node
+     * @param maxAttempts       maximum number of times to try to provision the node
      * @param installTimeoutSec timeout in seconds to connect to a new node and provision the JRE
      * @throws IllegalArgumentException if timeout is less than 1 second or if the maxAttempts is less than 1
      * @throws NodePoolException        if an error occurs managing the provision components
@@ -457,7 +465,7 @@ public class NodePool implements Describable<NodePool> {
 
         for (int i = 0; i < maxAttempts; i++) {
             try {
-                if(job.getRun().isBuilding()){
+                if (job.getRun().isBuilding()) {
                     attemptProvision(job, requestTimeoutSec, installTimeoutSec);
                     break;
                 } else {
@@ -467,10 +475,10 @@ public class NodePool implements Describable<NodePool> {
                 }
 
             } catch (Exception e) {
-                job.logToBoth(String.format("Node provisioning attempt for task: %s failed. Message: %s",
-                        job.getTask().getName(), e.getLocalizedMessage()), Level.WARNING);
+                job.logToBoth(format("Node provisioning attempt for task: %s failed. Message: %s",
+                        job.getTask().getName(), e.getLocalizedMessage()), WARNING);
                 if (i + 1 == maxAttempts) {
-                    throw new NodePoolException(String.format("Maximum attempts exceeded: %d out of %d.",
+                    throw new NodePoolException(format("Maximum attempts exceeded: %d out of %d.",
                             (i + 1), maxAttempts));
                 }
             }
@@ -480,7 +488,7 @@ public class NodePool implements Describable<NodePool> {
     /**
      * Make a single node provisioning attempt.  Update the progress state of the `job`.
      *
-     * @param job          object for tracking overall progress of the task/job
+     * @param job               object for tracking overall progress of the task/job
      * @param requestTimeoutSec watcher timeout
      * @param installTimeoutSec ssh connection / jre install timeout
      * @throws Exception if the provisioning attempt fails
@@ -501,29 +509,29 @@ public class NodePool implements Describable<NodePool> {
         } catch (Exception e) {
             // provisioning attempt failed
             job.failAttempt(e);
-            LOG.severe("Caught exception in attemptProvision:" +e.getClass()+" "+e.getMessage());
+            LOG.severe("Caught exception in attemptProvision:" + e.getClass() + " " + e.getMessage());
             try {
-                LOG.log(Level.FINE, "Releasing node after failed provisioning attempt:{0}", job.getNodePoolNode().getName());
+                LOG.log(FINE, "Releasing node after failed provisioning attempt:{0}", job.getNodePoolNode().getName());
                 job.getNodePoolNode().release();
                 try {
                     // Findbugs :(
                     NodePoolSlave nodePoolSlave = job.getNodePoolSlave();
-                    if (nodePoolSlave == null){
+                    if (nodePoolSlave == null) {
                         return;
                     }
                     Computer c = nodePoolSlave.toComputer();
-                    if (c != null){
+                    if (c != null) {
                         c.doDoDelete();
                     }
-                } catch (IOException ex){
+                } catch (IOException ex) {
                     Jenkins.getInstance().removeNode(job.getNodePoolSlave());
                 }
-            }catch (Exception ex){
+            } catch (Exception ex) {
                 // Failed to cleanup node after a failed attempt
                 // This is only an optimisation, the Janitor
                 // will ensure cleanup is completed once the
                 // build is complete.
-                LOG.log(Level.FINE, "Failed to cleanup after a failed provision attempt:{0}", e.toString());
+                LOG.log(FINE, "Failed to cleanup after a failed provision attempt:{0}", e.toString());
             }
             throw e;
         } finally {
@@ -534,22 +542,22 @@ public class NodePool implements Describable<NodePool> {
     }
 
     NodeRequest createNodeRequest(final NodePoolJob job) throws Exception {
-        return new NodeRequest(this, job);
+        return new NodeRequest(this, getPriority(), job);
     }
 
     /**
      * Make a single provisioning attempt.
      *
-     * @param request      node request object
+     * @param request             node request object
      * @param requestTimeoutInSec watcher timeout
      * @throws Exception if provisioning fails
      */
     void attemptProvisionNode2(final NodeRequest request,
-            final int requestTimeoutInSec, final int installTimeoutSec) throws Exception {
+                               final int requestTimeoutInSec, final int installTimeoutSec) throws Exception {
 
         List<NodePoolNode> allocatedNodes;
         NodePoolJob nodePoolJob = request.getJob();
-        if (nodePoolJob == null){
+        if (nodePoolJob == null) {
             throw new NodePoolException("NodePoolJob null in NodePool.attemptProvision2 for request:" + request);
         }
         // Let's create a node pool watcher and wait until the request is in the desired state
@@ -563,13 +571,10 @@ public class NodePool implements Describable<NodePool> {
             request.delete();
             throw new InterruptedException("Timeout waiting for request to get fulfilled: "
                     + e.getMessage());
-        } catch (NodePoolException e){
+        } catch (NodePoolException e) {
             request.delete();
             throw e;
         }
-
-        // Update request to refresh our view
-        request.updateFromZK();
 
         // Success represents is request fulfilled - everything else is a problem.
         if (request.getState() == NodePoolState.FULFILLED) {
@@ -580,41 +585,41 @@ public class NodePool implements Describable<NodePool> {
                 // This creates the slave, then the launcher and computer
                 // it returns before the launch is complete, so errors are
                 // not handled.
-                final NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId(), nodePoolJob);
+                final NodePoolSlave nps = new NodePoolSlave(node, getCredentialsId(), nodePoolJob, getJdkHome(), getJdkInstallationScript());
                 nodePoolJob.setNodePoolSlave(nps);
                 Jenkins.getInstance().addNode(nps);
 
                 LocalDateTime launchDeadline = LocalDateTime.now().plusSeconds(installTimeoutSec);
                 NodePoolComputer npc;
-                while (true){
+                while (true) {
                     npc = (NodePoolComputer) Jenkins.getInstance().getComputer(nodePoolJob.getNodePoolNode().getName());
 
-                    if(npc != null && !npc.isOffline()){
+                    if (npc != null && !npc.isOffline()) {
                         // node is online, great, stop waiting for it.
                         break;
                     }
 
                     // Check for conditions that mean that we no longer
                     // need to wait for this node (Build finished and Timeout)
-                    if (!nodePoolJob.getRun().isBuilding()){
+                    if (!nodePoolJob.getRun().isBuilding()) {
                         // If the build has completed, we no longer care if
                         // the node managed to come online, so stop waiting.
                         break;
                     }
-                    if(LocalDateTime.now().isAfter(launchDeadline)){
-                        LOG.warning("Launch deadline expired: "+nps.getDisplayName()+" For: "+nodePoolJob.getRun().getDisplayName());
+                    if (LocalDateTime.now().isAfter(launchDeadline)) {
+                        LOG.warning(format("Launch deadline expired: %s for job: %s", nps.getDisplayName(), nodePoolJob.getRun().getDisplayName()));
                         break;
                     }
 
                     Thread.sleep(500);
                 }
 
-                if (nodePoolJob.getRun().isBuilding()){
+                if (nodePoolJob.getRun().isBuilding()) {
                     // build still running
-                    if( npc == null || npc.isOffline()){
+                    if (npc == null || npc.isOffline()) {
                         // build still running and node failed to come online
-                        throw new NodePoolException("Failed to launch Jenkins agent on "+nps.getNodePoolNode().getName()+" NPC: "+npc);
-                    }else{
+                        throw new NodePoolException("Failed to launch Jenkins agent on " + nps.getNodePoolNode().getName() + " NPC: " + npc);
+                    } else {
                         // build running and node is online, add some details to the logs
                         nodePoolJob.logToBoth("NodePoolSlave instance " + nps.getNodePoolNode().getName() +
                                 " with host: " + nps.getNodePoolNode().getHost() +
@@ -626,8 +631,8 @@ public class NodePool implements Describable<NodePool> {
                 }
             }
         } else {
-            throw new Exception("Request failed or aborted while waiting for request state:" + NodePoolState.FULFILLED
-                    + ", actual state:" + request.getState());
+            throw new Exception(format("Request failed or aborted while waiting for request state: %s, actual state: %s",
+                    NodePoolState.FULFILLED, request.getState()));
         }
     }
 
@@ -647,10 +652,10 @@ public class NodePool implements Describable<NodePool> {
                         testConn.create()
                                 .creatingParentsIfNeeded()
                                 .withMode(CreateMode.EPHEMERAL)
-                                .forPath(MessageFormat.format("/testing/{0}", req.getSession().getId()));
-                        ok(MessageFormat.format("Successfully connected to Zookeeper at {0}", connectionString));
+                                .forPath(format("/testing/%s", req.getSession().getId()));
+                        ok(format("Successfully connected to Zookeeper at %s", connectionString));
                     } catch (Exception e) {
-                        error(MessageFormat.format("Failed to connecto to ZooKeeper :( {0}", e.getMessage()));
+                        error(format("Failed to connection to ZooKeeper :( %s", e.getMessage()));
                     }
                 }
             }.process();
@@ -729,7 +734,7 @@ public class NodePool implements Describable<NodePool> {
      * Release resources related to this nodepool
      */
     void cleanup() {
-        LOG.log(Level.INFO, "Removing Nodepool Configuration {0}", connectionString);
+        LOG.log(INFO, format("Removing Nodepool Configuration %s", connectionString));
         if (conn != null) {
             conn.close();
         }

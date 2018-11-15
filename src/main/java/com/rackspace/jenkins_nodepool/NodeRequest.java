@@ -23,9 +23,11 @@
  */
 package com.rackspace.jenkins_nodepool;
 
+import com.rackspace.jenkins_nodepool.models.NodeRequestModel;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.model.Label;
 import hudson.model.Queue.Task;
+
 import java.text.MessageFormat;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -34,7 +36,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
 import org.apache.zookeeper.CreateMode;
+
+import static java.lang.String.format;
+import static java.util.logging.Level.FINE;
+import static java.util.logging.Level.FINEST;
+import static java.util.logging.Level.WARNING;
 
 /**
  * Represents a nodepool node request. Data format is JSON dump of following
@@ -44,11 +52,12 @@ import org.apache.zookeeper.CreateMode;
  *
  * @author hughsaunders
  */
-public class NodeRequest extends ZooKeeperObject {
+public class NodeRequest {
 
-    //TODO: check requests-lock znodes, they seem to be stacking up.
-    // what creates them and what should clean them up?
-    private static final Logger LOGGER = Logger.getLogger(NodeRequest.class.getName());
+    /**
+     * Logger for this class
+     */
+    private static final Logger LOG = Logger.getLogger(NodeRequest.class.getName());
 
     /**
      * Request start time.
@@ -60,54 +69,62 @@ public class NodeRequest extends ZooKeeperObject {
      */
     private final Task task;
 
+    /**
+     * The nodepool associated with this task
+     */
+    private final NodePool nodePool;
+
+    /**
+     * The job associated with this task
+     */
     private final NodePoolJob nodePoolJob;
+
+    /**
+     * A handler for reading and writing the data model to/from Zookeeper
+     */
+    private final ZooKeeperObject<NodeRequestModel> zkWrapper;
 
     /**
      * Create new request
      *
      * @param nodePool NodePool cluster to use
-     * @param npj     Associated NodePoolJob which contains the task
+     * @param baseId   the base id string for the request - used to generate the full id which will be a combination of the base ID + a dash + a sequential value, such as 100-0001334443
+     * @param npj      Associated NodePoolJob which contains the task
      * @throws Exception on ZooKeeper error
      */
     @SuppressFBWarnings
-    public NodeRequest(NodePool nodePool, NodePoolJob npj) throws Exception {
-        super(nodePool);
+    public NodeRequest(NodePool nodePool, String baseId, NodePoolJob npj) throws Exception {
+        this.nodePool = nodePool;
+        // Create an instance of the ZK object wrapper for the Node Request Model - path is relative to the ZK connection namespace (typically: /nodepool)
+        final Class<NodeRequestModel> modelClazz = NodeRequestModel.class;
+        this.zkWrapper = new ZooKeeperObject<>(
+                format("/%s/%s-", this.nodePool.getRequestRoot(), baseId),
+                baseId, this.nodePool.getConn(), modelClazz);
+        LOG.log(FINEST, format("Creating node request with path prefix: %s", zkWrapper.getPath()));
+
         this.nodePoolJob = npj;
-        task = npj.getTask();
+        this.task = npj.getTask();
+
+        // Build up the ZK request model
         final String jenkinsLabel = task.getAssignedLabel().getDisplayName();
-        final List<String> node_types = new ArrayList();
-        node_types.add(nodePool.nodePoolLabelFromJenkinsLabel(jenkinsLabel));
-        data.put("node_types", node_types);
-        data.put("requestor", nodePool.getRequestor());
-        data.put("state", NodePoolState.REQUESTED.getStateString());
-        data.put("state_time", new Double(System.currentTimeMillis() / 1000));
-        data.put("jenkins_label", jenkinsLabel);
-        data.put("build_id", npj.getBuildId());
-        // sets path and zkid
-        createZNode();
+        final List<String> nodeTypes = new ArrayList<>();
+        nodeTypes.add(nodePool.nodePoolLabelFromJenkinsLabel(jenkinsLabel));
+        final NodeRequestModel model = new NodeRequestModel(
+                nodeTypes,
+                Collections.emptyList(), // declined by
+                System.currentTimeMillis() / 1000d,
+                false,
+                this.nodePool.getRequestor(),
+                NodePoolState.REQUESTED,
+                Collections.emptyList(), // nodes
+                jenkinsLabel,
+                npj.getBuildId());
+        // Save the model to ZK
+        final String generatedPath = this.zkWrapper.save(model, CreateMode.EPHEMERAL_SEQUENTIAL);
+
+        LOG.log(FINEST, format("Created new node request, path: %s (generated path: %s), id: %s", getPath(), generatedPath, getZKID()));
+
         startTime = System.currentTimeMillis();
-    }
-
-    /**
-     * Create the ZNode associated with this node request
-     *
-     * @throws Exception if an error occurs while creating the znode
-     */
-    @Override
-    public void createZNode() throws Exception {
-        final String createPath = MessageFormat.format("/{0}/{1}-",
-                nodePool.getRequestRoot(), nodePool.getPriority());
-        LOGGER.finest(MessageFormat.format("Creating request node: {0}",
-                createPath));
-        final String requestPath = nodePool.getConn().create()
-                .creatingParentsIfNeeded()
-                .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
-                .forPath(createPath, getJson().getBytes(nodePool.getCharset()));
-
-        LOGGER.log(Level.FINEST, "Requeste created at path: {0}", requestPath);
-
-        setZKID(nodePool.idForPath(requestPath));
-        setPath(requestPath);
     }
 
     /**
@@ -116,25 +133,42 @@ public class NodeRequest extends ZooKeeperObject {
      * @return the requested state value from the data model.
      */
     public NodePoolState getState() {
-        // Grab the specific state value - we use the fromString() method since it can handle strings with hyphens (such
-        // as the case of the "in-use" state).
-        return NodePoolState.fromString((String) data.get("state"));
+        try {
+            final NodeRequestModel model = zkWrapper.load();
+            return model.getState();
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while reading ZK node %s 'state' field. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
+            return null;
+        }
+    }
+
+    /**
+     * Updates the node request state to the specified value.
+     *
+     * @param state the state value to set in the node request.
+     * @return true if successful, false otherwise
+     */
+    public boolean updateState(final NodePoolState state) {
+        try {
+            final NodeRequestModel model = zkWrapper.load();
+            model.setState(state);
+            zkWrapper.save(model);
+            return true;
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while setting ZK node %s 'state' field. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
+            return false;
+        }
     }
 
     /**
      * Returns the NodePoolJob associated with this request
+     *
      * @return NodePoolJob
      */
-    public NodePoolJob getJob(){
+    public NodePoolJob getJob() {
         return this.nodePoolJob;
-    }
-
-    /**
-     * Get a string representation of this object, in JSON.
-     * @return JSON representation of this object, same as is  stored in zookeeper.
-     */
-    public String toString(){
-        return "NodePool Node Request["+this.getJson()+"]";
     }
 
     /**
@@ -143,11 +177,23 @@ public class NodeRequest extends ZooKeeperObject {
      * @return list of node names
      */
     public List<String> getAllocatedNodeNames() {
-        List<String> nodes = (List<String>) data.get("nodes");
-        if (nodes == null) {
-            nodes = Collections.emptyList();
+        try {
+            final NodeRequestModel model = zkWrapper.load();
+            return model.getNodes();
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while reading ZK node request %s 'nodes' field. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
+            return Collections.emptyList();
         }
-        return nodes;
+    }
+
+    /**
+     * Get a string representation of this object, in JSON.
+     *
+     * @return JSON representation of this object, same as is  stored in zookeeper.
+     */
+    public String toString() {
+        return "NodePool Node Request[" + this.getModelAsJSON() + "]";
     }
 
     /**
@@ -160,42 +206,63 @@ public class NodeRequest extends ZooKeeperObject {
         // Example fulfilled request
         // {"nodes": ["0000000000"], "node_types": ["debian"], "state": "fulfilled", "declined_by": [], "state_time": 1520849225.4513698, "reuse": false, "requestor": "NodePool:min-ready"}
 
-        // Refresh our view of the data
-        updateFromZK();
+        try {
+            final NodeRequestModel model = zkWrapper.load();
+            if (model.getState() != NodePoolState.FULFILLED) {
+                throw new IllegalStateException("Attempt to get allocated nodes from a node request before it has been fulfilled.");
+            }
+            final List<NodePoolNode> nodeObjects = new ArrayList<>();
+            for (String node : model.getNodes()) {
+                //this is a list but, there should only be one node as we only ever request one node.
+                NodePoolNode npn = new NodePoolNode(nodePool, node, nodePoolJob);
+                nodeObjects.add(npn);
+                nodePoolJob.setNodePoolNode(npn);
 
-        // We use fromString() to handle the "in-use" state which contains a hyphen (Java doesn't allow hyphen in enum symbol names).
-        if (NodePoolState.fromString((String) data.get("state")) != NodePoolState.FULFILLED) {
-            throw new IllegalStateException("Attempt to get allocated nodes from a node request before it has been fulfilled");
+            }
+            return nodeObjects;
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while reading ZK node %s 'type' field. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
+            return null;
         }
-        final List<NodePoolNode> nodeObjects = new ArrayList<>();
-        for (Object id : (List) data.get("nodes")) {
-            //this is a list but, there should only be one node as we only ever request one node.
-            NodePoolNode npn = new NodePoolNode(nodePool, (String) id, nodePoolJob);
-            nodeObjects.add(npn);
-            nodePoolJob.setNodePoolNode(npn);
-        }
-        return nodeObjects;
     }
 
     /**
-     * Update the local copy of the request data from values source from ZooKeeper
+     * Sets the allocated nodes to the specified value.
      *
-     * @param newData map of data values from ZooKeeper
+     * @param nodes a list of node values as a string
+     * @return true if successful, false otherwise
      */
-    @Override
-    public void updateFromMap(Map newData) {
-        super.updateFromMap(newData);
-        // convert state time from string
-        final Double stateTime = (Double) newData.get("state_time");
-        data.put("state_time", stateTime);
+    public boolean setAllocatedNodes(final List<String> nodes) {
+        try {
+            final NodeRequestModel model = zkWrapper.load();
+            model.setNode_types(nodes);
+            zkWrapper.save(model);
+            return true;
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while updating ZK node %s 'node_types' field. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
+            return false;
+        }
+    }
 
-        // Convert 'state' back into its corresponding enum value then write it out - this ensures were are dealing
-        // with proper NodePoolState enum values and not just random strings that could break the NodePoolState enum
-        // contract.
-        // Use the NodePoolState.fromString method since we need to handle the special case of "in-use" that contains
-        // a hyphen
-        final NodePoolState nodePoolState = NodePoolState.fromString((String) newData.get("state"));
-        data.put("state", nodePoolState.getStateString());
+    /**
+     * Adds the specified allocated nodes to the existing list of nodes.
+     *
+     * @param nodes a list of node values as a string
+     * @return true if successful, false otherwise
+     */
+    public boolean addAllocatedNodes(final List<String> nodes) {
+        try {
+            final NodeRequestModel model = zkWrapper.load();
+            model.getNodes().addAll(nodes);
+            zkWrapper.save(model);
+            return true;
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while updating ZK node %s 'node_types' field. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
+            return false;
+        }
     }
 
     /**
@@ -204,8 +271,15 @@ public class NodeRequest extends ZooKeeperObject {
      * @return the node pool label
      */
     public String getNodePoolLabel() {
-        final List<String> labels = (List<String>) data.get("node_types");
-        return labels.get(0);
+        try {
+            final NodeRequestModel model = zkWrapper.load();
+            final List<String> labels = model.getNode_types();
+            return labels.get(0);
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while reading ZK node %s 'type' field. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
+            return null;
+        }
     }
 
     /**
@@ -217,6 +291,11 @@ public class NodeRequest extends ZooKeeperObject {
         return task.getAssignedLabel();
     }
 
+    /**
+     * Returns the age of this request.
+     *
+     * @return the age of this request.
+     */
     public String getAge() {
         final Duration d = Duration.ofMillis(System.currentTimeMillis() - startTime);
         long s = d.getSeconds();
@@ -227,7 +306,52 @@ public class NodeRequest extends ZooKeeperObject {
         }
     }
 
+    /**
+     * Returns the task associated with this request.
+     *
+     * @return the task associated with this request
+     */
     public Task getTask() {
         return task;
+    }
+
+    /**
+     * Returns the ID associated with this request.
+     *
+     * @return the ID associated with this request
+     */
+    public String getZKID() {
+        return zkWrapper.getZKID();
+    }
+
+    /**
+     * Returns the path associated with this request.
+     *
+     * @return the path associated with this request
+     */
+    public String getPath() {
+        return zkWrapper.getPath();
+    }
+
+    /**
+     * Deletes the Node Request.
+     */
+    public void delete() {
+        zkWrapper.delete();
+    }
+
+    /**
+     * Returns the node request model as JSON.
+     *
+     * @return the node request model as JSON.
+     */
+    public String getModelAsJSON() {
+        try {
+            return zkWrapper.asJSON();
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while reading ZK node values from path: %s. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
+            return null;
+        }
     }
 }

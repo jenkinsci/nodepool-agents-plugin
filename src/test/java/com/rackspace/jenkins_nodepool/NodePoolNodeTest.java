@@ -27,7 +27,12 @@ import java.text.MessageFormat;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import com.rackspace.jenkins_nodepool.models.NodeModel;
 import org.junit.*;
+
+import static java.lang.String.format;
+import static java.util.logging.Logger.getLogger;
 import static org.junit.Assert.*;
 
 /**
@@ -36,11 +41,17 @@ import static org.junit.Assert.*;
  */
 public class NodePoolNodeTest {
 
+    /**
+     * Logger for this class.
+     */
+    private static final Logger LOG = getLogger(NodePoolNodeTest.class.getName());
     private NodePoolNode npn;
     private Mocks m;
     private String nodePath;
     private String hostKey;
+    private String hostname = "somehost";
     private List<String> hostKeys;
+    private ZooKeeperObject<NodeModel> zkWrapper;
 
     public NodePoolNodeTest() {
     }
@@ -57,7 +68,7 @@ public class NodePoolNodeTest {
     public void setUp() {
         try {
             m = new Mocks();
-            hostKeys = new ArrayList();
+            hostKeys = new ArrayList<>();
             hostKey = "hostKey";
             hostKeys.add(hostKey);
             nodePath = MessageFormat.format("/{0}/{1}", m.nodeRoot, m.npID);
@@ -65,15 +76,21 @@ public class NodePoolNodeTest {
                     .creatingParentsIfNeeded()
                     .forPath(nodePath, m.jsonString.getBytes(m.charset));
             npn = new NodePoolNode(m.np, m.npID, m.npj);
+
             // Type field now holds a list of string values
             final List<String> types = new ArrayList<>();
             types.add(m.npLabel);
-            npn.data.put("type", types);
-            npn.data.put("interface_ip", m.host);
-            npn.data.put("connection_port", m.port);
-            npn.data.put("host_keys", hostKeys);
+            final NodeModel model = new NodeModel();
+            model.setType(types);
+            model.setInterface_ip(m.host);
+            model.setConnection_port(m.port);
+            model.setHost_keys(hostKeys);
+            model.setHostname(m.host);
+
+            zkWrapper = new ZooKeeperObject<>(nodePath, m.npID, m.conn, NodeModel.class);
+            zkWrapper.save(model);
         } catch (Exception ex) {
-            Logger.getLogger(NodePoolNodeTest.class.getName()).log(Level.SEVERE, null, ex);
+            LOG.log(Level.SEVERE, format("Error setting up NodePoolNodeTest class. Message: %s", ex.getLocalizedMessage()));
         }
     }
 
@@ -138,10 +155,11 @@ public class NodePoolNodeTest {
      */
     @Test
     public void testGetPortBackwardCompat() {
-        npn.data.remove("connection_port");
-        npn.data.put("ssh_port", 2222.0);
-
-        assertEquals(new Integer(2222), npn.getPort());
+        final NodeModel model = new NodeModel();
+        model.setConnection_port(m.port);
+        assertEquals(m.port, model.getConnection_port());
+        model.setConnection_port(2222);
+        assertEquals(new Integer(2222), model.getConnection_port());
     }
 
     /**
@@ -149,8 +167,11 @@ public class NodePoolNodeTest {
      */
     @Test
     public void testDefaultPort() {
-        npn.data.remove("connection_port");
-        assertEquals(new Integer(22), npn.getPort());
+        final NodeModel model = new NodeModel();
+        model.setConnection_port(m.port);
+        assertEquals(m.port, model.getConnection_port());
+        model.setConnection_port(null);
+        assertEquals(m.port, model.getConnection_port());
     }
 
     /**
@@ -176,8 +197,8 @@ public class NodePoolNodeTest {
     @Test
     public void testSetInUse() throws Exception {
         npn.setInUse();
-        Map data = m.getNodeData(nodePath);
-        assertSame("NodePoolState is IN-USE", NodePoolState.IN_USE, NodePoolState.fromString((String)data.get("state")));
+        final NodeModel model = m.getNodeData(nodePath);
+        assertSame("NodePoolState is IN-USE", NodePoolState.IN_USE, model.getState());
         assertEquals(KazooLock.State.LOCKED, npn.lock.getState());
     }
 
@@ -188,8 +209,8 @@ public class NodePoolNodeTest {
     public void testRelease() throws Exception {
         npn.setInUse();
         npn.release();
-        Map data = m.getNodeData(nodePath);
-        assertSame("NodePoolState is USED", NodePoolState.USED, NodePoolState.fromString((String)data.get("state")));
+        final NodeModel model = m.getNodeData(nodePath);
+        assertSame("NodePoolState is USED", NodePoolState.USED, model.getState());
         assertEquals(KazooLock.State.UNLOCKED, npn.lock.getState());
     }
 }

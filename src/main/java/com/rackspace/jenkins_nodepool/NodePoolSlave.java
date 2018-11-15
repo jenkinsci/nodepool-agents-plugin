@@ -24,19 +24,24 @@
 package com.rackspace.jenkins_nodepool;
 
 import static com.rackspace.jenkins_nodepool.NodePoolUtils.covertHoldUtilStringToEpochMs;
+
 import hudson.Extension;
 import hudson.model.*;
 import hudson.plugins.sshslaves.verifiers.ManuallyProvidedKeyVerificationStrategy;
 import hudson.slaves.RetentionStrategy;
 import hudson.util.RunList;
+
 import java.io.IOException;
 import java.time.Duration;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
+
 import static java.util.logging.Level.*;
+
 import java.util.logging.Logger;
+
 import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -110,14 +115,16 @@ public class NodePoolSlave extends Slave {
     /**
      * Create a new slave
      *
-     * @param nodePoolNode  the node from NodePool
-     * @param credentialsId the Jenkins credential identifier
-     * @param npj           The job this slave/agent was created for
+     * @param nodePoolNode          the node from NodePool
+     * @param credentialsId         the Jenkins credential identifier
+     * @param npj                   The job this slave/agent was created for
+     * @param jdkHome               the JDK home folder
+     * @param jdkInstallationScript the script for installing the JDK
      * @throws Descriptor.FormException on configuration exception
      * @throws IOException              on configuration exception
      */
     @DataBoundConstructor  // not used, but it makes stapler happy if you click "Save" while editing a Node.
-    public NodePoolSlave(NodePoolNode nodePoolNode, String credentialsId, NodePoolJob npj) throws Descriptor.FormException, IOException {
+    public NodePoolSlave(NodePoolNode nodePoolNode, String credentialsId, NodePoolJob npj, String jdkHome, String jdkInstallationScript) throws Descriptor.FormException, IOException {
         super(
                 nodePoolNode.getName(), // name
                 "Nodepool Node", // description
@@ -130,49 +137,52 @@ public class NodePoolSlave extends Slave {
                         nodePoolNode.getPort(),
                         credentialsId,
                         "", //jvmoptions
-                        determineJDKInstaller(nodePoolNode.getNodePool()), //jdkInstaller
+                        determineJDKInstaller(jdkHome, jdkInstallationScript), //jdkInstaller
                         "", //prefixStartSlaveCmd
                         "", //suffixStartSlaveCmd
-                        60, //launchTimeoutSeconds
-                         2, //maxNumRetries keep this low, as the whole provision process is retried (request, accept, launch)
+                        300, //launchTimeoutSeconds
+                        2, //maxNumRetries keep this low, as the whole provision process is retried (request, accept, launch)
                         60, //retryWaitTime. This should relate to launchTimeout in NodePool.java
                         new ManuallyProvidedKeyVerificationStrategy(nodePoolNode.getHostKey())
                 ),
                 RetentionStrategy.NOOP, //retentionStrategy
-                new ArrayList() //nodeProperties
+                new ArrayList<>() //nodeProperties
         );
-        this.nodePoolJob =  npj;
-        if(this.nodePoolJob == null){
+        this.nodePoolJob = npj;
+        if (this.nodePoolJob == null) {
             LOG.warning("NodePoolJob null in NodePoolSlave constructor");
         } else {
-            this.nodePoolJob.logToBoth("NodePoolSlave created: "+ this.getDisplayName());
+            this.nodePoolJob.logToBoth("NodePoolSlave created: " + this.getDisplayName());
         }
         this.nodePoolNode = nodePoolNode;
     }
 
     /**
      * Get the NodePoolJob this slave was created for
+     *
      * @return NodePoolJob object
      */
-    public NodePoolJob getJob(){
+    public NodePoolJob getJob() {
         return this.nodePoolJob;
     }
 
     /**
      * A quick function to determine which JDK installer we have based on the NodePool configuration.
      *
-     * @param np a nodepool object reference
+     * @param jdkHome               the JDK home folder
+     * @param jdkInstallationScript the script to install the JDK
      * @return a NodePool JDK installer instance
      */
-    private static NodePoolJDKInstaller determineJDKInstaller(final NodePool np) {
-        final String jdkInstallationScript = np.getJdkInstallationScript();
-
+    private static NodePoolJDKInstaller determineJDKInstaller(final String jdkHome, final String jdkInstallationScript) {
         // If we are not provided a script or if the value is empty, use a default - otherwise use the script installer
+        // If we need want to support other OS types, this is where we'd want to extend, generally:
+        // 1) determine the which installer to use - add logic the check/conditional
+        // 2) write a subclass to handle the JDK installation - invoke when condition is met
         NodePoolJDKInstaller installer;
         if (jdkInstallationScript == null || jdkInstallationScript.trim().isEmpty()) {
             installer = new NodePoolDebianOpenJDKInstaller();
         } else {
-            installer = new NodePoolJDKScriptInstaller(np.getJdkInstallationScript().trim(), np.getJdkHome());
+            installer = new NodePoolJDKScriptInstaller(jdkInstallationScript.trim(), jdkHome);
         }
 
         LOG.log(FINE, String.format("Using JDK Installer:  %s", installer.getClass().getSimpleName()));
@@ -183,7 +193,7 @@ public class NodePoolSlave extends Slave {
         return nodePoolNode;
     }
 
-    public String getBuildUrl(){
+    public String getBuildUrl() {
         return Jenkins.getInstance().getRootUrl() + nodePoolJob.getRun().getUrl();
     }
 
@@ -278,7 +288,7 @@ public class NodePoolSlave extends Slave {
      */
     public void setHeld(boolean held) {
         this.held = held;
-        this.nodePoolJob.logToBoth("Setting hold status for "+this.getDisplayName()+" to "+this.held);
+        this.nodePoolJob.logToBoth("Setting hold status for " + this.getDisplayName() + " to " + this.held);
     }
 
     /**
@@ -328,9 +338,10 @@ public class NodePoolSlave extends Slave {
 
     /**
      * Get a reference to the nodepoolJob related to this agent
+     *
      * @return nodePoolJob object.
      */
-    public NodePoolJob getNodePoolJob(){
+    public NodePoolJob getNodePoolJob() {
         return nodePoolJob;
     }
 
@@ -507,8 +518,8 @@ public class NodePoolSlave extends Slave {
         }
     }
 
-    public Boolean isFinished(){
-        return ! nodePoolJob.getRun().isBuilding();
+    public Boolean isFinished() {
+        return !nodePoolJob.getRun().isBuilding();
     }
 
     /**

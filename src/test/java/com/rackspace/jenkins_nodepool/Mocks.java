@@ -24,19 +24,21 @@
 package com.rackspace.jenkins_nodepool;
 
 import com.google.gson.Gson;
+import com.rackspace.jenkins_nodepool.models.NodeModel;
 import hudson.model.Label;
 import hudson.model.Queue;
 import hudson.model.Run;
 import hudson.model.labels.LabelAtom;
+
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.text.MessageFormat;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
@@ -47,13 +49,21 @@ import org.jenkinsci.plugins.workflow.graph.FlowNode;
 import org.jenkinsci.plugins.workflow.job.WorkflowJob;
 import org.jenkinsci.plugins.workflow.job.WorkflowRun;
 import org.jenkinsci.plugins.workflow.support.steps.ExecutorStepExecution.PlaceholderTask;
+
+import static java.lang.String.format;
+import static java.util.logging.Logger.getLogger;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.*;
 
 /**
  * This class contains all the fixtures and mocks for unit testing.
- *
  */
 public class Mocks {
+
+    /**
+     * Logger for this class.
+     */
+    private static final Logger LOG = getLogger(Mocks.class.getName());
 
     Charset charset;
     CuratorFramework conn;
@@ -72,8 +82,7 @@ public class Mocks {
     NodePoolNode npn;
     NodePoolSlave nps;
     NodePoolComputer npc;
-    Double port; // I know this is dumb. I think its because GSON creates a double when deserialising.
-
+    Integer port;
     String priority;
     Queue.Item queueItem;
     String requestRoot;
@@ -120,7 +129,7 @@ public class Mocks {
         charset = Charset.forName("UTF-8");
         npLabel = "debian";
         host = "host";
-        port = 22.0;
+        port = 22;
         credentialsID = "somecreds";
         label = new LabelAtom(MessageFormat.format("{0}{1}", labelPrefix, npLabel));
         npcName = MessageFormat.format("{0}-{1}", label.getDisplayName(), npID);
@@ -172,21 +181,16 @@ public class Mocks {
         when(np.getNodeRoot()).thenReturn(nodeRoot);
         when(np.nodePoolLabelFromJenkinsLabel(label.getDisplayName())).thenReturn(npLabel);
         when(task.getAssignedLabel()).thenReturn(label);
+        when(task.getName()).thenReturn("Task 1");
         try {
             when(task.getNode()).thenReturn(fn);
             when(feo.getExecutable()).thenReturn(run);
-        } catch (IOException ex) {
-            Logger.getLogger(Mocks.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (InterruptedException ex) {
-            Logger.getLogger(Mocks.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IOException | InterruptedException ex) {
+            fail(format("%s setting up Mocks node and flow execution owner executable. Message: %s",
+                    ex.getClass().getSimpleName(), ex.getLocalizedMessage()));
         }
         when(fn.getExecution()).thenReturn(fe);
         when(fe.getOwner()).thenReturn(feo);
-        try {
-            when(feo.getExecutable()).thenReturn(run);
-        } catch (IOException ex) {
-            Logger.getLogger(Mocks.class.getName()).log(Level.SEVERE, null, ex);
-        }
         when(run.getBuildStatusSummary()).thenReturn(new Run.Summary(false, "message"));
         when(run.getParent()).thenReturn(job);
         when(run.getNumber()).thenReturn(22);
@@ -201,41 +205,38 @@ public class Mocks {
         when(attemptFailure.getDurationSeconds()).thenReturn(1L);
         try {
             when(nr.getAllocatedNodes()).thenReturn(allocatedNodes);
-            doNothing().when(nr).updateFromZK();
             when(nr.getState()).thenReturn(NodePoolState.FULFILLED);
         } catch (Exception ex) {
-            Logger.getLogger(Mocks.class.getName()).log(Level.SEVERE, null, ex);
+            fail(format("%s setting up Mocks allocated nodes and state. Message: %s",
+                    ex.getClass().getSimpleName(), ex.getLocalizedMessage()));
         }
-
     }
 
     void cleanup() {
         try {
             zkTestServer.stop();
         } catch (IOException ex) {
-            Logger.getLogger(Mocks.class.getName()).log(Level.SEVERE, null, ex);
+            fail(format("%s stopping zookeeper server in Mocks. Message: %s",
+                    ex.getClass().getSimpleName(), ex.getLocalizedMessage()));
         }
     }
 
-    Map getNodeData(String path) throws Exception {
+    NodeModel getNodeData(String path) throws Exception {
         byte[] rdata = conn.getData().forPath(path);
         String rString = new String(rdata, charset);
-        return new Gson().fromJson(rString, HashMap.class);
+        return new Gson().fromJson(rString, NodeModel.class);
     }
 
-    void writeNodeData(String path, Map data) throws Exception {
+    void writeNodeData(String path, NodeModel data) throws Exception {
         byte[] bdata = new Gson().toJson(data).getBytes(charset);
         if (conn.checkExists().forPath(path) != null) {
             conn.setData().forPath(path, bdata);
         } else {
-            conn.create()
-                    .creatingParentsIfNeeded()
-                    .forPath(path, bdata);
+            conn.create().creatingParentsIfNeeded().forPath(path, bdata);
         }
     }
 
     private void startTestServer() {
-
         try {
             zkTestServer = new TestingServer();
             zkTestServer.start();
@@ -247,7 +248,8 @@ public class Mocks {
                     .build();
             conn.start();
         } catch (Exception ex) {
-            Logger.getLogger(Mocks.class.getName()).log(Level.SEVERE, null, ex);
+            fail(format("%s starting zookeeper server in Mocks. Message: %s",
+                    ex.getClass().getSimpleName(), ex.getLocalizedMessage()));
         }
     }
 
