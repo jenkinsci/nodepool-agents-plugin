@@ -48,7 +48,9 @@ public class NodePoolLabelFinder extends LabelFinder {
             NodePoolNode npn = nps.getNodePoolNode();
             if(npn != null){
                 String provider = npn.getProvider();
-                labels.add(new LabelAtom(provider));
+                if (provider != null){
+                    labels.add(new LabelAtom(provider));
+                }
             }
         }
 

@@ -110,6 +110,7 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
             // in the ui, but will reappear on refresh. :(
             // To prevent that we clear the array if no
             // nodePools are supplied.
+            LOG.info("Removing last nodepool configuration, no nodepools are now configured.");
             nodePools.clear();
         }
         save();
