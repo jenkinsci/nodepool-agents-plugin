@@ -65,18 +65,23 @@ class Janitor implements Runnable {
         LOG.log(INFO, "Janitor thread running...");
 
         try (ACLContext ignored = ACL.as(ACL.SYSTEM)) {
-            // Grab a reference to the NodePool ZK connection
-            if (NodePools.get().getNodePools().isEmpty()) {
-                LOG.log(WARNING, "No NodePool connections configured!");
-            } else {
-                conn = NodePools.get().getNodePools().get(0).getConn();
-            }
             runAsSystem();
         } catch (Exception e) {
             LOG.log(SEVERE, format("Caught exception while escalating privileges for the Janitor thread. Message: %s",
                     e.getLocalizedMessage()));
         }
         LOG.log(SEVERE, "Janitor Thread Exited - this shouldn't happen, resources may leak.");
+    }
+
+    private CuratorFramework getConn() throws NodePoolException{
+        // Grab a reference to the NodePool ZK connection
+        CuratorFramework conn;
+        if (NodePools.get().getNodePools().isEmpty()) {
+            throw new NodePoolException("No Nodepools Configured, can't obtain zookeeper connection.");
+        } else {
+            conn = NodePools.get().getNodePools().get(0).getConn();
+        }
+        return conn;
     }
 
     /**
@@ -104,10 +109,14 @@ class Janitor implements Runnable {
      * <li>The node build is complete and is not held</li>
      * </ul>
      */
-    private void clean() {
+    private void clean() throws NodePoolException {
         LOG.log(FINEST, "--------------------- Janitor scanning -------------------");
-        showZookeeperRequests();
+        // This cleanup doesn't require a zookeeper connection, so run before
+        // getConn() which may throw NodePoolException. If it does, it will
+        // be handled by runAsSystem.
         cleanJenkinsNodes();
+        conn = getConn();
+        showZookeeperRequests();
         cleanZookeeperNodes();
         LOG.log(FINEST, "--------------------- Janitor scanning done --------------");
     }
@@ -408,4 +417,3 @@ class Janitor implements Runnable {
         }
     }
 }
-

@@ -221,6 +221,21 @@ public class NodePool implements Describable<NodePool> {
     }
 
     /**
+     * Hash Code based on connection string
+     */
+    public int hashCode(){
+        return connectionString.hashCode();
+    }
+
+    /**
+     * Equals based on connection string
+     */
+    @Override
+    public boolean equals(Object other){
+        return this.connectionString.equals(((NodePool)other).getConnectionString());
+    }
+
+    /**
      * Accept the node that was created to satisfy the given request.
      *
      * @param request node request
