@@ -87,7 +87,12 @@ public class NodePoolNode {
     public List<String> getNPTypes() {
         try {
             final NodeModel model = zkWrapper.load();
-            return model.getType();
+            List<String> types =  model.getType();
+            if (types != null){
+                return types;
+            } else {
+                return new ArrayList<>();
+            }
         } catch (ZookeeperException e) {
             LOG.log(WARNING, format("%s occurred while reading ZK node %s 'type' field. Message: %s",
                     e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));

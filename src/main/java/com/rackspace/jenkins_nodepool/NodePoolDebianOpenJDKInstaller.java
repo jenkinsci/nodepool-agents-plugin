@@ -99,13 +99,22 @@ public class NodePoolDebianOpenJDKInstaller extends NodePoolJDKInstaller {
 
         // Install the Openjdk 8 JRE
         final String[] installCommands = new String[]{
+                // wait for any other apt/dpkg processes before starting
+                "while", "pgrep", "\"dpkg|apt\";", "do", "sleep", "1", "echo", "-n", ".", ";done;",
                 "apt-get", "update",
                 "&&",
                 "apt-get", "install", OPEN_JDK_8_JRE_PKG, "-y"
         };
-        fine(tl, format("Installing %s using command: %s", OPEN_JDK_8_JRE_PKG, Arrays.toString(installCommands)));
 
         final RemoteLauncher launcher = new RemoteLauncher(tl, connection);
+
+        // Do we need to install? If exists, we'll skip.  This doesn't check for Java version level compatibility.
+        if (isJavaInstalled(launcher, tl)) {
+            fine(tl, format("Java appears to be installed. Skipping installation. Note: Since this is an existing installation, JAVA_HOME may not be here: %s", getJavaHome()));
+            return new FilePath(new File(getJavaHome()));
+        }
+
+        fine(tl, format("Installing %s using command: %s", OPEN_JDK_8_JRE_PKG, Arrays.toString(installCommands)));
         final int exitCode = executeCommand(tl, launcher, installCommands);
 
         if (exitCode != 0) {
