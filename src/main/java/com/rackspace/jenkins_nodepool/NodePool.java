@@ -232,7 +232,13 @@ public class NodePool implements Describable<NodePool> {
      */
     @Override
     public boolean equals(Object other){
-        return this.connectionString.equals(((NodePool)other).getConnectionString());
+        if (other == null) return false;
+        if (this == other) return true;
+        if (other instanceof NodePool) {
+            return getConnectionString().equalsIgnoreCase(((NodePool) other).getConnectionString());
+        } else {
+            return false;
+        }
     }
 
     /**
