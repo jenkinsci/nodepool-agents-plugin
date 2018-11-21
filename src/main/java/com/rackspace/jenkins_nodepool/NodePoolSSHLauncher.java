@@ -4,6 +4,7 @@ import com.cloudbees.jenkins.plugins.sshcredentials.SSHAuthenticator;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 import com.trilead.ssh2.*;
+import com.trilead.ssh2.jenkins.SFTPClient;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import hudson.AbortException;
 import hudson.FilePath;
@@ -12,7 +13,6 @@ import hudson.model.Slave;
 import hudson.model.TaskListener;
 import hudson.plugins.sshslaves.Messages;
 import hudson.plugins.sshslaves.PluginImpl;
-import hudson.plugins.sshslaves.SFTPClient;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.plugins.sshslaves.verifiers.HostKey;
 import hudson.plugins.sshslaves.verifiers.NonVerifyingKeyVerificationStrategy;
@@ -33,6 +33,8 @@ import java.util.Set;
 import java.util.concurrent.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import static java.lang.String.format;
 
 /**
  * NodePool SSH Launcher class - derived from the SSHLauncher plugin which didn't handle custom JDK installations.
@@ -156,7 +158,7 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
     @Override
     public synchronized void launch(final SlaveComputer computer, final TaskListener tl) throws InterruptedException {
         // Make sure he JDK is installed and launch the agent
-        fine(tl, String.format("Launching installer thread for computer: %s", computer));
+        fine(tl, format("Launching installer thread for computer: %s", computer));
 
         // Create a new connection
         connection = new Connection(getHost(), getPort());
@@ -170,7 +172,7 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
                         Executors.defaultThreadFactory(),
                         "NodePoolSSHLauncher.Agent launch for '" + computer.getName() + "' node"));
 
-        info(tl, String.format("Launching JRE installer, agent installer, and execute thread for computer: %s", computer));
+        info(tl, format("Launching JRE installer, agent installer, and execute thread for computer: %s", computer));
         final Set<Callable<Boolean>> callables = new HashSet<Callable<Boolean>>();
 
         // Add the body of work as a Callable object
@@ -181,7 +183,7 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
 
                 try {
                     // Not ready to accept tasks yet
-                    fine(tl, String.format("Setting node %s to accepting tasks: false", nodeName));
+                    fine(tl, format("Setting node %s to accepting tasks: false", nodeName));
                     computer.setAcceptingTasks(false);
 
                     // Determine the host key verification strategy
@@ -209,7 +211,7 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
                     for (int i = 0; i <= maxNumRetries; i++) {
                         try{
                             FilePath jdkInstallationFolder = jdkInstaller.performInstallation(computer.getNode(), tl, connection);
-                            info(tl, String.format("Installation is complete for node: %s on %s:%d.  Installation folder is: %s",
+                            info(tl, format("Installation is complete for node: %s on %s:%d.  Installation folder is: %s",
                                     computer, getHost(), getPort(), jdkInstallationFolder));
                             break;
                         } catch (Exception e){
@@ -231,37 +233,37 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
                     final String java = "java";
                     final String workingDirectory = "/tmp";
 
-                    fine(tl, String.format("Copying over the slave jar for node: %s on %s:%d",
+                    fine(tl, format("Copying over the slave jar for node: %s on %s:%d",
                             computer, getHost(), getPort()));
                     copySlaveJar(tl, workingDirectory);
 
-                    fine(tl, String.format("Starting Jenkins agent for node: %s on %s:%d",
+                    fine(tl, format("Starting Jenkins agent for node: %s on %s:%d",
                             computer, getHost(), getPort()));
                     startSlave(computer, tl, java, workingDirectory);
 
-                    fine(tl, String.format("Registering Jenkins agent for node: %s on %s:%d",
+                    fine(tl, format("Registering Jenkins agent for node: %s on %s:%d",
                             computer, getHost(), getPort()));
                     PluginImpl.register(connection);
 
                     // Ready to accept tasks now
-                    fine(tl, String.format("Setting node %s to accepting tasks: true", nodeName));
+                    fine(tl, format("Setting node %s to accepting tasks: true", nodeName));
                     computer.setAcceptingTasks(true);
 
                     returnValue = Boolean.TRUE;
                 } catch (RuntimeException | Error e) {
-                    warn(tl, String.format("%s while performing installation for node: %s on %s:%d. Message: %s",
+                    warn(tl, format("%s while performing installation for node: %s on %s:%d. Message: %s",
                             e.getClass().getSimpleName(), computer, getHost(), getPort(), e.getLocalizedMessage()));
                     e.printStackTrace(tl.error(Messages.SSHLauncher_UnexpectedError()));
                 } catch (AbortException e) {
-                    warn(tl, String.format("%s while performing installation for node: %s on %s:%d. Message: %s",
+                    warn(tl, format("%s while performing installation for node: %s on %s:%d. Message: %s",
                             e.getClass().getSimpleName(), computer, getHost(), getPort(), e.getLocalizedMessage()));
                     tl.getLogger().println(e.getMessage());
                 } catch (IOException e) {
-                    warn(tl, String.format("%s while performing installation for node: %s on %s:%d. Message: %s",
+                    warn(tl, format("%s while performing installation for node: %s on %s:%d. Message: %s",
                             e.getClass().getSimpleName(), computer, getHost(), getPort(), e.getLocalizedMessage()));
                     e.printStackTrace(tl.getLogger());
                 } catch (InterruptedException e) {
-                    warn(tl, String.format("%s while performing installation for node: %s on %s:%d. Message: %s",
+                    warn(tl, format("%s while performing installation for node: %s on %s:%d. Message: %s",
                             e.getClass().getSimpleName(), computer, getHost(), getPort(), e.getLocalizedMessage()));
                     e.printStackTrace();
                 } finally {
@@ -289,23 +291,23 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
 
             try {
                 // Blocking call to get the result
-                fine(tl, String.format("Waiting for node %s installation to complete...", nodeName));
+                fine(tl, format("Waiting for node %s installation to complete...", nodeName));
                 res = results.get(0).get();
             } catch (ExecutionException e) {
-                warn(tl, String.format("%s while running install. Message: %s", e.getClass().getSimpleName(), e.getLocalizedMessage()));
+                warn(tl, format("%s while running install. Message: %s", e.getClass().getSimpleName(), e.getLocalizedMessage()));
                 res = Boolean.FALSE;
             }
 
             if (res) {
-                info(tl, String.format("SSH Launch of node %s on %s:%d completed in %d ms",
+                info(tl, format("SSH Launch of node %s on %s:%d completed in %d ms",
                         nodeName, getHost(), getPort(), duration));
             } else {
-                warn(tl, String.format("SSH Launch failed for node %s on %s:%d, took %d ms. Cleaning up the connection.",
+                warn(tl, format("SSH Launch failed for node %s on %s:%d, took %d ms. Cleaning up the connection.",
                         nodeName, getHost(), getPort(), duration));
                 cleanupConnection(tl);
             }
         } catch (InterruptedException e) {
-            warn(tl, String.format("SSH Launch failed for node %s on %s:%d with a %s error.",
+            warn(tl, format("SSH Launch failed for node %s on %s:%d with a %s error.",
                     nodeName, getHost(), getPort(), e.getClass().getSimpleName()));
         } finally {
             launcherExecutorService.shutdownNow();
@@ -323,7 +325,7 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
             // lookup every time so that we always have the latest
             return SSHLauncher.lookupSystemCredentials(credentialsId);
         } catch (Throwable t) {
-            LOG.log(Level.WARNING, String.format("%s while looking up credentials with ID: %s", t.getClass().getSimpleName(), credentialsId));
+            LOG.log(Level.WARNING, format("%s while looking up credentials with ID: %s", t.getClass().getSimpleName(), credentialsId));
             return null;
         }
     }
@@ -368,7 +370,7 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
     }
 
     protected void openConnection(final TaskListener tl, final SlaveComputer computer) throws IOException, InterruptedException {
-        fine(tl, String.format("Opening SSH connection for node: %s on %s:%d", computer, getHost(), getPort()));
+        fine(tl, format("Opening SSH connection for node: %s on %s:%d", computer, getHost(), getPort()));
         connection.setTCPNoDelay(true);
 
         int maxNumRetries = this.maxNumRetries < 0 ? 0 : this.maxNumRetries;
@@ -397,10 +399,10 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
                     throw ioexception;
                 }
                 if (maxNumRetries - i > 0) {
-                    info(tl, String.format("SSH Connection failed with IOException - message is: %s, retrying in %d seconds.  There are %d more retries left.",
+                    info(tl, format("SSH Connection failed with IOException - message is: %s, retrying in %d seconds.  There are %d more retries left.",
                             message, this.retryWaitTimeSeconds, (maxNumRetries - i)));
                 } else {
-                    warn(tl, String.format("SSH Connection failed with IOException - message is: %s", message));
+                    warn(tl, format("SSH Connection failed with IOException - message is: %s", message));
                     throw ioexception;
                 }
             }
@@ -419,17 +421,17 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
         }
         if (SSHAuthenticator.newInstance(connection, credentials).authenticate(tl)
                 && connection.isAuthenticationComplete()) {
-            fine(tl, String.format("SSH authentication successful for node: %s on %s:%d",
+            fine(tl, format("SSH authentication successful for node: %s on %s:%d",
                     computer, getHost(), getPort()));
         } else {
-            warn(tl, String.format("SSH authentication failed for node: %s on: %s:%d",
+            warn(tl, format("SSH authentication failed for node: %s on: %s:%d",
                     computer, getHost(), getPort()));
             throw new AbortException(Messages.SSHLauncher_AuthenticationFailedException());
         }
     }
 
     protected void reportEnvironment(TaskListener tl, final SlaveComputer computer) throws IOException, InterruptedException {
-        fine(tl, String.format("Dumping environment for node: %s on: %s:%d", computer, getHost(), getPort()));
+        fine(tl, format("Dumping environment for node: %s on: %s:%d", computer, getHost(), getPort()));
         connection.exec("set", tl.getLogger());
     }
 
@@ -441,9 +443,9 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
      * @throws IOException If something goes wrong.
      */
     private void copySlaveJar(TaskListener tl, String workingDirectory) throws IOException, InterruptedException {
-        String fileName = workingDirectory + "/slave.jar";
+        String fileName = workingDirectory + SSHLauncher.SLASH_AGENT_JAR;
 
-        fine(tl, String.format("Starting sftp client to: %s:%d", getHost(), getPort()));
+        fine(tl, format("Starting sftp client to: %s:%d", getHost(), getPort()));
         SFTPClient sftpClient = null;
         try {
             sftpClient = new SFTPClient(connection);
@@ -454,6 +456,7 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
                     fine(tl, Messages.SSHLauncher_RemoteFSDoesNotExist(getTimestamp(), workingDirectory));
                     sftpClient.mkdirs(workingDirectory, 0700);
                 } else if (fileAttributes.isRegularFile()) {
+                    warn(tl, Messages.SSHLauncher_RemoteFSIsAFile(workingDirectory));
                     throw new IOException(Messages.SSHLauncher_RemoteFSIsAFile(workingDirectory));
                 }
 
@@ -466,26 +469,23 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
                 }
 
                 try {
-                    fine(tl, "Copying latest slave.jar...");
-                    byte[] slaveJar = new Slave.JnlpJar("slave.jar").readFully();
+                    fine(tl, Messages.SSHLauncher_CopyingAgentJar(getTimestamp()));
+                    byte[] slaveJar = new Slave.JnlpJar(SSHLauncher.AGENT_JAR).readFully();
                     // Transfer the JAR over - use resource management to auto-close/cleanup
                     try (OutputStream os = sftpClient.writeToFile(fileName)) {
                         os.write(slaveJar);
                     }
-                    fine(tl, String.format("Copied %d bytes", slaveJar.length));
+                    fine(tl, format("Copied %d bytes", slaveJar.length));
                 } catch (Throwable e) {
-                    warn(tl, String.format("%s wile copying over slave.jar via SFTP. Message: %s",
-                            e.getClass().getSimpleName(), e.getLocalizedMessage()));
-                    throw new IOException(Messages.SSHLauncher_ErrorCopyingSlaveJarTo(fileName), e);
+                    warn(tl, format("%s Message: %s", Messages.SSHLauncher_ErrorCopyingAgentJarTo(fileName), e.getLocalizedMessage()));
+                    throw new IOException(Messages.SSHLauncher_ErrorCopyingAgentJarTo(fileName), e);
                 }
-            } catch (Error error) {
-                warn(tl, String.format("%s wile copying over slave.jar via SFTP. Message: %s",
-                        error.getClass().getSimpleName(), error.getLocalizedMessage()));
-                throw error;
+            } catch (Error e) {
+                warn(tl, format("%s via SFTP. Message: %s", Messages.SSHLauncher_ErrorCopyingAgentJarTo(fileName), e.getLocalizedMessage()));
+                throw e;
             } catch (Throwable e) {
-                warn(tl, String.format("%s wile copying over slave.jar via SFTP. Message: %s",
-                        e.getClass().getSimpleName(), e.getLocalizedMessage()));
-                throw new IOException(Messages.SSHLauncher_ErrorCopyingSlaveJarInto(workingDirectory), e);
+                warn(tl, format("%s via SFTP. Message: %s", Messages.SSHLauncher_ErrorCopyingAgentJarTo(fileName), e.getLocalizedMessage()));
+                throw new IOException(Messages.SSHLauncher_ErrorCopyingAgentJarInto(workingDirectory), e);
             }
         } catch (IOException e) {
             if (sftpClient == null) {
@@ -523,13 +523,13 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
             }
 
             // delete the slave jar as we do with SFTP
-            connection.exec("rm " + workingDirectory + "/slave.jar", new NullStream());
+            connection.exec("rm " + workingDirectory + SSHLauncher.SLASH_AGENT_JAR, new NullStream());
 
             // SCP it to the slave. hudson.Util.ByteArrayOutputStream2 doesn't work for this. It pads the byte array.
-            fine(tl, Messages.SSHLauncher_CopyingSlaveJar(getTimestamp()));
-            scp.put(new Slave.JnlpJar("slave.jar").readFully(), "slave.jar", workingDirectory, "0644");
+            fine(tl, Messages.SSHLauncher_CopyingAgentJar(getTimestamp()));
+            scp.put(new Slave.JnlpJar(SSHLauncher.AGENT_JAR).readFully(), SSHLauncher.AGENT_JAR, workingDirectory, "0644");
         } catch (IOException e) {
-            throw new IOException(Messages.SSHLauncher_ErrorCopyingSlaveJarInto(workingDirectory), e);
+            throw new IOException(Messages.SSHLauncher_ErrorCopyingAgentJarInto(workingDirectory), e);
         }
     }
 
@@ -545,12 +545,12 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
     private void startSlave(SlaveComputer computer, final TaskListener tl, String java, String workingDirectory) throws IOException {
         final Session session = connection.openSession();
         expandChannelBufferSize(session, tl);
-        String cmd = "cd \"" + workingDirectory + "\" && " + java + " " + getJvmOptions() + " -jar slave.jar";
+        String cmd = "cd \"" + workingDirectory + "\" && " + java + " " + getJvmOptions() + " -jar " + SSHLauncher.AGENT_JAR;
 
         //This will wrap the cmd with prefix commands and suffix commands if they are set.
         cmd = getPrefixStartSlaveCmd() + cmd + getSuffixStartSlaveCmd();
 
-        fine(tl, String.format("Starting slave with command: %s", cmd));
+        fine(tl, Messages.SSHLauncher_StartingAgentProcess(getTimestamp(), cmd));
         session.execCommand(cmd);
 
         session.pipeStderr(new DelegateNoCloseOutputStream(tl.getLogger()));
@@ -558,6 +558,8 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
         try {
             computer.setChannel(session.getStdout(), session.getStdin(), tl.getLogger(), null);
         } catch (InterruptedException e) {
+            warn(tl, format("%s occurred while setting up the SSH channel. Message: %s",
+                    e.getClass().getSimpleName(), e.getLocalizedMessage()));
             session.close();
             throw new IOException(Messages.SSHLauncher_AbortedDuringConnectionOpen(), e);
         } catch (IOException e) {
@@ -607,7 +609,7 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
      * @return the formatted current time stamp.
      */
     private static String getTimestamp() {
-        return String.format("[%1$tD %1$tT]", new Date());
+        return format("[%1$tD %1$tT]", new Date());
     }
 
     /**
@@ -618,7 +620,7 @@ public class NodePoolSSHLauncher extends ComputerLauncher {
      * @param msg      the message to log
      */
     private static void log(Level lvl, TaskListener listener, String msg) {
-        listener.getLogger().println(String.format("%s [%s] %s", getTimestamp(), lvl, msg));
+        listener.getLogger().println(format("%s [%s] %s", getTimestamp(), lvl, msg));
         LOG.log(lvl, msg);
     }
 

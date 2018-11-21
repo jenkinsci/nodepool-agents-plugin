@@ -27,6 +27,7 @@ hs_err_pid*
 .classpath
 .settings/
 .history/
+.vscode/
 
 # Ignore Virtual Env in docker folder
 docker/.venv/

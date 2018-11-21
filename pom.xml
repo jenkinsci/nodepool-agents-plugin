@@ -16,9 +16,9 @@
         <!-- Jenkins -->
         <!--<jenkins.version>2.107.1</jenkins.version>-->
         <!-- Jenkins version bump to support BlueOcean -->
-        <jenkins.version>2.107.3</jenkins.version>
+        <!-- <jenkins.version>2.107.3</jenkins.version> -->
         <!-- Currently the Latest and Greatest -->
-        <!--<jenkins.version>2.138.3</jenkins.version>-->
+        <jenkins.version>2.138.3</jenkins.version>
         <java.level>8</java.level>
     </properties>
     <name>NodePool Agents Plugin</name>
@@ -103,6 +103,7 @@
                         <org.apache.zookeeper>WARNING</org.apache.zookeeper>
                         <org.apache.curator>WARNING</org.apache.curator>
                         <org.springframework.beans>WARNING</org.springframework.beans>
+                        <org.jenkinsci.plugins>WARNING</org.jenkinsci.plugins>
                     </loggers>
                 </configuration>
             </plugin>
@@ -222,7 +223,14 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>ssh-slaves</artifactId>
-            <version>1.26</version>
+            <version>1.29.1</version>
+        </dependency>
+        <!-- Required for newer Jenkins as hudson.plugins.sshslaves.SFTPClient was removed from ssh-slaves -->
+        <!-- This dependency pulls in trilead-ssh2 which provides the SSH2 library/protocol in Java -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>trilead-api</artifactId>
+            <version>1.0.1</version>
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
@@ -248,7 +256,7 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>ssh-credentials</artifactId>
-            <version>1.12</version>
+            <version>1.14</version>
         </dependency>
         <dependency>
             <!-- CommandLauncher was detached from core some time ago (cf. https://github.com/jenkinsci/jenkins/pull/3076) -->
