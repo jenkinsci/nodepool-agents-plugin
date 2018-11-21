@@ -113,7 +113,7 @@ public class NodeRequest {
                 nodeTypes,
                 Collections.emptyList(), // declined by
                 System.currentTimeMillis() / 1000d,
-                false,
+                true, // enable reuse, without this ready nodes won't be used and a new node will be built.
                 this.nodePool.getRequestor(),
                 NodePoolState.REQUESTED,
                 Collections.emptyList(), // nodes
