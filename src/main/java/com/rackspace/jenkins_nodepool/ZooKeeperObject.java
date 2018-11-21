@@ -222,12 +222,21 @@ public class ZooKeeperObject<T> {
     }
 
     /**
+     * See load(Boolean)
+     * @return the data model as a Java object
+     * @throws ZookeeperException
+     */
+    public T load() throws ZookeeperException {
+        return load(false);
+    }
+    /**
      * Reads the data model from Zookeeper.
      *
      * @return the data model as a Java object
      * @throws ZookeeperException if an error occurs while reading the data model from the Zookeeper node
+     * @param create Create a new znode if the required path doesn't exist
      */
-    public T load() throws ZookeeperException {
+    public T load(Boolean create) throws ZookeeperException {
         try {
             if (exists()) {
                 byte[] bytes = conn.getData().forPath(this.path);
@@ -241,9 +250,12 @@ public class ZooKeeperObject<T> {
                     //LOG.log(FINEST, format("Loaded model, path: %s, data: %s", path, jsonString));
                     return GSON.fromJson(jsonString, typeParameterClass);
                 }
-            } else {
+            } else if (create) {
                 // Return a new empty model
                 return typeParameterClass.newInstance();
+            } else {
+                // Don't create a new node, because create is false
+                throw new ZookeeperException("Can't read from non-existent znode: "+this.path);
             }
         } catch (Exception e) {
             LOG.log(WARNING, format("%s occurred while loading ZK data. Message: %s",

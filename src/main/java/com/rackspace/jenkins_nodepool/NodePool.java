@@ -57,6 +57,7 @@ import javax.servlet.ServletException;
 import jenkins.model.Jenkins;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.framework.imps.CuratorFrameworkState;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.zookeeper.CreateMode;
 import org.kohsuke.stapler.*;
@@ -430,6 +431,9 @@ public class NodePool implements Describable<NodePool> {
         }
         if (conn == null && connectionString != null) {
             conn = NodePool.createZKConnection(connectionString, zooKeeperRoot);
+        }
+        if (conn != null && conn.getState() != CuratorFrameworkState.STARTED){
+            conn.start();
         }
     }
 

@@ -63,7 +63,8 @@ public class NodePoolNode {
         this.zkWrapper = new ZooKeeperObject<>(path, id, nodePool.getConn(), modelClazz);
 
         // Update the Build ID and save it back - use our wrapper to do the heavy lifting
-        final NodeModel model = this.zkWrapper.load();
+        // Set create to true as the zNode probably won't exist
+        final NodeModel model = this.zkWrapper.load(true);
         model.setBuild_id(npj.getBuildId());
         this.zkWrapper.save(model);
 
@@ -87,7 +88,12 @@ public class NodePoolNode {
     public List<String> getNPTypes() {
         try {
             final NodeModel model = zkWrapper.load();
-            return model.getType();
+            List<String> types =  model.getType();
+            if (types != null){
+                return types;
+            } else {
+                return new ArrayList<>();
+            }
         } catch (ZookeeperException e) {
             LOG.log(WARNING, format("%s occurred while reading ZK node %s 'type' field. Message: %s",
                     e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));

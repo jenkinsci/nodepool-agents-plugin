@@ -42,7 +42,7 @@
                 <!-- TODO: read jenkins hostname or name of itself? -->
             </f:entry>
             <f:entry title="Priority" field="priority">
-                <f:textbox default="100"></f:textbox>
+                <f:textbox default="500"></f:textbox>
             </f:entry>
             <f:entry title="JDK/JRE Installation Script" field="jdkInstallationScript">
                 <f:textarea name="jdkInstallationScript" value="${jdkInstallationScript}" class="fixed-width" />
