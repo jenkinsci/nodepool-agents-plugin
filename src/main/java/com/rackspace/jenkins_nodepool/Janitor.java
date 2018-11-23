@@ -1,19 +1,28 @@
 package com.rackspace.jenkins_nodepool;
 
+import com.google.gson.Gson;
+import com.rackspace.jenkins_nodepool.models.NodeModel;
+import com.rackspace.jenkins_nodepool.models.NodeRequestModel;
 import hudson.model.Computer;
 import hudson.model.Node;
+import hudson.model.Run;
 import hudson.model.labels.LabelAtom;
 import hudson.security.ACL;
 import hudson.security.ACLContext;
+
+import java.nio.charset.StandardCharsets;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.locks.Lock;
 import java.util.logging.Level;
-import static java.util.logging.Level.FINE;
-import static java.util.logging.Level.WARNING;
 import java.util.logging.Logger;
+
 import jenkins.model.Jenkins;
+import org.apache.curator.framework.CuratorFramework;
 import org.jenkinsci.plugins.workflow.job.WorkflowRun;
+
+import static java.lang.String.format;
+import static java.util.logging.Level.*;
 
 /**
  * This class implements the logic for the background janitor thread.
@@ -25,28 +34,54 @@ class Janitor implements Runnable {
      * Our class logger.
      */
     private static final Logger LOG = Logger.getLogger(JanitorialListener.class.getName());
+
+    /**
+     * Janitor check interval in seconds.
+     */
     private static final String SLEEP_SECS_DEFAULT = "60";
 
     private long sleepMilliseconds;
+
+    /**
+     * JSON reader/writer helper
+     */
+    private Gson gson = new Gson();
+
+    /**
+     * A reference to the Zookeeper connection framework
+     */
+    private CuratorFramework conn;
 
     Janitor() {
         // by default, sleep for 60 seconds between cleaning attempts.
         final String sleepSeconds = System.getProperty(Janitor.class.getName() + ".sleep_seconds",
                 SLEEP_SECS_DEFAULT);
-        sleepMilliseconds = Integer.parseInt(sleepSeconds) * 1000;
+        sleepMilliseconds = Long.parseLong(sleepSeconds) * 1000L;
     }
 
     @Override
     public void run() {
 
-        LOG.log(Level.INFO, "Janitor thread running...");
+        LOG.log(INFO, "Janitor thread running...");
 
         try (ACLContext ignored = ACL.as(ACL.SYSTEM)) {
             runAsSystem();
-        } catch (Exception e){
-            LOG.log(Level.SEVERE, "Caught exception while escalating privileges for the Janitor thread:"+e.getMessage());
+        } catch (Exception e) {
+            LOG.log(SEVERE, format("Caught exception while escalating privileges for the Janitor thread. Message: %s",
+                    e.getLocalizedMessage()));
         }
-        LOG.log(Level.SEVERE, "Janitor Thread Exited - this shouldn't happen, resources may leak.");
+        LOG.log(SEVERE, "Janitor Thread Exited - this shouldn't happen, resources may leak.");
+    }
+
+    private CuratorFramework getConn() throws NodePoolException{
+        // Grab a reference to the NodePool ZK connection
+        CuratorFramework conn;
+        if (NodePools.get().getNodePools().isEmpty()) {
+            throw new NodePoolException("No Nodepools Configured, can't obtain zookeeper connection.");
+        } else {
+            conn = NodePools.get().getNodePools().get(0).getConn();
+        }
+        return conn;
     }
 
     /**
@@ -55,7 +90,7 @@ class Janitor implements Runnable {
     private void runAsSystem() {
         while (true) {
             try {
-                Thread.currentThread().sleep(sleepMilliseconds);
+                Thread.sleep(sleepMilliseconds);
                 clean();
             } catch (Exception e) {
                 LOG.log(WARNING, "Cleanup failed: " + e.getMessage(), e);
@@ -63,6 +98,28 @@ class Janitor implements Runnable {
         }
     }
 
+    /**
+     * Examines the nodes defined in both Jenkins and the NodePool service.
+     * <p>
+     * Nodes are removed under these conditions:
+     * <p><ul>
+     * <li>The node in question is no longer in NodePool/ZooKeeper</li>
+     * <li>The node has a invalid label</li>
+     * <li>The node was previously used for a build</li>
+     * <li>The node build is complete and is not held</li>
+     * </ul>
+     */
+    private void clean() throws NodePoolException {
+        LOG.log(FINEST, "--------------------- Janitor scanning -------------------");
+        // This cleanup doesn't require a zookeeper connection, so run before
+        // getConn() which may throw NodePoolException. If it does, it will
+        // be handled by runAsSystem.
+        cleanJenkinsNodes();
+        conn = getConn();
+        showZookeeperRequests();
+        cleanZookeeperNodes();
+        LOG.log(FINEST, "--------------------- Janitor scanning done --------------");
+    }
 
     /**
      * Examines all the nodes Jenkins currently has, and looks for NodePool nodes that should be removed from
@@ -75,58 +132,83 @@ class Janitor implements Runnable {
      * <li>The node was previously used for a build</li>
      * </ul>
      */
-    private void clean() {
+    private void cleanJenkinsNodes() {
+        try {
 
-        final Jenkins jenkins = Jenkins.getInstance();
-
-        for (Node node : jenkins.getNodes()) {
-            if (!(node instanceof NodePoolSlave))
-                continue;
-
-            final NodePoolSlave nodePoolSlave = (NodePoolSlave) node;
-            LOG.log(Level.FINE, "Evaluating NodePool Node: " + nodePoolSlave);
-
-            NodePoolJob nodePoolJob = nodePoolSlave.getJob();
-            if (nodePoolJob == null){
-                LOG.log(Level.FINE, "No NodePoolJob found for: {0} cleaning.", nodePoolSlave);
-                cleanNode(nodePoolSlave, "Job Reference is null");
-                continue;
+            final Jenkins jenkins = Jenkins.getInstanceOrNull();
+            // This should never happen, but would return null if the service has not been started, or was already shut down,
+            // or we are running on an unrelated JVM, typically an agent.
+            if (jenkins == null) {
+                LOG.log(WARNING, "Error - unable to fetch a reference to a Jenkins instance - we should be running on the master. Unable to run Janitor cleanup.");
+                return;
             }
-            WorkflowRun run = (WorkflowRun)nodePoolJob.getRun();
 
-            if (run.isBuilding()){
-                // The associated build is still executing,
-                // don't remove the node under any circumstances
-                // Timeouts are handled in the jobs, not here.
-            } else if (nodePoolSlave.isHeld()) {
-                // Build has ended, but node could be held.
-                // Grab the hold until time - need to compare it to current time to determine if our hold has expired
-                final long holdUtilEpochMs = ((NodePoolSlave) node).getHoldUnitEpochMs();
-                long now = System.currentTimeMillis();
-                if (now > holdUtilEpochMs) {
-                    // Build complete and hold expired, clean node
-                    LOG.log(Level.INFO, String.format(
-                            "Removing held node: %s - job is done and hold has expired - hold until time: %s, current time: %s",
-                            nodePoolSlave,
-                            NodePoolUtils.getFormattedDateTime(holdUtilEpochMs, ZoneOffset.UTC),
-                            NodePoolUtils.getFormattedDateTime(now, ZoneOffset.UTC)));
-                    ((NodePoolSlave) node).setHeld(false);
-                    cleanNode(nodePoolSlave, "Hold expired");
-                } else {
-                    // Build complete, but hold has not expired so retain node
-                    LOG.log(Level.FINE, String.format(
-                            "Skipping held node: %s - job is running: %b, held: %b - hold until time: %s, current time: %s",
-                            nodePoolSlave, nodePoolJob.getRun().isBuilding(), nodePoolSlave.isHeld(),
-                            NodePoolUtils.getFormattedDateTime(holdUtilEpochMs, ZoneOffset.UTC),
-                            NodePoolUtils.getFormattedDateTime(System.currentTimeMillis(), ZoneOffset.UTC)));
-                }
+            LOG.log(FINEST, "Reviewing Jenkins nodes...");
+            if (jenkins.getNodes().isEmpty()) {
+                LOG.log(FINEST, "No Jenkins nodes registered.");
             } else {
-                // Build complete and node isn't held, clean it.
-                LOG.log(Level.INFO, "Removing node " + nodePoolSlave
-                    + " because the build it was created for ("
-                    +run.getExternalizableId()+") is no longer running.");
-                cleanNode(nodePoolSlave, "Build Complete");
+                for (Node node : jenkins.getNodes()) {
+                    if (!(node instanceof NodePoolSlave)) {
+                        continue;
+                    }
+
+                    final NodePoolSlave nodePoolSlave = (NodePoolSlave) node;
+                    NodePoolJob nodePoolJob = nodePoolSlave.getJob();
+
+                    LOG.log(FINEST, "Evaluating NodePool Node: " + nodePoolSlave);
+                    if (nodePoolJob == null) {
+                        LOG.log(FINE, format("NodePool Node: %s does not have a job. Cleaning node...", nodePoolSlave));
+                        cleanNode(nodePoolSlave, "Job Reference is null");
+                        continue;
+                    }
+
+                    WorkflowRun run = (WorkflowRun) nodePoolJob.getRun();
+                    if (run == null) {
+                        LOG.log(WARNING, format("NodePool Node: %s does not have a workflow run object associated with the job. Skipping.", nodePoolSlave));
+                        continue;
+                    }
+
+                    if (run.isBuilding()) {
+                        // The associated build is still executing,
+                        // don't remove the node under any circumstances
+                        // Timeouts are handled in the jobs, not here.
+                        LOG.log(FINEST, format("Node %s is still building a job. Skipping cleanup.", nodePoolSlave));
+                    } else if (nodePoolSlave.isHeld()) {
+                        // Build has ended, but node could be held.
+                        // Grab the hold until time - need to compare it to current time to determine if our hold has expired
+                        final long holdUtilEpochMs = ((NodePoolSlave) node).getHoldUnitEpochMs();
+                        long now = System.currentTimeMillis();
+                        if (now > holdUtilEpochMs) {
+                            // Build complete and hold expired, clean node
+                            LOG.log(INFO, format(
+                                    "Removing held node: %s - job is done and hold has expired - hold until time: %s, current time: %s",
+                                    nodePoolSlave,
+                                    NodePoolUtils.getFormattedDateTime(holdUtilEpochMs, ZoneOffset.UTC),
+                                    NodePoolUtils.getFormattedDateTime(now, ZoneOffset.UTC)));
+                            ((NodePoolSlave) node).setHeld(false);
+                            cleanNode(nodePoolSlave, "Hold expired");
+                        } else {
+                            // Build complete, but hold has not expired so retain node
+                            LOG.log(FINE, format(
+                                    "Skipping held node: %s - job is running: %b, held: %b - hold until time: %s, current time: %s",
+                                    nodePoolSlave, nodePoolJob.getRun().isBuilding(), nodePoolSlave.isHeld(),
+                                    NodePoolUtils.getFormattedDateTime(holdUtilEpochMs, ZoneOffset.UTC),
+                                    NodePoolUtils.getFormattedDateTime(System.currentTimeMillis(), ZoneOffset.UTC)));
+                        }
+                    } else {
+                        // Build complete and node isn't held, clean it.
+                        LOG.log(INFO, format("Removing node %s because the build it was created for (%s) is no longer running.",
+                                nodePoolSlave, run.getExternalizableId()));
+                        cleanNode(nodePoolSlave, "Build Complete");
+                    }
+                }
             }
+        } catch (RuntimeException e) {
+            // Explicitly catch Runtime to resolve Findbugs REC_CATCH_EXCEPTION
+            throw e;
+        } catch (Exception e) {
+            LOG.log(WARNING, format("%s error while querying for Jenkins nodes. Message: %s",
+                    e.getClass().getSimpleName(), e.getLocalizedMessage()));
         }
     }
 
@@ -138,8 +220,8 @@ class Janitor implements Runnable {
      * @param nodePoolSlave the node to remove
      * @param reason        the reason why the node is being removed
      */
-    void cleanNode(NodePoolSlave nodePoolSlave, String reason) {
-        // Executed from a threadpool so that
+    private void cleanNode(NodePoolSlave nodePoolSlave, String reason) {
+        // Executed from a thread pool so that
         // the 30s waits don't block the Janitor.
         Computer.threadPoolForRemoting.submit(() -> {
             try {
@@ -151,7 +233,7 @@ class Janitor implements Runnable {
                 // won't block anything.
                 Thread.sleep(30000L);
             } catch (InterruptedException ex) {
-               //meh we woke up.
+                //meh we woke up.
             }
             // Lock to prevent races with other threads that attempt cleanup
             Lock cleanupLock = NodePools.get().getCleanupLock();
@@ -161,24 +243,30 @@ class Janitor implements Runnable {
             try {
                 NodePoolComputer c = (NodePoolComputer) nodePoolSlave.toComputer();
                 NodePoolNode npn = nodePoolSlave.getNodePoolNode();
-                if (c != null){
+                if (c != null) {
                     c.doToggleOffline(reason);
                     c.doDoDelete();
                 } else {
-                    LOG.log(FINE, String.format("Releasing NodePoolNode with no associated computer %s", npn));
+                    LOG.log(FINE, format("Releasing NodePoolNode with no associated computer %s", npn));
                     // inner try to ensure we attempt removeNode
                     try {
                         npn.release();
-                    }catch (Exception e){
-                        LOG.log(FINE, String.format("%s while attempting to clean node %s. Message: %s",
-                        e.getClass().getSimpleName(), npn, e.getLocalizedMessage()));
-                    };
-                    Jenkins.getInstance().removeNode(nodePoolSlave);
+                    } catch (Exception e) {
+                        LOG.log(FINE, format("%s while attempting to release node %s. Message: %s",
+                                e.getClass().getSimpleName(), npn, e.getLocalizedMessage()));
+                    }
+
+                    final Jenkins jenkinsInstance = Jenkins.getInstanceOrNull();
+                    if (jenkinsInstance != null) {
+                        jenkinsInstance.removeNode(nodePoolSlave);
+                    } else {
+                        LOG.log(WARNING, "Error - unable to fetch a reference to a Jenkins instance - unable to remove node");
+                    }
                 }
             } catch (Exception e) {
-                LOG.log(FINE, String.format("%s while attempting to clean node %s. Message: %s",
+                LOG.log(FINE, format("%s while attempting to clean node %s. Message: %s",
                         e.getClass().getSimpleName(), nodePoolSlave, e.getLocalizedMessage()));
-            }finally{
+            } finally {
                 cleanupLock.unlock();
             }
         });
@@ -193,40 +281,139 @@ class Janitor implements Runnable {
     boolean hasInvalidLabel(NodePoolSlave nodePoolSlave) {
         final String nodeLabel = nodePoolSlave.getLabelString();
         final List<NodePool> nodePools = NodePools.get().nodePoolsForLabel(new LabelAtom(nodeLabel));
-        return (nodePools == null || nodePools.size() == 0);
+        return (nodePools == null || nodePools.isEmpty());
     }
 
     /**
-     * Check if the given slave node has disappeared in ZooKeeper
-     *
-     *
-     * @param nodePoolSlave the node to check
-     * @return true if the node has disappeared
+     * Shows the current requests in Zookeeper
      */
-    private boolean isMissing(NodePoolSlave nodePoolSlave) {
-        NodePoolComputer c = (NodePoolComputer) nodePoolSlave.toComputer();
-        if (c == null || c.isOffline()) {
-            // agent is offline - confirm that this node still exists in ZK/NP:
-            final NodePoolNode nodePoolNode = nodePoolSlave.getNodePoolNode();
+    private void showZookeeperRequests() {
+        LOG.log(FINEST, "Looking for requests...");
 
-            try {
-                if (nodePoolNode == null) {
-                    // node is unknown
-                    LOG.log(Level.FINE, "Slave " + nodePoolSlave + " has no associated Node record.");
-                    return true;
+        try {
+            if (NodePools.get().getNodePools().isEmpty()) {
+                LOG.log(FINEST, "No NodePools configured - unable to query for requests.");
+            } else {
+                final String zkNodesRequestRootPath = format("/%s", NodePools.get().getNodePools().get(0).getRequestRoot());
+                final List<String> nodesRequestPaths = conn.getChildren().forPath(zkNodesRequestRootPath);
+                if (nodesRequestPaths.isEmpty()) {
+                    LOG.log(FINEST, "No Node Requests registered.");
+                } else {
+                    for (String nodeRequestPath : nodesRequestPaths) {
+                        // Read and parse the data into a POJO model
+                        final String path = format("%s/%s", zkNodesRequestRootPath, nodeRequestPath);
+                        //LOG.log(FINE, format("ZK Node Request path: %s", path));
+                        final byte[] data = conn.getData().forPath(path);
+                        final NodeRequestModel model = gson.fromJson(new String(data, StandardCharsets.UTF_8), NodeRequestModel.class);
+                        LOG.log(FINEST, format("Node Request, path: %s, state: %s, requestor: %s, build id: %s",
+                                path,
+                                model.getState(),
+                                model.getRequestor(),
+                                model.getBuild_id()));
+                    }
                 }
-                if (!nodePoolNode.exists()) {
-                    // Corresponding ZNode is gone, this is definitely an orphan record in Jenkins
-                    LOG.log(Level.FINE, "Slave " + nodePoolSlave + " no longer exists in ZK.");
-                    return true;
-                }
-            } catch (Exception e) {
-                LOG.log(WARNING, "Failed to check if node " + nodePoolNode + " exists.", e);
-                return false;
             }
+        } catch (RuntimeException e) {
+            // Explicitly catch Runtime to resolve Findbugs REC_CATCH_EXCEPTION
+            throw e;
+        } catch (Exception e) {
+            LOG.log(WARNING, format("%s error while querying for NodePool requests and nodes. Message: %s",
+                    e.getClass().getSimpleName(), e.getLocalizedMessage()));
         }
-        return false;
     }
 
-}
+    /**
+     * Cleans any stale zookeeper nodes that have been used and are currently not running.
+     */
+    private void cleanZookeeperNodes() {
+        LOG.log(FINEST, "Looking for Zookeeper nodes...");
 
+        try {
+            if (NodePools.get().getNodePools().isEmpty()) {
+                LOG.log(FINEST, "No nodepools configured - unable to query for zookeeper nodes.");
+            } else {
+                // Scan for nodes listed in Zookeeper (not in Jenkins)
+                final String zkNodesRootPath = format("/%s", NodePools.get().getNodePools().get(0).getNodeRoot());
+                final List<String> nodesPaths = conn.getChildren().forPath(zkNodesRootPath);
+                if (nodesPaths.isEmpty()) {
+                    LOG.log(FINEST, "No NodePool nodes registered in Zookeeper. Expecting reserved nodes (min-ready).");
+                } else {
+                    for (String nodePath : nodesPaths) {
+                        // Read and parse the data into a data model
+                        final String path = format("%s/%s", zkNodesRootPath, nodePath);
+                        final byte[] data = conn.getData().forPath(path);
+                        final NodeModel model = gson.fromJson(new String(data, StandardCharsets.UTF_8), NodeModel.class);
+
+                        // If we have a build id, then we should get a Run object - will be null if node isn't allocated
+                        // to a job yet (on standby/min-ready)
+                        Run run = null;
+                        if (model.getBuild_id() != null) {
+                            run = Run.fromExternalizableId(model.getBuild_id());
+                        }
+
+                        if (model.getAllocated_to() == null) {
+                            LOG.log(FINEST, format("Reserved Node: %s, region: %s, held: %b, allocated to: %s",
+                                    nodePath,
+                                    model.getRegion(),
+                                    (model.getHold_job() != null),
+                                    model.getAllocated_to()));
+                        } else if (run != null && model.getBuild_id() != null && run.isBuilding()) {
+                            // Node is being used: we have an external id, a build id, and it's currently building
+                            LOG.log(FINE, format("In-Use Node: %s, region: %s, held: %b, allocated to: %s, build id: %s, is running: %s",
+                                    nodePath,
+                                    model.getRegion(),
+                                    (model.getHold_job() != null),
+                                    model.getAllocated_to(),
+                                    model.getBuild_id(),
+                                    run.isBuilding()));
+                        } else if (run != null && model.getBuild_id() != null && !run.isBuilding() && model.getHold_job() != null) {
+                            LOG.log(FINEST, format("Retired Node (held): %s, region: %s, held: %b, allocated to: %s, build id: %s, is running: %s.",
+                                    nodePath,
+                                    model.getRegion(),
+                                    (model.getHold_job() != null),
+                                    model.getAllocated_to(),
+                                    model.getBuild_id(),
+                                    run.isBuilding()));
+                        } else if (run != null && model.getBuild_id() != null && !run.isBuilding() && model.getHold_job() == null) {
+                            LOG.log(FINEST, format("Retired Node (not held): %s, region: %s, held: %b, allocated to: %s, build id: %s, is running: %s - should REMOVE this node.",
+                                    nodePath,
+                                    model.getRegion(),
+                                    (model.getHold_job() != null),
+                                    model.getAllocated_to(),
+                                    model.getBuild_id(),
+                                    run.isBuilding()));
+
+                            // Toggle the state to used
+                            model.setState(NodePoolState.USED);
+
+                            // Save the changes back to ZK
+                            final String jsonStringModel = gson.toJson(model, NodeModel.class);
+                            conn.setData().forPath(path, jsonStringModel.getBytes(StandardCharsets.UTF_8));
+                            LOG.log(FINEST, format("Retired Node (not held): %s, region: %s, held: %b, allocated to: %s, build id: %s, is running: %s - changed state to USED - launcher should remove.",
+                                    nodePath,
+                                    model.getRegion(),
+                                    (model.getHold_job() != null),
+                                    model.getAllocated_to(),
+                                    model.getBuild_id(),
+                                    run.isBuilding()));
+                        } else {
+                            LOG.log(WARNING, format("Unknown/Unsupported State of Node: %s, region: %s, held: %b, allocated to: %s, build id: %s, is running: %s",
+                                    nodePath,
+                                    model.getRegion(),
+                                    (model.getHold_job() != null),
+                                    model.getAllocated_to(),
+                                    model.getBuild_id(),
+                                    (run == null ? "null" : run.isBuilding())));
+                        }
+                    }
+                }
+            }
+        } catch (RuntimeException e) {
+            // Explicitly catch Runtime to resolve Findbugs REC_CATCH_EXCEPTION
+            throw e;
+        } catch (Exception e) {
+            LOG.log(WARNING, format("%s error while querying for Zookeeper nodes. Message: %s",
+                    e.getClass().getSimpleName(), e.getLocalizedMessage()));
+        }
+    }
+}

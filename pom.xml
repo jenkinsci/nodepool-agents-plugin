@@ -11,7 +11,14 @@
     <version>0.0.17-SNAPSHOT</version>
     <packaging>hpi</packaging>
     <properties>
-        <jenkins.version>2.73.3</jenkins.version>
+        <!-- Original -->
+        <!--<jenkins.version>2.73.3</jenkins.version>-->
+        <!-- Jenkins -->
+        <!--<jenkins.version>2.107.1</jenkins.version>-->
+        <!-- Jenkins version bump to support BlueOcean -->
+        <!-- <jenkins.version>2.107.3</jenkins.version> -->
+        <!-- Currently the Latest and Greatest -->
+        <jenkins.version>2.138.3</jenkins.version>
         <java.level>8</java.level>
     </properties>
     <name>NodePool Agents Plugin</name>
@@ -84,6 +91,25 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>org.jenkins-ci.tools</groupId>
+                <artifactId>maven-hpi-plugin</artifactId>
+                <extensions>true</extensions>
+                <configuration>
+                    <showDeprecation>true</showDeprecation>
+                    <webApp>
+                        <contextPath>/jenkins</contextPath>
+                    </webApp>
+                    <!-- See: https://jenkinsci.github.io/maven-hpi-plugin/run-mojo.html -->
+                    <loggers>
+                        <com.rackspace>ALL</com.rackspace>
+                        <org.apache.zookeeper>WARNING</org.apache.zookeeper>
+                        <org.apache.curator>WARNING</org.apache.curator>
+                        <org.springframework.beans>WARNING</org.springframework.beans>
+                        <org.jenkinsci.plugins>WARNING</org.jenkinsci.plugins>
+                    </loggers>
+                </configuration>
+            </plugin>
+            <plugin>
                 <groupId>org.eclipse.jetty</groupId>
                 <artifactId>jetty-maven-plugin</artifactId>
                 <version>9.4.10.v20180503</version>
@@ -107,7 +133,11 @@
                             <properties>
                                 <property>
                                     <name>java.util.logging.SimpleFormatter.format</name>
-                                    <value>[%4$.4s][%1$tY-%1$tm-%1$tdT%1$tH:%1$tM:%1$tS%tz] %2$s %5$s%6$s%n</value>
+                                    <!-- See: https://docs.oracle.com/javase/7/docs/api/java/util/logging/SimpleFormatter.html for columns -->
+                                    <!-- Shows Logger name and method: %2 -->
+                                    <!--<value>[%4$6.6s][%1$tY-%1$tm-%1$tdT%1$tH:%1$tM:%1$tS%tz] %2$s %5$s%6$s%n</value> -->
+                                    <!-- Show Logger name only (doesn't include the method): %3 -->
+                                    <value>[%4$6.6s][%1$tY-%1$tm-%1$tdT%1$tH:%1$tM:%1$tS%tz] %3$s - %5$s%6$s%n</value>
                                 </property>
                             </properties>
                         </configuration>
@@ -118,6 +148,11 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>2.22.0</version>
+                <configuration>
+                    <systemPropertyVariables>
+                        <log4j.configuration>file:${basedir}/src/test/resources/log4j.properties</log4j.configuration>
+                    </systemPropertyVariables>
+                </configuration>
             </plugin>
         </plugins>
     </build>
@@ -190,7 +225,14 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>ssh-slaves</artifactId>
-            <version>1.26</version>
+            <version>1.29.1</version>
+        </dependency>
+        <!-- Required for newer Jenkins as hudson.plugins.sshslaves.SFTPClient was removed from ssh-slaves -->
+        <!-- This dependency pulls in trilead-ssh2 which provides the SSH2 library/protocol in Java -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>trilead-api</artifactId>
+            <version>1.0.1</version>
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
@@ -216,8 +258,30 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>ssh-credentials</artifactId>
-            <version>1.12</version>
+            <version>1.14</version>
         </dependency>
+        <dependency>
+            <!-- CommandLauncher was detached from core some time ago (cf. https://github.com/jenkinsci/jenkins/pull/3076) -->
+            <!-- Needed for running the unit tests for more recent versions of Jenkins -->
+            <!-- Some discussion here: https://groups.google.com/forum/#!topic/jenkinsci-dev/OJ7JadgPUzE -->
+            <groupId>${project.groupId}</groupId>
+            <artifactId>command-launcher</artifactId>
+            <version>1.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>script-security</artifactId>
+            <version>1.39</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- If Jenkins >= 2.112 - avoids java.lang.NoClassDefFoundError: hudson/tools/JDKInstaller$FileSystem -->
+        <!--<dependency>-->
+            <!--<groupId>${project.groupId}</groupId>-->
+            <!--<artifactId>jdk-tool</artifactId>-->
+            <!--<version>1.1</version>-->
+            <!--<scope>test</scope>-->
+        <!--</dependency>-->
     </dependencies>
 
     <reporting>

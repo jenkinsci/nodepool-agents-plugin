@@ -24,24 +24,34 @@
 package com.rackspace.jenkins_nodepool;
 
 import com.google.gson.Gson;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.logging.Level;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.zookeeper.CreateMode;
+
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.List;
 import java.util.logging.Logger;
 
-//TODO: serialise to JSON properly with XStream
+import static java.lang.String.format;
+import static java.util.logging.Level.FINEST;
+import static java.util.logging.Level.INFO;
+import static java.util.logging.Level.WARNING;
+
 /**
- * Base class for zookeeper proxy objects.
- *
+ * A wrapper class for Zookeeper Objects.
  */
-public abstract class ZooKeeperObject {
+public class ZooKeeperObject<T> {
+    /**
+     * This classes logger.
+     */
     private static final Logger LOG = Logger.getLogger(ZooKeeperObject.class.getName());
-    static final Gson GSON = new Gson();
+
+    private final Class<T> typeParameterClass;
 
     /**
-     * Copy (possible stale) of data held in a ZNode
+     * JSON reader/writer helper
      */
-    final Map data;
+    private static final Gson GSON = new Gson();
 
     /**
      * Path to ZNode
@@ -54,18 +64,23 @@ public abstract class ZooKeeperObject {
     String zKID;
 
     /**
-     * Associated NodePool + ZK information
+     * A reference to the Zookeeper connection framework
      */
-    NodePool nodePool;
+    private CuratorFramework conn;
 
     /**
-     * Initialize local copy of ZNode data
+     * Creates a new Zookeeper object model.
      *
-     * @param nodePool associated NodePool cluster
+     * @param path               the Zookeeper node path
+     * @param zKID               the zookeeper node id
+     * @param conn               the ZK connection object
+     * @param typeParameterClass the type of the class - used to assist in marshalling/unmarshalling
      */
-    public ZooKeeperObject(NodePool nodePool) {
-        data = new HashMap();
-        this.nodePool = nodePool;
+    public ZooKeeperObject(String path, String zKID, CuratorFramework conn, Class<T> typeParameterClass) {
+        this.path = path;
+        this.zKID = zKID;
+        this.conn = conn;
+        this.typeParameterClass = typeParameterClass;
     }
 
     public String getPath() {
@@ -84,72 +99,254 @@ public abstract class ZooKeeperObject {
         this.zKID = zKID;
     }
 
-    public void updateFromMap(Map data) {
-        this.data.putAll(data);
-    }
-
     /**
-     * Get a copy of this object's data from the ZNode
+     * Creates the associated Zookeeper node if it doesn't already exist.
      *
-     * @return Map of the ZNode data
-     * @throws Exception on ZooKeeper error
+     * @param model the data model
+     * @return the created path
+     * @throws ZookeeperException if an error occurs while checking or creating the Zookeeper node
      */
-    public Map getFromZK() throws Exception {
-        byte[] bytes = nodePool.getConn().getData().forPath(this.path);
-        String jsonString = new String(bytes, nodePool.getCharset());
-        LOG.log(Level.FINEST, "Read ZNODE: {0}, Data: {1}", new Object[]{path, jsonString});
-        return GSON.fromJson(jsonString, HashMap.class);
-    }
+    private String createZNode(final T model) throws ZookeeperException {
+        try {
+            // Convert to JSON and save to ZK
+            final String jsonStringModel = GSON.toJson(model, model.getClass());
+            //LOG.log(FINEST, format("Saving model, path: %s, data: %s", path, jsonStringModel));
 
-    /**
-     * Update this instance from values in the associated ZNode
-     *
-     * @throws Exception on ZooKeeper error
-     */
-    public final void updateFromZK() throws Exception {
-        final Map zkData = getFromZK();
-        updateFromMap(zkData);
-    }
-
-    public String getJson() {
-        return GSON.toJson(data);
-    }
-
-    public void createZNode() throws Exception {
-        nodePool.getConn()
-                .create()
-                .creatingParentsIfNeeded()
-                .forPath(path);
-    }
-
-    public void writeToZK() throws Exception {
-        if (!exists()) {
-            createZNode();
+            if (!exists()) {
+                conn.create().creatingParentsIfNeeded().forPath(path, jsonStringModel.getBytes(StandardCharsets.UTF_8));
+            } else {
+                conn.setData().forPath(path, jsonStringModel.getBytes(StandardCharsets.UTF_8));
+            }
+            return path;
+        } catch (Exception e) {
+            LOG.log(WARNING, format("%s occurred while creating ZK node %s. Message: %s",
+                    e.getClass().getSimpleName(), getPath(), e.getLocalizedMessage()));
+            // Super annoying that the ZK curator framework throws general exceptions all over the place - return our
+            // specialized type so that we can handle this separately if desired
+            throw new ZookeeperException(e);
         }
-        nodePool.getConn()
-                .setData().
-                forPath(this.path, getJson().getBytes(nodePool.getCharset()));
     }
 
     /**
-     * Delete the associated ZNode
+     * Creates the associated Zookeeper node if it doesn't already exist.
+     *
+     * @param model the data model
+     * @param mode  the Zookeeper create mode
+     * @return the created path
+     * @throws ZookeeperException if an error occurs while checking or creating the Zookeeper node
+     */
+    private String createZNode(final T model, final CreateMode mode) throws ZookeeperException {
+        try {
+            // Convert to JSON and save to ZK
+            final String jsonStringModel = GSON.toJson(model, model.getClass());
+            //LOG.log(FINEST, format("Saving model, path: %s, data: %s", path, jsonStringModel));
+            return conn.create().creatingParentsIfNeeded().withMode(mode).forPath(path, jsonStringModel.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            LOG.log(WARNING, format("%s occurred while creating ZK node %s. Message: %s",
+                    e.getClass().getSimpleName(), getPath(), e.getLocalizedMessage()));
+            // Super annoying that the ZK curator framework throws general exceptions all over the place - return our
+            // specialized type so that we can handle this separately if desired
+            throw new ZookeeperException(e);
+        }
+    }
+
+    /**
+     * Returns True if the associated ZNode exists, false otherwise.
+     *
+     * @return true if the node exists, false otherwise
+     * @throws ZookeeperException if an error occurs while checking the Zookeeper node
+     */
+    private boolean exists() throws ZookeeperException {
+        try {
+            return conn.checkExists().forPath(getPath()) != null;
+        } catch (Exception e) {
+            LOG.log(WARNING, format("%s occurred while checking if ZK node %s exists. Message: %s",
+                    e.getClass().getSimpleName(), getPath(), e.getLocalizedMessage()));
+            // Super annoying that the ZK curator framework throws general exceptions all over the place - return our
+            // specialized type so that we can handle this separately if desired
+            throw new ZookeeperException(e);
+        }
+    }
+
+    /**
+     * Saves the specified model to Zookeeper
+     *
+     * @param model the data model
+     * @return the path for the data
+     * @throws ZookeeperException if an error occurs while saving the data model to Zookeeper node
+     */
+    public String save(final T model) throws ZookeeperException {
+        try {
+            return createZNode(model);
+        } catch (Exception e) {
+            LOG.log(WARNING, format("%s occurred while saving ZK data. Message: %s",
+                    e.getClass().getSimpleName(), e.getLocalizedMessage()));
+            // Super annoying that the ZK curator framework throws general exceptions all over the place - return our
+            // specialized type so that we can handle this separately if desired
+            throw new ZookeeperException(e);
+        }
+    }
+
+    /**
+     * Saves the specified model to Zookeeper using the given create mode attribute. Note: if the CreateMode is one of
+     * the SEQUENTIAL varieties, then the generated node id (ZKID) will will be updated appropriately.
+     *
+     * @param model the data model
+     * @param mode  the Zookeeper create mode
+     * @return the path for the data
+     * @throws ZookeeperException if an error occurs while saving the data model to Zookeeper node
+     */
+    public String save(final T model, final CreateMode mode) throws ZookeeperException {
+        try {
+            String generatedPath;
+            if (mode == CreateMode.EPHEMERAL_SEQUENTIAL || mode == CreateMode.PERSISTENT_SEQUENTIAL) {
+                // Create the node - should return the generated path
+                generatedPath = createZNode(model, mode);
+
+                //LOG.log(FINEST, format("Setting sequential path of type %s to: %s", typeParameterClass.getSimpleName(), generatedPath));
+                setPath(generatedPath);
+                setZKID(idFromPath(generatedPath));
+            } else {
+                LOG.log(FINEST, format("Setting path of type %s to: %s", typeParameterClass.getSimpleName(), path));
+                generatedPath = createZNode(model);
+            }
+
+            return generatedPath;
+        } catch (Exception e) {
+            LOG.log(WARNING, format("%s occurred while saving ZK data. Message: %s",
+                    e.getClass().getSimpleName(), e.getLocalizedMessage()));
+            // Super annoying that the ZK curator framework throws general exceptions all over the place - return our
+            // specialized type so that we can handle this separately if desired
+            throw new ZookeeperException(e);
+        }
+    }
+
+    /**
+     * See load(Boolean)
+     *
+     * @return the data model as a Java object
+     * @throws ZookeeperException if an error occurs while reading the data model from the Zookeeper node
+     */
+    public T load() throws ZookeeperException {
+        return load(false);
+    }
+
+    /**
+     * Reads the data model from Zookeeper.
+     *
+     * @param create Creates a new znode if the required path doesn't exist
+     * @return the data model as a Java object
+     * @throws ZookeeperException if an error occurs while reading the data model from the Zookeeper node
+     */
+    public T load(Boolean create) throws ZookeeperException {
+        try {
+            if (exists()) {
+                byte[] bytes = conn.getData().forPath(this.path);
+                // If no data or empty value
+                if (bytes == null || bytes.length == 0) {
+                    // Return a new empty model
+                    return typeParameterClass.newInstance();
+                } else {
+                    // Convert the value to a string with the proper encoding and unmarshall into the appropriate type
+                    final String jsonString = new String(bytes, StandardCharsets.UTF_8);
+                    //LOG.log(FINEST, format("Loaded model, path: %s, data: %s", path, jsonString));
+                    return GSON.fromJson(jsonString, typeParameterClass);
+                }
+            } else if (create) {
+                // Return a new empty model
+                return typeParameterClass.newInstance();
+            } else {
+                // Don't create a new node, because create is false
+                throw new ZookeeperException("Can't read from non-existent znode: " + this.path);
+            }
+        } catch (Exception e) {
+            LOG.log(WARNING, format("%s occurred while loading ZK data. Message: %s",
+                    e.getClass().getSimpleName(), e.getLocalizedMessage()));
+            // Super annoying that the ZK curator framework throws general exceptions all over the place - return our
+            // specialized type so that we can handle this separately if desired
+            throw new ZookeeperException(e);
+        }
+    }
+
+    /**
+     * Deletes the associated Zookeeper Node.
      */
     public void delete() {
         try {
-            nodePool.getConn().delete().forPath(path);
+            if (exists()) {
+                conn.delete().deletingChildrenIfNeeded().forPath(getPath());
+                LOG.log(FINEST, format("Deleted path: %s", getPath()));
+            } else {
+                LOG.log(FINEST, format("Path already deleted: %s", getPath()));
+            }
         } catch (Exception e) {
             // not sure what else we can do at this point.
-            LOG.log(Level.WARNING, "Failed to delete node at path: " + path + ": " + e.getMessage(), e);
+            LOG.log(INFO, format("Failed to delete node at path: %s. Message: %s", getPath(), e.getLocalizedMessage()));
         }
     }
 
     /**
-     * Check if the associated ZNode exists
+     * Extracts the ID from the provided path.
      *
-     * @return true if the node exists
-     * @throws Exception  on ZooKeeper error
+     * @param path the path to the data
+     * @return the ID portion of the path.
+     * @throws NodePoolException if path is null, empty or otherwise malformed
      */
-    public boolean exists() throws Exception {
-        return nodePool.getConn().checkExists().forPath(getPath()) != null;
+    public String idFromPath(final String path) throws NodePoolException {
+        if (path == null || path.isEmpty()) {
+            throw new NodePoolException("Path is null or empty");
+        }
+
+        if (!path.startsWith("/")) {
+            throw new NodePoolException("Path is malformed - should start with a '/' character");
+        }
+
+        if (path.contains("-")) {
+            final List<String> parts = Arrays.asList(path.split("-"));
+            final String id = parts.get(parts.size() - 1);
+            if (id == null || id.length() == 0) {
+                throw new NodePoolException("Path is malformed - extracted ID is null or empty");
+            } else {
+                try {
+                    Long.parseLong(id);
+                } catch (NumberFormatException nfe) {
+                    throw new NodePoolException(format("Path is malformed - extracted ID is invalid: %s", id));
+                }
+                return id;
+            }
+        } else {
+            throw new NodePoolException("Malformed node path while looking for request id: " + path);
+        }
+    }
+
+    /**
+     * Returns the associated data model as a JSON string
+     *
+     * @return the associated data model as a JSON string
+     * @throws ZookeeperException if an error occurs while loading and converting the data model
+     */
+    public String asJSON() throws ZookeeperException {
+        try {
+            if (exists()) {
+                byte[] bytes = conn.getData().forPath(this.path);
+                // If no data or empty value
+                if (bytes == null || bytes.length == 0) {
+                    // Return a new empty model
+                    return "{}";
+                } else {
+                    // Convert the value to a string with the proper encoding and return
+                    return new String(bytes, StandardCharsets.UTF_8);
+                }
+            } else {
+                // Return a new empty model
+                return "{}";
+            }
+        } catch (Exception e) {
+            LOG.log(WARNING, format("%s occurred while loading ZK data. Message: %s",
+                    e.getClass().getSimpleName(), e.getLocalizedMessage()));
+            // Super annoying that the ZK curator framework throws general exceptions all over the place - return our
+            // specialized type so that we can handle this separately if desired
+            throw new ZookeeperException(e);
+        }
     }
 }

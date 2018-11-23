@@ -31,8 +31,13 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
+
+import com.rackspace.jenkins_nodepool.models.NodeRequestModel;
 import org.apache.zookeeper.data.Stat;
 import org.junit.*;
+
+import static java.lang.String.format;
+import static java.util.logging.Logger.getLogger;
 import static org.junit.Assert.*;
 
 /**
@@ -41,16 +46,19 @@ import static org.junit.Assert.*;
  */
 public class NodeRequestTest {
 
-    private static final Logger LOG = Logger.getLogger(NodeRequestTest.class.getName());
-    static Gson gson;
+    /**
+     * Logger for this class.
+     */
+    private static final Logger LOG = getLogger(NodeRequestTest.class.getName());
+
+    private static Gson gson;
     private final String label = "testlabel";
-    Mocks m;
-    NodeRequest nr;
+    private Mocks m;
+    private NodeRequest nr;
 
     @BeforeClass
     public static void setUpClass() {
         gson = new Gson();
-
     }
 
     @AfterClass
@@ -60,7 +68,7 @@ public class NodeRequestTest {
     @Before
     public void setUp() throws Exception {
         m = new Mocks();
-        nr = new NodeRequest(m.np, m.npj);
+        nr = new NodeRequest(m.np, m.priority, m.npj);
     }
 
     @After
@@ -71,56 +79,25 @@ public class NodeRequestTest {
     @Test
     public void TestSerialisation() {
         try {
-            NodeRequest nr = new NodeRequest(m.np, m.npj);
-            String json = nr.toString();
+            final NodeRequest nr = new NodeRequest(m.np, m.priority, m.npj);
+            final List<String> allocatedNodesList = new ArrayList<>();
+            allocatedNodesList.add(label);
+            nr.setAllocatedNodes(allocatedNodesList);
+
+            final String json = nr.getModelAsJSON();
 
             LOG.fine("TestSerialisation json string: " + json);
 
             // ensure the json is valid by deserialising it
-            Map data = gson.fromJson(json, HashMap.class);
+            final NodeRequestModel nodeRequestModel = gson.fromJson(json, NodeRequestModel.class);
 
             // Check a couple of key value pairs are as expected
-            assertEquals("Request State is REQUESTED", NodePoolState.REQUESTED, NodePoolState.fromString((String)data.get("state")));
-            assertEquals(((List) data.get("node_types")).get(0), label);
+            assertEquals("Request State is REQUESTED", NodePoolState.REQUESTED, nodeRequestModel.getState());
+            assertEquals("Node Request Type Label Matches", nodeRequestModel.getNode_types().get(0), label);
         } catch (Exception ex) {
-            Logger.getLogger(NodeRequestTest.class.getName()).log(Level.SEVERE, null, ex);
+            fail(format("%s while testing serialization. Message: %s",
+                    ex.getClass().getSimpleName(), ex.getLocalizedMessage()));
         }
-    }
-
-    @Test
-    public void TestUpdateFromMap() {
-        try {
-            Map updateData = new HashMap();
-            updateData.put("state_time", 1);
-            updateData.put("state", NodePoolState.PENDING.getStateString());
-            nr.updateFromMap(updateData);
-            assertEquals("Request State is PENDING", NodePoolState.PENDING, nr.getState());
-        } catch (Exception ex) {
-            Logger.getLogger(NodeRequestTest.class.getName()).log(Level.SEVERE, null, ex);
-        }
-
-    }
-
-    /**
-     * Test of createZNode method, of class NodeRequest.
-     */
-    @Test
-    public void testCreateZNode() throws Exception {
-
-        // createZNode is called on construction
-        // so remove the created node in order to
-        // fully test this invocation of createZNode
-        String rpath = nr.getPath();
-        m.conn.delete().forPath(rpath);
-        Stat exists = m.conn.checkExists().forPath(rpath);
-        assertNull(exists);
-        assertFalse(nr.exists());
-
-        nr.createZNode();
-        rpath = nr.getPath();
-        exists = m.conn.checkExists().forPath(rpath);
-        assertNotNull(exists);
-        assertTrue(nr.exists());
     }
 
     /**
@@ -129,27 +106,6 @@ public class NodeRequestTest {
     @Test
     public void testGetState() {
         assertTrue(nr.getState() instanceof NodePoolState);
-    }
-
-    /**
-     * Test of getAllocatedNodes method, of class NodeRequest.
-     */
-    @Test
-    public void testGetAllocatedNodes() throws Exception {
-        try {
-            nr.getAllocatedNodes();
-            fail("Exception should have been thrown");
-        } catch (IllegalStateException e) {
-            // pass
-        }
-
-        nr.data.put("state", NodePoolState.FULFILLED.getStateString());
-        List<String> nodeIds = new ArrayList();
-        nodeIds.add(m.npID);
-        nr.data.put("nodes", nodeIds);
-        List<NodePoolNode> nodes = (List) nr.data.get("nodes");
-        assertNotNull(nodes);
-        assertTrue(nodes.size() == 1);
     }
 
     /**
@@ -177,6 +133,4 @@ public class NodeRequestTest {
         String age = nr.getAge();
         assertTrue(Pattern.matches("[0-9]+[sm]", age));
     }
-
-
 }

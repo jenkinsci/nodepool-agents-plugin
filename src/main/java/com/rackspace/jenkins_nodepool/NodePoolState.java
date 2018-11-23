@@ -23,6 +23,8 @@
  */
 package com.rackspace.jenkins_nodepool;
 
+import com.google.gson.annotations.SerializedName;
+
 import java.util.logging.Logger;
 
 /**
@@ -37,32 +39,46 @@ public enum NodePoolState {
     // Reference: https://github.com/openstack-infra/nodepool/blob/master/nodepool/zk.py#L28-L57
 
     // We are building this image (or node) but it is not ready for use.
+    @SerializedName("building")
     BUILDING("building"),
     // The image is being uploaded.
+    @SerializedName("uploading")
     UPLOADING("uploading"),
     // The image/upload/node is ready for use.
+    @SerializedName("ready")
     READY("ready"),
     // The image/upload/node should be deleted.
+    @SerializedName("deleting")
     DELETING("deleting"),
     // The build failed.
+    @SerializedName("failed")
     FAILED("failed"),
     // Node request is submitted/unhandled.
+    @SerializedName("requested")
     REQUESTED("requested"),
     // Node request has been processed successfully.
+    @SerializedName("fulfilled")
     FULFILLED("fulfilled"),
     // Node request is being worked.
+    @SerializedName("pending")
     PENDING("pending"),
     // Node is being tested
+    @SerializedName("testing")
     TESTING("testing"),
     // Node is being used (note - the data model uses a hyphen, but we can't use a hyphen as a java symbol)
+    @SerializedName("in-use")
     IN_USE("in-use"),
     // Node has been used
+    @SerializedName("used")
     USED("used"),
     // Node is being held
+    @SerializedName("hold")
     HOLD("hold"),
     // Initial state
+    @SerializedName("init")
     INIT("init"),
     // Aborted due to a transient error like overquota that should not count as a failed launch attempt
+    @SerializedName("aborted")
     ABORTED("aborted");
 
     /**

@@ -1,22 +1,31 @@
 package com.rackspace.jenkins_nodepool;
 
-import static java.lang.String.format;
+import com.rackspace.jenkins_nodepool.models.NodeModel;
+
 import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import static java.lang.String.format;
+import static java.util.logging.Level.FINE;
+import static java.util.logging.Level.WARNING;
 
 
 /**
  * Representation of a node from NodePool (not necessarily a Jenkins slave)
  */
 
-public class NodePoolNode extends ZooKeeperObject {
+public class NodePoolNode {
+
+    /**
+     * The default connection port
+     */
+    private static final Integer DEFAULT_CONNECTION_PORT = 22;
 
     /**
      * Logger for this class.
      */
-    private static final Logger LOG = java.util.logging.Logger.getLogger(NodePoolNode.class.getName());
+    private static final Logger LOG = Logger.getLogger(NodePoolNode.class.getName());
 
     /**
      * The lock on the node ZNode
@@ -26,7 +35,14 @@ public class NodePoolNode extends ZooKeeperObject {
     /**
      * The job this node was requested for
      */
-    final NodePoolJob nodePoolJob;
+    private final NodePoolJob nodePoolJob;
+
+    /**
+     * A handler for reading and writing the data model to/from Zookeeper
+     */
+    private final ZooKeeperObject<NodeModel> zkWrapper;
+
+    private final String labelPrefix;
 
     /**
      * Creates a new Zookeeper node for the node pool.
@@ -34,25 +50,33 @@ public class NodePoolNode extends ZooKeeperObject {
      * @param nodePool NodePool
      * @param id       id of node as represented in ZooKeeper
      * @param npj      NodePoolJob object representing the build that this node was requested for.
-     * @throws Exception on ZooKeeper error
+     * @throws ZookeeperException on ZooKeeper error
      */
-    public NodePoolNode(NodePool nodePool, String id, NodePoolJob npj) throws Exception {
-        super(nodePool);
+    public NodePoolNode(NodePool nodePool, String id, NodePoolJob npj) throws ZookeeperException {
         this.nodePoolJob = npj;
-        super.setPath(format("/%s/%s", nodePool.getNodeRoot(), id));
-        super.setZKID(id);
-        super.updateFromZK();
-        data.put("build_id", npj.getBuildId());
-        super.writeToZK();
-        this.lock = new KazooLock(getLockPath(), nodePool, npj);
+        this.labelPrefix = nodePool.getLabelPrefix();
 
+        // Create an instance of the ZK object wrapper - path is relative to the ZK connection namespace (typically: /nodepool)
+        String path = format("/%s/%s", nodePool.getNodeRoot(), id);
+        final Class<NodeModel> modelClazz = NodeModel.class;
+        LOG.log(FINE, format("Creating ZK wrapper object of type: %s for path: %s", modelClazz, path));
+        this.zkWrapper = new ZooKeeperObject<>(path, id, nodePool.getConn(), modelClazz);
+
+        // Update the Build ID and save it back - use our wrapper to do the heavy lifting
+        // Set create to true as the zNode probably won't exist
+        final NodeModel model = this.zkWrapper.load(true);
+        model.setBuild_id(npj.getBuildId());
+        this.zkWrapper.save(model);
+
+        this.lock = new KazooLock(getLockPath(), nodePool, npj);
     }
 
     /**
      * Get the NodePoolJob associated with this node
+     *
      * @return NodePoolJob object
      */
-    public NodePoolJob getJob(){
+    public NodePoolJob getJob() {
         return this.nodePoolJob;
     }
 
@@ -62,31 +86,17 @@ public class NodePoolNode extends ZooKeeperObject {
      * @return an array of NodePool labels
      */
     public List<String> getNPTypes() {
-        final Object o = data.get("type");
-        // A little ugly here and overly cautious, but this is the safe way to convert a generic object from a remote
-        // data store to a collection of specific types.
-        if (o instanceof ArrayList) {
-            // Safe to cast now
-            final ArrayList list = (ArrayList) o;
-            // A list to hold the values - we know the size now
-            final List<String> response = new ArrayList<>(list.size());
-            // For each element in the list...
-            for (Object o1 : list) {
-                // Is the element a string? Should be...
-                if (o1 instanceof String) {
-                    // Safe to cast and add to our list
-                    response.add((String) o1);
-                } else {
-                    LOG.log(Level.WARNING, format("Unable to cast list data to a string value!  Type is: %s",
-                            o1.getClass().getTypeName()));
-                    return new ArrayList<>();
-                }
+        try {
+            final NodeModel model = zkWrapper.load();
+            List<String> types =  model.getType();
+            if (types != null){
+                return types;
+            } else {
+                return new ArrayList<>();
             }
-
-            return response;
-        } else {
-            LOG.log(Level.WARNING, format("Unable to cast data field 'type' to an ArrayList!  Type is: %s",
-                    o.getClass().getTypeName()));
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while reading ZK node %s 'type' field. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
             return new ArrayList<>();
         }
     }
@@ -94,10 +104,17 @@ public class NodePoolNode extends ZooKeeperObject {
     /**
      * Get the name of the provider that provisioned this node
      *
-     * @return String name of the provider
+     * @return String name of the provider, or null if not set
      */
     public String getProvider() {
-        return (String) data.get("provider");
+        try {
+            final NodeModel model = zkWrapper.load();
+            return model.getProvider();
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while reading ZK node %s 'provider' field. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
+            return null;
+        }
     }
 
     /**
@@ -106,7 +123,7 @@ public class NodePoolNode extends ZooKeeperObject {
      * @return lock path
      */
     final String getLockPath() {
-        return format("/%s/%s/lock", nodePool.getNodeRoot(), zKID);
+        return format("%s/lock", zkWrapper.getPath());
     }
 
     /**
@@ -116,33 +133,36 @@ public class NodePoolNode extends ZooKeeperObject {
      */
     public String getJenkinsLabel() {
         if (getNPTypes().isEmpty()) {
-            LOG.log(Level.WARNING, "Unable to return a proper Jenkins Label - NP type list is empty.");
-            return format("%s", nodePool.getLabelPrefix());
+            LOG.log(WARNING, "Unable to return a proper Jenkins Label - NP type list is empty.");
+            return format("%s", labelPrefix);
         } else {
-            return format("%s%s", nodePool.getLabelPrefix(), getNPTypes().get(0));
+            return format("%s%s", labelPrefix, getNPTypes().get(0));
         }
     }
 
-    public String getName() {
-        return format("%s-%s", getJenkinsLabel(), getZKID());
-    }
-
     /**
-     * Used to render node editing page in the UI
+     * Returns the name for this node.
      *
-     * @return node pool object
+     * @return the name for this node
      */
-    public NodePool getNodePool() {
-        return nodePool;
+    public String getName() {
+        return format("%s-%s", getJenkinsLabel(), zkWrapper.getZKID());
     }
 
     /**
-     * Returns the host.
+     * Returns the host or interface IP for the node.
      *
-     * @return the host
+     * @return the host / interface IP or null if not set
      */
     public String getHost() {
-        return (String) data.get("interface_ip");
+        try {
+            final NodeModel model = zkWrapper.load();
+            return model.getInterface_ip();
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while reading ZK node %s 'interface_ip' field. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
+            return null;
+        }
     }
 
     /**
@@ -151,12 +171,25 @@ public class NodePoolNode extends ZooKeeperObject {
      * @return the connection port
      */
     public Integer getPort() {
-        Double port = (Double) data.get("connection_port");
-        if (port == null) {
-            // fall back to the field name used on older NodePool clusters.
-            port = (Double) data.getOrDefault("ssh_port", 22.0);
+        try {
+            final NodeModel model = zkWrapper.load();
+            Integer connectionPort = model.getConnection_port();
+            if (connectionPort == null) {
+                // fall back to the SSH port field on older NodePool clusters.
+                connectionPort = model.getSsh_port();
+                if (connectionPort == null) {
+                    return DEFAULT_CONNECTION_PORT;
+                } else {
+                    return connectionPort;
+                }
+            } else {
+                return connectionPort;
+            }
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while reading ZK node %s 'connection_port' or 'ssh_port' field. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
+            return null;
         }
-        return port.intValue();
     }
 
     /**
@@ -165,8 +198,19 @@ public class NodePoolNode extends ZooKeeperObject {
      * @return the first host key
      */
     public String getHostKey() {
-        List<String> hostKeys = (List) data.get("host_keys");
-        return hostKeys.get(0);
+        try {
+            final NodeModel model = zkWrapper.load();
+            final List<String> hostKeys = model.getHost_keys();
+            if (hostKeys.isEmpty()) {
+                return null;
+            } else {
+                return hostKeys.get(0);
+            }
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while reading ZK node %s 'host_keys' field. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
+            return null;
+        }
     }
 
     /**
@@ -175,7 +219,14 @@ public class NodePoolNode extends ZooKeeperObject {
      * @return the host keys
      */
     public List<String> getHostKeys() {
-        return (List) data.get("host_keys");
+        try {
+            final NodeModel model = zkWrapper.load();
+            return model.getHost_keys();
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while reading ZK node %s 'host_keys' field. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
+            return new ArrayList<>();
+        }
     }
 
     /**
@@ -192,27 +243,15 @@ public class NodePoolNode extends ZooKeeperObject {
      * Update the state of the node according to NodePool
      *
      * @param state NodePool node state
-     * @throws Exception on ZooKeeper error
      */
-    private void setState(NodePoolState state) throws Exception {
-        setState(state, true);
-    }
-
-    /**
-     * Update the state of the node according to  NodePool
-     *
-     * @param state NodePool node state
-     * @param write if true, save updates back to ZooKeeper
-     * @throws Exception on ZooKeeper error
-     */
-    private void setState(NodePoolState state, boolean write) throws Exception {
-        // get up to date info, so we are less likely to lose data
-        // when writing back.
-        updateFromZK();
-        data.put("state", state.getStateString());
-
-        if (write) {
-            writeToZK();
+    private void setState(NodePoolState state) {
+        try {
+            final NodeModel model = zkWrapper.load();
+            model.setState(state);
+            zkWrapper.save(model);
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while reading/writing ZK node %s 'state' field. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
         }
     }
 
@@ -224,43 +263,66 @@ public class NodePoolNode extends ZooKeeperObject {
      */
     public void hold(String jobIdentifier) throws Exception {
         // Lock should already be held, we only hold nodes that have already been assigned to Jenkins.
-        setState(NodePoolState.HOLD, false);
-        data.put("comment", "Jenkins hold");
-        data.put("hold_job", jobIdentifier);
-        writeToZK();
-
-        unlock(); // imitate zuul and unlock here.
+        try {
+            final NodeModel model = zkWrapper.load();
+            model.setState(NodePoolState.HOLD);
+            model.setComment("Jenkins hold");
+            model.setHold_job(jobIdentifier);
+            zkWrapper.save(model);
+            unlock(); // imitate zuul and unlock here.
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while reading/writing ZK node %s 'state' and 'hold' related fields. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
+        }
     }
 
     /**
      * Returns the hold until time (in milliseconds since epoch) for this Node.
      *
      * @return the hold until time value for this Node.
-     * @throws Exception on ZK read error
      */
-    public Long getHoldUntil() throws Exception {
-        return (Long) data.get("hold_until");
+    public Long getHoldUntil() {
+        try {
+            final NodeModel model = zkWrapper.load();
+            // TODO: DAD - Reivew - model doesn't have hold_until key // return (Long) data.get("hold_until");
+            return model.getHold_expiration();
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while reading ZK node %s 'hold_expiration' field. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
+            return null;
+        }
     }
 
     /**
      * Sets the node hold until time (ms since epoch).
      *
      * @param holdUntilTimeEpochMillis the hold until time in milliseconds since epoch
-     * @throws Exception on ZK write error
      */
-    public void setHoldUntil(Long holdUntilTimeEpochMillis) throws Exception {
-        data.put("hold_until", holdUntilTimeEpochMillis);
-        writeToZK();
+    public void setHoldUntil(Long holdUntilTimeEpochMillis) {
+        try {
+            final NodeModel model = zkWrapper.load();
+            // TODO: DAD - Reivew - model doesn't have hold_until key // data.put("hold_until", holdUntilTimeEpochMillis);
+            model.setHold_expiration(holdUntilTimeEpochMillis);
+            zkWrapper.save(model);
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while reading/writing ZK node %s 'hold_expiration' field. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
+        }
     }
 
     /**
      * Removes the node hold until time.
-     *
-     * @throws Exception on ZK write error
      */
-    public void removeHoldUntil() throws Exception {
-        data.remove("hold_until");
-        writeToZK();
+    public void removeHoldUntil() {
+        try {
+            final NodeModel model = zkWrapper.load();
+            // TODO: DAD - Reivew - model doesn't have hold_until key // data.remove("hold_until");
+            model.setHold_expiration(0L);
+            zkWrapper.save(model);
+        } catch (ZookeeperException e) {
+            LOG.log(WARNING, format("%s occurred while reading/writing ZK node %s 'hold_expiration' field. Message: %s",
+                    e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
+        }
     }
 
     /**

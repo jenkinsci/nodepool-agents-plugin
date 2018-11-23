@@ -9,8 +9,11 @@ import hudson.tools.Messages;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.Serializable;
 import java.util.Arrays;
 import java.util.logging.Logger;
+
+import static java.lang.String.format;
 
 /**
  * An installer that accepts a script to perform the necessary steps to install the JDK/JRE on a remote NodePool slave
@@ -26,9 +29,9 @@ public class NodePoolJDKScriptInstaller extends NodePoolJDKInstaller {
     private static final String INSTALLER_NAME = "nodepool-jdk-script-installer";
 
     /**
-     * Increment this when modifying this class.
+     * Serial version UID - change this when modifying this class.
      */
-    public static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 661801659754255052L;
 
     /**
      * The JDK Installation script (e.g. apt-get update && apt-get install openjdk-8-jre-headless -y)
@@ -93,29 +96,30 @@ public class NodePoolJDKScriptInstaller extends NodePoolJDKInstaller {
 
         // Do we need to install? If exists, we'll skip.  This doesn't check for Java version level compatibility.
         if (isJavaInstalled(launcher, tl)) {
-            fine(tl, String.format("Java appears to be installed. Skipping installation. Note: Since this is an existing installation, JAVA_HOME may not be here: %s", getJavaHome()));
+            fine(tl, format("Java appears to be installed. Skipping installation. Note: Since this is an existing installation, JAVA_HOME may not be here: %s", getJavaHome()));
         } else {
 
             // Install the Openjdk 8 JRE
             final String[] installCommands = new String[]{jdkInstallationScript};
-            fine(tl, String.format("Installing JDK/JRE using command: %s", Arrays.toString(installCommands)));
+            fine(tl, format("Installing JDK/JRE using command: %s", Arrays.toString(installCommands)));
 
             final int exitCode = executeCommand(tl, launcher, installCommands);
 
             if (exitCode != 0) {
-                warn(tl, String.format(
+                final String msg = format(
                         "Failed to install JDK/JRE using command: %s via performInstallation() for node: %s - exit code is: %d",
-                        Arrays.toString(installCommands), node, exitCode));
-                throw new AbortException(Messages.JDKInstaller_FailedToInstallJDK(exitCode));
+                        Arrays.toString(installCommands), node, exitCode);
+                warn(tl, msg);
+                throw new AbortException(msg);
             } else {
                 fine(tl, "Installed JDK/JRE");
             }
 
             // Let's test to see if the java installation was successful
             if (isJavaInstalled(launcher, tl)) {
-                fine(tl, String.format("Running java command was successful for node: %s", node));
+                fine(tl, format("Running java command was successful for node: %s", node));
             } else {
-                warn(tl, String.format("Running java command was NOT successful for node: %s", node));
+                warn(tl, format("Running java command was NOT successful for node: %s", node));
             }
         }
 
