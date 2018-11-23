@@ -96,7 +96,9 @@
                 <extensions>true</extensions>
                 <configuration>
                     <showDeprecation>true</showDeprecation>
-                    <contextPath>/jenkins</contextPath>
+                    <webApp>
+                        <contextPath>/jenkins</contextPath>
+                    </webApp>
                     <!-- See: https://jenkinsci.github.io/maven-hpi-plugin/run-mojo.html -->
                     <loggers>
                         <com.rackspace>ALL</com.rackspace>
