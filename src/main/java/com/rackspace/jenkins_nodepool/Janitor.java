@@ -14,7 +14,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.locks.Lock;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import jenkins.model.Jenkins;
@@ -302,14 +301,22 @@ class Janitor implements Runnable {
                     for (String nodeRequestPath : nodesRequestPaths) {
                         // Read and parse the data into a POJO model
                         final String path = format("%s/%s", zkNodesRequestRootPath, nodeRequestPath);
-                        //LOG.log(FINE, format("ZK Node Request path: %s", path));
                         final byte[] data = conn.getData().forPath(path);
-                        final NodeRequestModel model = gson.fromJson(new String(data, StandardCharsets.UTF_8), NodeRequestModel.class);
-                        LOG.log(FINEST, format("Node Request, path: %s, state: %s, requestor: %s, build id: %s",
-                                path,
-                                model.getState(),
-                                model.getRequestor(),
-                                model.getBuild_id()));
+                        // Check to see if we were able to load any data
+                        if (data == null || data.length == 0) {
+                            LOG.log(WARNING, format("Unable to load data at node: %s. Data is is null or empty.", path));
+                        } else {
+                            final NodeRequestModel model = gson.fromJson(new String(data, StandardCharsets.UTF_8), NodeRequestModel.class);
+                            if (model == null) {
+                                LOG.log(WARNING, format("Unable to load data model at node: %s. Model is null or empty.", path));
+                            } else {
+                                LOG.log(FINEST, format("Node Request, path: %s, state: %s, requestor: %s, build id: %s",
+                                        path,
+                                        model.getState(),
+                                        model.getRequestor(),
+                                        model.getBuild_id()));
+                            }
+                        }
                     }
                 }
             }
@@ -342,7 +349,20 @@ class Janitor implements Runnable {
                         // Read and parse the data into a data model
                         final String path = format("%s/%s", zkNodesRootPath, nodePath);
                         final byte[] data = conn.getData().forPath(path);
+                        // Check to see if we were able to load any data
+                        if (data == null || data.length == 0) {
+                            LOG.log(WARNING, format("Unable to load data at node: %s. Data is is null or empty.", nodePath));
+                            // Let's skip for now - not much we can do other than delete the znode. It could be in the
+                            // process of being created and the data hasn't been written/saved yet...
+                            continue;
+                        }
+
+                        // Convert the JSON data to a POJO model
                         final NodeModel model = gson.fromJson(new String(data, StandardCharsets.UTF_8), NodeModel.class);
+                        if (model == null) {
+                            LOG.log(WARNING, format("Unable to load data model at node: %s. Model is null or empty.", nodePath));
+                            continue;
+                        }
 
                         // If we have a build id, then we should get a Run object - will be null if node isn't allocated
                         // to a job yet (on standby/min-ready)
