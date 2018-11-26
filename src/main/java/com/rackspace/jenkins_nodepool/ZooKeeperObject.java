@@ -83,18 +83,47 @@ public class ZooKeeperObject<T> {
         this.typeParameterClass = typeParameterClass;
     }
 
+    /**
+     * Returns the connection string associated with this object.
+     *
+     * @return the connection string associated with this object.
+     */
+    public String getConnectionString() {
+        return conn.getZookeeperClient().getCurrentConnectionString();
+    }
+
+    /**
+     * Returns the path for the object.
+     *
+     * @return the path for the underlying object.
+     */
     public String getPath() {
         return path;
     }
 
+    /**
+     * Sets the path for the object.
+     *
+     * @param path the path value
+     */
     public void setPath(String path) {
         this.path = path;
     }
 
+    /**
+     * Returns the id for the object.
+     *
+     * @return the id for the object.
+     */
     public String getZKID() {
         return zKID;
     }
 
+    /**
+     * Sets the ID for the object.
+     *
+     * @param zKID the ID value
+     */
     public void setZKID(String zKID) {
         this.zKID = zKID;
     }
