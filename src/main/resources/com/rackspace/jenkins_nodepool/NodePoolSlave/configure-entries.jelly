@@ -76,13 +76,13 @@
             ${it.nodePoolNode.jenkinsLabel}
         </f:entry>
         <f:entry title="${%NodePool Label}">
-            ${it.nodePoolNode.nPType}
+            ${it.nodePoolJob.label}
         </f:entry>
     </f:section>
 
     <f:section title="${%ZooKeeper}">
         <f:entry title="${%NodePool Connection String}">
-            ${it.nodePoolNode.nodePool.connectionString}
+            ${it.nodePoolNode.connectionString}
         </f:entry>
         <f:entry title="${%ZooKeeper Path}">
             /nodepool${it.nodePoolNode.path}

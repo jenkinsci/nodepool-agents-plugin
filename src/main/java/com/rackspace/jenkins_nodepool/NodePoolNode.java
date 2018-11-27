@@ -88,8 +88,8 @@ public class NodePoolNode {
     public List<String> getNPTypes() {
         try {
             final NodeModel model = zkWrapper.load();
-            List<String> types =  model.getType();
-            if (types != null){
+            List<String> types = model.getType();
+            if (types != null) {
                 return types;
             } else {
                 return new ArrayList<>();
@@ -115,6 +115,33 @@ public class NodePoolNode {
                     e.getClass().getSimpleName(), zkWrapper.getPath(), e.getLocalizedMessage()));
             return null;
         }
+    }
+
+    /**
+     * Returns the path for the underlying NodePool object.
+     *
+     * @return the path for the underlying NodePool object.
+     */
+    public String getPath() {
+        return zkWrapper.getPath();
+    }
+
+    /**
+     * Returns the id for the underlying NodePool object.
+     *
+     * @return the id for the underlying NodePool object.
+     */
+    public String getZKID() {
+        return zkWrapper.getZKID();
+    }
+
+    /**
+     * Returns the connection string for the underlying NodePool object.
+     *
+     * @return the connection string for the underlying NodePool object.
+     */
+    public String getConnectionString() {
+        return zkWrapper.getConnectionString();
     }
 
     /**
