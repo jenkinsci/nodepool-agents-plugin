@@ -236,9 +236,17 @@ class Janitor implements Runnable {
             }
             // Lock to prevent races with other threads that attempt cleanup
             Lock cleanupLock = NodePools.get().getCleanupLock();
-            // semantics are such that unlock fails
-            // if lock is not held
-            cleanupLock.lock();
+            // Semantics are such that unlock fails if lock is not held, so we must lock before unlocking
+            // Its important these cleanup threads don't block waiting for the lock as they
+            // kicked off frequently and can build up to the thread limit. This introduces
+            // a deadlock as one thread holds the lock, but can't create a thread because of
+            // all the other threads waiting for the lock.
+
+            // This form of trylock will return immediately if the lock is held by another thread
+            Boolean lockAcquired = cleanupLock.tryLock();
+            if (! lockAcquired) {
+                return;
+            }
             try {
                 NodePoolComputer c = (NodePoolComputer) nodePoolSlave.toComputer();
                 NodePoolNode npn = nodePoolSlave.getNodePoolNode();

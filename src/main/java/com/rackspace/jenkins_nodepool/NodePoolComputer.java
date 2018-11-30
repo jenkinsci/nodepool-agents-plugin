@@ -29,6 +29,8 @@ import hudson.slaves.SlaveComputer;
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Lock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -96,8 +98,9 @@ public class NodePoolComputer extends SlaveComputer {
             // Call get to block until disconnection
             // has been executed, to ensure execution
             // happens while cleanupLock is held.
-            result.get();
-        } catch (InterruptedException | ExecutionException ex) {
+            // Timeout added so that the cleanupLock is not held indefinitely.
+            result.get(2, TimeUnit.MINUTES);
+        } catch (InterruptedException | ExecutionException | TimeoutException ex) {
             Logger.getLogger(NodePoolComputer.class.getName()).log(Level.SEVERE, null, ex);
         } finally {
             cleanupLock.unlock();
