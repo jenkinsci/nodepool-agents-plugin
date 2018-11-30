@@ -42,7 +42,14 @@ public class NodePoolLabelFinder extends LabelFinder {
     @Override
     public Collection<LabelAtom> findLabels(Node node) {
         Set<LabelAtom> labels = new HashSet<>();
+        return labels;
 
+        // RE-2230. This has been disabled, because the ZK exists call can block
+        // The main jenkins Queue lock is acquired before calling this function
+        // when a node is deleted, so if the ZK call blocks, the Queue lock
+        // is held, and new builds can't proceed out of the queue.
+
+        /*
         if(node instanceof NodePoolSlave){
             NodePoolSlave nps = (NodePoolSlave) node;
             NodePoolNode npn = nps.getNodePoolNode();
@@ -55,6 +62,7 @@ public class NodePoolLabelFinder extends LabelFinder {
         }
 
         return labels;
+        */
     }
 
 }
