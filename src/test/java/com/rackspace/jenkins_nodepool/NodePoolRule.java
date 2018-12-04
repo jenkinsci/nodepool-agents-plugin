@@ -24,7 +24,6 @@
 package com.rackspace.jenkins_nodepool;
 
 import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.command.AttachContainerCmd;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.DockerCmdExecFactory;
 import com.github.dockerjava.api.command.ExecCreateCmdResponse;
@@ -40,12 +39,13 @@ import com.github.dockerjava.core.async.ResultCallbackTemplate;
 import com.github.dockerjava.core.command.ExecStartResultCallback;
 import com.github.dockerjava.core.command.LogContainerResultCallback;
 import com.github.dockerjava.netty.NettyDockerCmdExecFactory;
+
+import java.security.SecureRandom;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.logging.Logger;
 import java.util.stream.IntStream;
 import org.apache.curator.framework.CuratorFramework;
@@ -54,7 +54,6 @@ import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
-import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -209,7 +208,7 @@ public class NodePoolRule implements TestRule {
         return new Statement() {
 
             private String containerName(String base) {
-                Random random = new Random();
+                SecureRandom random = new SecureRandom();
                 Integer id = random.nextInt();
                 return MessageFormat.format("{0}{1,number,####}", base, id);
             }
