@@ -152,9 +152,9 @@ public class NodePoolJob {
 
     void succeed() {
         if(attempts.isEmpty()){
-            throw new IllegalStateException("Cannot mark attempt as successfull if there are no attempts");
+            throw new IllegalStateException("Cannot mark attempt as successful if there are no attempts");
         }
-        logToBoth("Nodepool Node Requested Succeded: "
+        logToBoth("Nodepool Node Requested Succeeded: "
                 +getCurrentAttempt().getRequest().toString());
         getCurrentAttempt().succeed();
     }

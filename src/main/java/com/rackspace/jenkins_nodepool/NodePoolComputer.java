@@ -37,6 +37,8 @@ import java.util.logging.Logger;
 import jenkins.model.Jenkins;
 import org.kohsuke.stapler.HttpResponse;
 
+import static java.lang.String.format;
+
 /**
  * @author hughsaunders
  */
@@ -135,9 +137,10 @@ public class NodePoolComputer extends SlaveComputer {
                 nodePoolNode.release();
             }
         } catch (Exception ex) {
-            LOG.log(Level.WARNING, ex.getClass().getSimpleName() + " exception while releasing nodepool node: " +
-                    (nodePoolNode == null ? "nodepool node name is null" : nodePoolNode.getName()) + "." +
-                    " Message: " + ex.getLocalizedMessage());
+            LOG.log(Level.WARNING, format("%s exception while releasing nodepool node: %s. Message: %s",
+                    ex.getClass().getSimpleName(),
+                    (nodePoolNode == null ? "nodepool node name is null" : nodePoolNode.getName()),
+                    ex.getLocalizedMessage()));
         }
 
         return super.doDoDelete();
@@ -218,7 +221,7 @@ public class NodePoolComputer extends SlaveComputer {
                 if (nodePoolNode != null) {
                     // this can be null because stale computers are cleaned up asynchronously on jenkins restart and
                     // the node object is not serialized.
-                    LOG.log(Level.INFO, "Holding node " + slave.getDisplayName() + " (" + jobIdentifier + ")");
+                    LOG.log(Level.INFO, format("Holding node %s (%s)",slave.getDisplayName(), jobIdentifier));
                     nodePoolNode.hold(jobIdentifier);
                 }
             } catch (Exception e) {
@@ -271,7 +274,7 @@ public class NodePoolComputer extends SlaveComputer {
                     }
                 } catch (Exception ex) {
                     LOG.log(Level.WARNING,
-                            String.format("%s error while deleting node (in threadPoolForRemtoing). Message: %s. Was it already deleted?",
+                            format("%s error while deleting node (in threadPoolForRemtoing). Message: %s. Was it already deleted?",
                                     ex.getClass().getSimpleName(), ex.getLocalizedMessage()));
                 }finally{
                     cleanupLock.unlock();
@@ -279,7 +282,7 @@ public class NodePoolComputer extends SlaveComputer {
             });
         } catch (Exception ex){
              LOG.log(Level.WARNING,
-                     String.format("%s error while deleting node (in taskCompleted handler). Message: %s. Was it already deleted?",
+                     format("%s error while deleting node (in taskCompleted handler). Message: %s. Was it already deleted?",
                                     ex.getClass().getSimpleName(), ex.getLocalizedMessage()));
         }
     }

@@ -13,13 +13,17 @@ import hudson.model.TaskListener;
 import hudson.remoting.VirtualChannel;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.Builder;
+
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
+
+import static java.lang.String.format;
 
 /*
  * The MIT License
@@ -46,7 +50,6 @@ import org.kohsuke.stapler.DataBoundConstructor;
  */
 
 /**
- *
  * @author Rackspace
  */
 public class HoldStep extends Builder implements SimpleBuildStep {
@@ -58,34 +61,59 @@ public class HoldStep extends Builder implements SimpleBuildStep {
     private PrintStream consoleLog;
 
     @DataBoundConstructor
-    public HoldStep(String duration, String reason){
+    public HoldStep(String duration, String reason) {
         this.reason = reason;
         this.duration = duration;
     }
 
-    public HoldStep(String duration){
+    public HoldStep(String duration) {
         this(duration, "Held from Pipeline Step");
     }
 
-    public HoldStep(){
+    public HoldStep() {
         this("1d");
     }
 
-    public String getReason(){
+    public String getReason() {
         return reason;
     }
-    public String getDuration(){
+
+    public String getDuration() {
         return duration;
     }
 
-    private void log(String message, Level level){
-        consoleLog.println(message);
+    /**
+     * Logs to both the job log and the system logger.
+     *
+     * @param level   the log level
+     * @param message the log message
+     */
+    private void log(Level level, String message) {
+        if (consoleLog != null) {
+            consoleLog.println(message);
+        }
         LOG.log(level, message);
     }
-    private void log(String message){
-        log(message, Level.INFO);
+
+    /**
+     * Logs an INFO message to both the job log and the system logger.
+     *
+     * @param message the log message
+     */
+    private void log(String message) {
+        log(Level.INFO, message);
     }
-    private void setConsoleLogger(PrintStream logger){
+
+    /**
+     * Logs an WARNING message to both the job log and the system logger.
+     *
+     * @param message the log message
+     */
+    private void warn(String message) {
+        log(Level.WARNING, message);
+    }
+
+    private void setConsoleLogger(PrintStream logger) {
         this.consoleLog = logger;
     }
 
@@ -100,42 +128,42 @@ public class HoldStep extends Builder implements SimpleBuildStep {
         Job job = run.getParent();
 
         Computer computer;
-        if (executor != null){
+        if (executor != null) {
             computer = executor.getOwner();
         } else if (Computer.currentComputer() != null) {
             computer = Computer.currentComputer();
-        } else if(fp.toComputer() != null){
+        } else if (fp.toComputer() != null) {
             computer = fp.toComputer();
         } else {
-            log("Can't hold as theres no node allocated :(");
+            log("Can't hold as there are no nodes allocated :(");
             return;
         }
 
-        if (computer instanceof NodePoolComputer){
+        if (computer instanceof NodePoolComputer) {
+            NodePoolComputer npc = (NodePoolComputer) computer;
+            NodePoolSlave nps = (NodePoolSlave) npc.getNode();
             try {
-                NodePoolComputer npc = (NodePoolComputer) computer;
-                NodePoolSlave nps = (NodePoolSlave) npc.getNode();
-                if (nps != null){
-                    String build_id = job.getDisplayName()+"-"+run.getNumber();
+                if (nps != null) {
+                    String build_id = job.getDisplayName() + "-" + run.getNumber();
                     nps.setHeld(true);
                     nps.setHoldReason(reason);
                     nps.setHoldUser(build_id);
                     nps.setHoldUntil(duration, true);
                     log("Held node: " + npc.toString()
-                      + " IP:"+nps.getNodePoolNode().getHost()
-                      + " Hold Expiry Time: "+nps.getHoldUntilTimeFormatted());
+                            + " IP:" + nps.getNodePoolNode().getHost()
+                            + " Hold Expiry Time: " + nps.getHoldUntilTimeFormatted());
                 }
             } catch (Exception ex) {
-                log("Failed to hold node: "+ex.toString(), Level.SEVERE);
+                warn(format("%s occurred while attempting to hold node: %s", ex.getClass().getSimpleName(), npc.getDisplayName()));
             }
-        }else {
+        } else {
             log("Can't hold as the current node is not a nodepool node");
         }
     }
 
     @Symbol("nodePoolHold")
     @Extension
-    public static class DescriptorImple extends BuildStepDescriptor<Builder>{
+    public static class DescriptorImple extends BuildStepDescriptor<Builder> {
         @Override
         public String getDisplayName() {
             return "Set NodePool hold from within a job";

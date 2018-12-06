@@ -66,13 +66,13 @@ class Janitor implements Runnable {
         try (ACLContext ignored = ACL.as(ACL.SYSTEM)) {
             runAsSystem();
         } catch (Exception e) {
-            LOG.log(SEVERE, format("Caught exception while escalating privileges for the Janitor thread. Message: %s",
-                    e.getLocalizedMessage()));
+            LOG.log(SEVERE, format("%s while escalating privileges for the Janitor thread. Message: %s",
+                    e.getClass().getSimpleName(), e.getLocalizedMessage()));
         }
         LOG.log(SEVERE, "Janitor Thread Exited - this shouldn't happen, resources may leak.");
     }
 
-    private CuratorFramework getConn() throws NodePoolException{
+    private CuratorFramework getConn() throws NodePoolException {
         // Grab a reference to the NodePool ZK connection
         CuratorFramework conn;
         if (NodePools.get().getNodePools().isEmpty()) {
@@ -92,7 +92,7 @@ class Janitor implements Runnable {
                 Thread.sleep(sleepMilliseconds);
                 clean();
             } catch (Exception e) {
-                LOG.log(WARNING, "Cleanup failed: " + e.getMessage(), e);
+                LOG.log(WARNING, format("%s while running cleanup. Message: ", e.getClass().getSimpleName(), e.getLocalizedMessage()));
             }
         }
     }
@@ -206,7 +206,7 @@ class Janitor implements Runnable {
             // Explicitly catch Runtime to resolve Findbugs REC_CATCH_EXCEPTION
             throw e;
         } catch (Exception e) {
-            LOG.log(WARNING, format("%s error while querying for Jenkins nodes. Message: %s",
+            LOG.log(WARNING, format("%s error while querying for Jenkins nodes. Message: %s. Unable to review and clean Jenkins nodes.",
                     e.getClass().getSimpleName(), e.getLocalizedMessage()));
         }
     }
@@ -244,7 +244,7 @@ class Janitor implements Runnable {
 
             // This form of trylock will return immediately if the lock is held by another thread
             Boolean lockAcquired = cleanupLock.tryLock();
-            if (! lockAcquired) {
+            if (!lockAcquired) {
                 return;
             }
             try {

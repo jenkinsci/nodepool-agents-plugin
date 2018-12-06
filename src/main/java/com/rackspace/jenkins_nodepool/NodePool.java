@@ -262,11 +262,11 @@ public class NodePool implements Describable<NodePool> {
                 LOG.log(INFO, format("Accepting node %s on behalf of request %s", node, request.getZKID()));
                 node.setInUse(); // TODO: debug making sure this lock stuff actually works
                 acceptedNodes.add(node);
-
             }
         } catch (Exception e) {
             // (if we hit this, then the request will get re-created on the next isDone() poll.)
-            LOG.log(WARNING, "Failed to lock node" + e.getMessage(), e);
+            LOG.log(WARNING, format("%s while attempting to accept and lock node. Message: %s",
+                    e.getClass().getSimpleName(), e.getLocalizedMessage()));
 
             // roll back acceptance on any nodes we managed to successfully accept
             for (NodePoolNode acceptedNode : acceptedNodes) {
@@ -275,8 +275,8 @@ public class NodePool implements Describable<NodePool> {
                     acceptedNode.release();
 
                 } catch (Exception lockException) {
-                    LOG.log(WARNING, "Failed to release lock on node " + acceptedNode.getName() + ": "
-                            + lockException.getMessage(), lockException);
+                    LOG.log(WARNING, format("%s while attempting to release lock on node %s. Message: %s",
+                            e.getClass().getSimpleName(), acceptedNode.getName(), lockException.getLocalizedMessage()));
                 }
             }
 
@@ -534,9 +534,11 @@ public class NodePool implements Describable<NodePool> {
         } catch (Exception e) {
             // provisioning attempt failed
             job.failAttempt(e);
-            LOG.severe("Caught exception in attemptProvision:" + e.getClass() + " " + e.getMessage());
+            LOG.severe(format("%s while attempting to provision node %s. Message: %s",
+                    e.getClass().getSimpleName(), job.getNodePoolNode().getName(), e.getLocalizedMessage()));
             try {
-                LOG.log(FINE, "Releasing node after failed provisioning attempt:{0}", job.getNodePoolNode().getName());
+                LOG.log(FINE, format("Releasing node after failed provisioning attempt: %s",
+                        job.getNodePoolNode().getName()));
                 job.getNodePoolNode().release();
                 try {
                     // Findbugs :(
@@ -556,7 +558,8 @@ public class NodePool implements Describable<NodePool> {
                 // This is only an optimisation, the Janitor
                 // will ensure cleanup is completed once the
                 // build is complete.
-                LOG.log(FINE, "Failed to cleanup after a failed provision attempt:{0}", e.toString());
+                LOG.log(FINE, format("%s while attempting to cleanup after a failed provision attempt. Message: %s",
+                        ex.getClass().getSimpleName(), ex.getLocalizedMessage()));
             }
             throw e;
         } finally {
