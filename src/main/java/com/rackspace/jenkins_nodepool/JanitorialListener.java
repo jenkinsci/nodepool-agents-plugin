@@ -61,12 +61,20 @@ public class JanitorialListener extends ComputerListener {
         }
     }
 
+    /**
+     * Returns true if the janitor is enabled, false otherwise. This routine leverages the 'nodepool.janitor.enabled"'
+     * property to determine if the janitor is enabled or not. Set the value to 'true' to enable (default) or 'false'
+     * to disable.
+     *
+     * @return returns true if the listener is enabled, false otherwise.
+     */
     private boolean enabled() {
         final String enabledStr = System.getProperty(ENABLED);
+        // Default is enabled
         if (enabledStr == null) {
             return true;
         } else {
-            return Boolean.valueOf(enabledStr);
+            return Boolean.parseBoolean(enabledStr);
         }
     }
 }

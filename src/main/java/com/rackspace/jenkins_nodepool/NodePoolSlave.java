@@ -276,7 +276,7 @@ public class NodePoolSlave extends Slave {
     public boolean isHeld() {
         // check for optional "force hold" property, primarily useful for debugging.
         final String forceHoldStr = System.getProperty(FORCE_HOLD_PROPERTY, "false");
-        final boolean forceHold = Boolean.valueOf(forceHoldStr);
+        final boolean forceHold = Boolean.parseBoolean(forceHoldStr);
 
         return held || forceHold;
     }

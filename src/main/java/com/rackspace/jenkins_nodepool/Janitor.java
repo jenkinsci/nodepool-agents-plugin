@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.locks.Lock;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import jenkins.model.Jenkins;
@@ -37,7 +38,7 @@ class Janitor implements Runnable {
     /**
      * Janitor check interval in seconds.
      */
-    private static final String SLEEP_SECS_DEFAULT = "60";
+    private static final Long SLEEP_SECS_DEFAULT = 60L;
 
     private long sleepMilliseconds;
 
@@ -53,9 +54,17 @@ class Janitor implements Runnable {
 
     Janitor() {
         // by default, sleep for 60 seconds between cleaning attempts.
-        final String sleepSeconds = System.getProperty(Janitor.class.getName() + ".sleep_seconds",
-                SLEEP_SECS_DEFAULT);
-        sleepMilliseconds = Long.parseLong(sleepSeconds) * 1000L;
+        final String propertyKey = Janitor.class.getName() + ".sleep_seconds";
+        String sleepSeconds = System.getProperty(propertyKey, SLEEP_SECS_DEFAULT.toString());
+
+        // Convert to a long value and milliseconds - use default if a format error
+        try {
+            sleepMilliseconds = Long.parseLong(sleepSeconds) * 1000L;
+        } catch (NumberFormatException nfe) {
+            LOG.log(Level.WARNING, format("Unable to convert system property '%s' with value '%s' to milliseconds. " +
+                    "Using default value: %d ms.", propertyKey, sleepSeconds, SLEEP_SECS_DEFAULT * 1000L));
+            sleepMilliseconds = SLEEP_SECS_DEFAULT * 1000L;
+        }
     }
 
     @Override
