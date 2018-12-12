@@ -28,19 +28,15 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.model.Label;
 import hudson.model.Queue.Task;
 
-import java.text.MessageFormat;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.apache.zookeeper.CreateMode;
 
 import static java.lang.String.format;
-import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINEST;
 import static java.util.logging.Level.WARNING;
 
@@ -300,9 +296,9 @@ public class NodeRequest {
         final Duration d = Duration.ofMillis(System.currentTimeMillis() - startTime);
         long s = d.getSeconds();
         if (s < 60) {
-            return MessageFormat.format("{0}s", d.getSeconds());
+            return format("%ds", d.getSeconds());
         } else {
-            return MessageFormat.format("{0}m", d.getSeconds() / 60);
+            return format("%dm", d.getSeconds() / 60);
         }
     }
 

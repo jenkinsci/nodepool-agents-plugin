@@ -23,7 +23,6 @@
  */
 package com.rackspace.jenkins_nodepool;
 
-import java.text.MessageFormat;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -36,6 +35,8 @@ import org.apache.curator.framework.api.CuratorWatcher;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException.NodeExistsException;
 import org.apache.zookeeper.WatchedEvent;
+
+import static java.lang.String.format;
 
 
 /**
@@ -238,10 +239,11 @@ public class KazooLock {
     public void release() throws Exception {
         LOG.log(Level.FINEST, "Releasing Lock {0}", path);
         if (state != State.LOCKED) {
-            throw new IllegalStateException(MessageFormat.format("Cannot unlock from state: {0}, Path: {1}", state, node));
+            throw new IllegalStateException(format("Cannot unlock from state: %s, Path: %s", state, node));
         }
         if (node == null) {
-            throw new IllegalStateException(MessageFormat.format("Trying to unlock before lock has been locked. State:{0}, Path:{1}", state, node));
+            throw new IllegalStateException(
+                    format("Trying to unlock before lock has been locked. State:%s, Path:%s", state, node));
         }
         nodePool.getConn().delete().forPath(node);
         state = State.UNLOCKED;
