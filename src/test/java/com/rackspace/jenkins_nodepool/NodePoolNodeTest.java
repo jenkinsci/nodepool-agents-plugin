@@ -23,7 +23,6 @@
  */
 package com.rackspace.jenkins_nodepool;
 
-import java.text.MessageFormat;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -71,7 +70,7 @@ public class NodePoolNodeTest {
             hostKeys = new ArrayList<>();
             hostKey = "hostKey";
             hostKeys.add(hostKey);
-            nodePath = MessageFormat.format("/{0}/{1}", m.nodeRoot, m.npID);
+            nodePath = format("/%s/%s", m.nodeRoot, m.npID);
             m.conn.create()
                     .creatingParentsIfNeeded()
                     .forPath(nodePath, m.jsonString.getBytes(m.charset));
@@ -112,7 +111,7 @@ public class NodePoolNodeTest {
      */
     @Test
     public void testGetLockPath() {
-        String lockPath = MessageFormat.format("{0}/lock", nodePath);
+        String lockPath = format("%s/lock", nodePath);
         assertEquals(lockPath, npn.getLockPath());
     }
 
@@ -129,9 +128,7 @@ public class NodePoolNodeTest {
      */
     @Test
     public void testGetName() {
-        assertEquals(
-                MessageFormat.format("{0}-{1}", m.label.getDisplayName(), m.npID),
-                 npn.getName());
+        assertEquals(format("%s-%s", m.label.getDisplayName(), m.npID), npn.getName());
     }
 
     /**

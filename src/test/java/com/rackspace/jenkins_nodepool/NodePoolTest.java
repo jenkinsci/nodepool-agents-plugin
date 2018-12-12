@@ -29,9 +29,7 @@ import org.apache.curator.framework.imps.CuratorFrameworkState;
 import org.junit.*;
 import org.jvnet.hudson.test.JenkinsRule;
 
-import java.text.MessageFormat;
 import java.util.List;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static java.lang.String.format;
@@ -153,7 +151,7 @@ public class NodePoolTest {
      */
     @Test
     public void testIdForPath() throws Exception {
-        String path = MessageFormat.format("/foo/bah/wib-{0}", m.npID);
+        String path = format("/foo/bah/wib-%s", m.npID);
         assertEquals(m.npID, np.idForPath(path));
     }
 

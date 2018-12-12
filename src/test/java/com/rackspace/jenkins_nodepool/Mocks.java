@@ -32,11 +32,8 @@ import hudson.model.labels.LabelAtom;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
-import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.apache.curator.framework.CuratorFramework;
@@ -122,7 +119,7 @@ public class Mocks {
         value = "a map value";
         key = "map key";
         npID = "000000001";
-        jsonString = MessageFormat.format("'{'\"{0}\":\"{1}\"'}'", key, value);
+        jsonString = format("{\"%s\":\"%s\"}", key, value);
         zkNamespace = "unittest";
         nodeRoot = "nodes";
         requestRoot = "requests";
@@ -131,8 +128,8 @@ public class Mocks {
         host = "host";
         port = 22;
         credentialsID = "somecreds";
-        label = new LabelAtom(MessageFormat.format("{0}{1}", labelPrefix, npLabel));
-        npcName = MessageFormat.format("{0}-{1}", label.getDisplayName(), npID);
+        label = new LabelAtom(format("%s%s", labelPrefix, npLabel));
+        npcName = format("%s-%s", label.getDisplayName(), npID);
         np = mock(NodePool.class, withSettings().serializable());
         task = mock(PlaceholderTask.class);
         //queueItem = mock(Queue.Item.class);

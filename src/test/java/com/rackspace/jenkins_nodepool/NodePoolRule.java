@@ -41,7 +41,6 @@ import com.github.dockerjava.core.command.LogContainerResultCallback;
 import com.github.dockerjava.netty.NettyDockerCmdExecFactory;
 
 import java.security.SecureRandom;
-import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -54,6 +53,8 @@ import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
+
+import static java.lang.String.format;
 
 /**
  *
@@ -75,8 +76,8 @@ public class NodePoolRule implements TestRule {
 
         @Override
         public void onNext(Frame item) {
-            LOG.info(MessageFormat.format(
-                    "{0}: {1}",
+            LOG.info(format(
+                    "%s: %s",
                     container,
                     new String(item.getPayload()).trim())
             );
@@ -146,7 +147,7 @@ public class NodePoolRule implements TestRule {
                 return containers.get(c);
             }
         }
-        throw new IllegalStateException(MessageFormat.format("Failed to find container matching prefix {0}", prefix));
+        throw new IllegalStateException(format("Failed to find container matching prefix %s", prefix));
     }
 
     public CuratorFramework getCuratorConnection() {
@@ -210,7 +211,8 @@ public class NodePoolRule implements TestRule {
             private String containerName(String base) {
                 SecureRandom random = new SecureRandom();
                 Integer id = random.nextInt();
-                return MessageFormat.format("{0}{1,number,####}", base, id);
+                //return MessageFormat.format("{0}{1,number,####}", base, id);
+                return format("%s%d", base, id);
             }
 
             @Override
@@ -245,7 +247,7 @@ public class NodePoolRule implements TestRule {
                 //npEnv.forEach((s) -> {
                 //    LOG.log(Level.SEVERE, "npenv: {0}", s);
                 //});
-                npEnv.add(MessageFormat.format("ZK_NAME={0}", zkName));
+                npEnv.add(format("ZK_NAME=%s", zkName));
                 nodepoolLinks.add(zkName);
                 npc = startContainer("hughsaunders/nodepoolrulejunit",
                         npName, npEnv, nodepoolLinks, "9999");
@@ -257,7 +259,7 @@ public class NodePoolRule implements TestRule {
                 Map<ExposedPort, Ports.Binding[]> zkBindings = zkInfo.getNetworkSettings().getPorts().getBindings();
                 String zkClientHostPort = null;
                 for (ExposedPort ep : zkBindings.keySet()) {
-                    LOG.info(MessageFormat.format("checking zk exposed port {0}", ep.getPort()));
+                    LOG.info(format("checking zk exposed port %d", ep.getPort()));
                     if (ep.getPort() != 2181) {
                         continue;
                     }
