@@ -90,20 +90,12 @@ public class NodePoolComputer extends SlaveComputer {
      */
     @Override
     public Future<?> disconnect(OfflineCause cause) {
-        Lock cleanupLock = NodePools.get().getCleanupLock();
         Future<?> result = null;
-        cleanupLock.lock();
         try{
             result = super.disconnect(cause); //To change body of generated methods, choose Tools | Templates.
-            // Call get to block until disconnection
-            // has been executed, to ensure execution
-            // happens while cleanupLock is held.
-            // Timeout added so that the cleanupLock is not held indefinitely.
             result.get(2, TimeUnit.MINUTES);
         } catch (InterruptedException | ExecutionException | TimeoutException ex) {
             Logger.getLogger(NodePoolComputer.class.getName()).log(Level.SEVERE, null, ex);
-        } finally {
-            cleanupLock.unlock();
         }
         return result;
     }
@@ -125,6 +117,9 @@ public class NodePoolComputer extends SlaveComputer {
         return nodePoolNode;
     }
 
+    /**
+     * Calls Jenkins.removeNode, which calls Nodes.removeNode which acquires the Queue lock
+     */
     @Override
     public HttpResponse doDoDelete() throws IOException {
         try {
@@ -139,7 +134,6 @@ public class NodePoolComputer extends SlaveComputer {
                     (nodePoolNode == null ? "nodepool node name is null" : nodePoolNode.getName()) + "." +
                     " Message: " + ex.getLocalizedMessage());
         }
-
         return super.doDoDelete();
     }
 
@@ -251,12 +245,6 @@ public class NodePoolComputer extends SlaveComputer {
                 }
 
                 Jenkins jenkins = Jenkins.getInstance();
-                // Lock to prevent cleanup races with the Janitor thread
-                Lock cleanupLock = NodePools.get().getCleanupLock();
-
-                // semantics are such that unlock fails
-                // if lock is not held
-                cleanupLock.lock();
                 try {
                     // Check that the computer is still registered with Jenkins
                     // If it's already been removed by the Janitor then npc
@@ -273,8 +261,6 @@ public class NodePoolComputer extends SlaveComputer {
                     LOG.log(Level.WARNING,
                             String.format("%s error while deleting node (in threadPoolForRemtoing). Message: %s. Was it already deleted?",
                                     ex.getClass().getSimpleName(), ex.getLocalizedMessage()));
-                }finally{
-                    cleanupLock.unlock();
                 }
             });
         } catch (Exception ex){
