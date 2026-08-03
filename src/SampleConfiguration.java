@@ -3,7 +3,6 @@ package org.wherenow.jenkins_nodepool;
 import hudson.Extension;
 import hudson.util.FormValidation;
 import jenkins.model.GlobalConfiguration;
-import org.apache.commons.lang.StringUtils;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 
@@ -41,7 +40,7 @@ public class SampleConfiguration extends GlobalConfiguration {
     }
 
     public FormValidation doCheckLabel(@QueryParameter String value) {
-        if (StringUtils.isEmpty(value)) {
+        if ((value == null || value.isEmpty())) {
             return FormValidation.warning("Please specify a label.");
         }
         return FormValidation.ok();

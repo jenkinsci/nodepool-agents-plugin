@@ -1,6 +1,5 @@
 package com.rackspace.jenkins_nodepool;
 
-import org.apache.commons.lang.exception.ExceptionUtils;
 
 import java.time.Duration;
 import java.time.temporal.TemporalAmount;
@@ -87,7 +86,7 @@ public final class Attempt {
         if (e == null) {
             return null;
         } else {
-            return ExceptionUtils.getStackTrace(e);
+            return hudson.Functions.printThrowable(e);
         }
     }
 
